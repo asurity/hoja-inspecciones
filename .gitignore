@@ -1,0 +1,10 @@
+# Archivos temporales de Excel
+~$*.xlsm
+~$*.xlsx
+
+# Carpeta de respaldos locales
+backups/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db

@@ -416,22 +416,23 @@ End Function
 '            está asociada a una sección (tipo de respuesta) y tiene un
 '            valor de puntaje que se usa para calcular RPN.
 ' Total columnas: 5
-' Columnas usadas por código: 4
-' Columnas no usadas: ID Criticidad (datos adicionales)
+' Columnas usadas por código: 5
+' Columnas no usadas: ninguna
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (14/04/2026):
+' COLUMNAS VERIFICADAS (15/04/2026):
 '   [1] ID Opcion                  - String (PK única)
 '   [2] ID Seccion                 - String (FK a tblSecciones)
-'   [3] ID Criticidad              - String (NO USADA - datos adicionales)
+'   [3] ID Criticidad              - String (FK a tblCriticidad - filtrado de opciones)
 '   [4] Opción texto               - String (texto de la opción)
 '   [5] Valor puntaje              - Long (puntaje para cálculo RPN)
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - ChecklistRepository.bas (ObtenerOpcionesRespuesta, ObtenerIDOpcionPorTexto - LECTURA)
+'   - frmChecklistVirtual.frm (Filtra opciones por ID Seccion e ID Criticidad)
 '   - TableManager.bas (TableManager.RemoveTableRows - INCLUIDA en tabla_list)
-' NOTA: ID Criticidad está presente para conocer la criticidad de cada opción
-'       de respuesta que verá el usuario, aunque no se hace lookup directo
-'       en el código de funciones específicas.
+' NOTA: ID Criticidad se usa para filtrar opciones por pregunta según su criticidad.
+'       Cada pregunta tiene ID Sección e ID Criticidad, y solo se muestran las
+'       opciones que coincidan con ambos valores.
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------
@@ -477,3 +478,100 @@ End Function
 '   - ChecklistRepository.bas (ObtenerEvaluadores - LECTURA columna 3)
 '   - SystemInitializer.bas (ValidarDatosMaestros - LECTURA para validación)
 ' ----------------------------------------------------------------------
+
+' ----------------------------------------------------------------------
+' TABLA: tblInspecciones
+' Ubicación: Hoja "Historico"
+' Propósito: Registro de inspecciones completadas con resultados de scoring,
+'            RPN y categorización. Cada inspección está vinculada a un
+'            personal, plantilla y tiene múltiples respuestas en tblRespuestas.
+' Total columnas: 30
+' ----------------------------------------------------------------------
+' COLUMNAS VERIFICADAS (15/04/2026):
+'   [01] ID Inspeccion               - String (UUID único, PK)
+'   [02] Area                        - String (área donde se realizó la inspección)
+'   [03] Linea Auditada              - String (línea de producción/proceso auditada)
+'   [04] Hora inicio                 - String (hora de inicio de inspección)
+'   [05] Hora termino                - String (hora de término de inspección)
+'   [06] Iniciales AY1               - String (iniciales ayudante 1)
+'   [07] Iniciales AY2               - String (iniciales ayudante 2)
+'   [08] Iniciales OP                - String (iniciales operador)
+'   [09] Lugar Auditoria             - String ("Dentro del área"/"Fuera del área")
+'   [10] Iniciales personal          - String (FK a tblPersonal - evaluado)
+'   [11] ID Plantilla                - String (FK a tblPlantillas)
+'   [12] Planta                      - String (planta ejecutora)
+'   [13] Fecha inspeccion            - Date (fecha de realización)
+'   [14] Auditor                     - String (quien realizó la auditoría)
+'   [15] Estado                      - String (ver INSPECCION_* constantes)
+'   [16] TA puntaje obtenido         - Double (puntaje obtenido en sección TA)
+'   [17] TA puntos maximos           - Double (máximo posible sección TA)
+'   [18] TA puntos no aplica         - Double (puntos no aplicables en TA)
+'   [19] TA porcentaje               - Double (porcentaje final TA)
+'   [20] RPN calculado               - Double (Risk Priority Number calculado)
+'   [21] Categoria resultado         - String ("Categoría 1/2/3")
+'   [22] Requiere accion             - String ("Si"/"No" - si requiere acción)
+'   [23] Fecha proxima inspeccion    - Date (fecha calculada próxima inspección)
+'   [24] Dias para vencimiento       - Long (días hasta vencimiento)
+'   [25] Estado programacion         - String (ver ESTADO_* constantes)
+'   [26] Observaciones generales     - String (observaciones de la inspección)
+'   [27] Fecha calculo               - Date (timestamp de cálculos)
+'   [28] Usuario calculo             - String (usuario que completó cálculos)
+'   [29] Fecha completado            - Date (timestamp de completado)
+'   [30] Usuario completado          - String (usuario que completó)
+'
+' MÓDULOS QUE USAN ESTA TABLA:
+'   - InspectionRepository.bas (CrearInspeccion, ActualizarCalculosInspeccion - ESCRITURA)
+'   - InspectionScheduler.bas (ObtenerUltimaInspeccion - LECTURA)
+'   - ChecklistOrchestrator.bas (GuardarInspeccionCompleta vía Repository)
+' ----------------------------------------------------------------------
+
+' ----------------------------------------------------------------------
+' TABLA: tblRespuestas
+' Ubicación: Hoja "Historico"
+' Propósito: Respuestas individuales de cada pregunta en una inspección.
+'            Cada respuesta vincula una inspección con una pregunta y su
+'            opción seleccionada, incluyendo observaciones opcionales.
+' Total columnas: 7
+' ----------------------------------------------------------------------
+' COLUMNAS VERIFICADAS (15/04/2026):
+'   [1] ID Respuesta            - String (UUID único, PK)
+'   [2] ID Inspeccion           - String (FK a tblInspecciones)
+'   [3] ID Pregunta             - String (FK a tblPreguntas)
+'   [4] ID Opcion               - String (FK a tblOpcionesDeRespuesta)
+'   [5] Valor numerico          - Double (valor numérico de la opción para scoring)
+'   [6] Observacion             - String (observaciones opcionales de la respuesta)
+'   [7] Fecha respuesta         - Date (timestamp de registro de respuesta)
+'
+' MÓDULOS QUE USAN ESTA TABLA:
+'   - InspectionRepository.bas (GuardarRespuestas - ESCRITURA)
+'   - frmChecklistVirtual.frm (ObtenerRespuestas, RecopilarRespuestas)
+' ----------------------------------------------------------------------
+
+' ============================================================================
+' CONFIGURACIÓN DE CERTIFICADOS PDF
+' Última actualización: 15/04/2026 - Fase 0: Preparación infraestructura
+' ============================================================================
+
+' ----------------------------------------------------------------------
+' Constante: SHEET_PLANTILLA_CERTIFICADO
+' Propósito: Nombre de la hoja oculta que sirve como plantilla para
+'            generar certificados PDF de inspecciones completadas.
+' Estado: Hoja muy oculta (xlSheetVeryHidden)
+' ----------------------------------------------------------------------
+Public Const SHEET_PLANTILLA_CERTIFICADO As String = "Plantilla Certificado"
+
+' ----------------------------------------------------------------------
+' Constantes: Configuración de exportación PDF
+' ----------------------------------------------------------------------
+Public Const PDF_PREFIJO_NOMBRE As String = "CERTIFICADO"
+Public Const PDF_CALIDAD As Long = 0  ' 0 = xlQualityStandard, 1 = xlQualityMinimum
+Public Const PDF_ABRIR_AUTOMATICO As Boolean = True
+
+' ----------------------------------------------------------------------
+' Constantes: Anchos de columnas para tabla de preguntas en certificado
+' Valores en puntos de Excel (1 punto ≈ 0.35 mm)
+' ----------------------------------------------------------------------
+Public Const CERT_ANCHO_COL_NUMERO As Double = 20
+Public Const CERT_ANCHO_COL_PREGUNTA As Double = 350
+Public Const CERT_ANCHO_COL_RESPUESTA As Double = 80
+Public Const CERT_ANCHO_COL_OBSERVACION As Double = 90
