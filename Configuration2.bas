@@ -517,8 +517,8 @@ End Function
 ' Propósito: Registro de inspecciones completadas con resultados de scoring,
 '            RPN y categorización. Cada inspección está vinculada a un
 '            personal, plantilla y tiene múltiples respuestas en tblRespuestas.
-' Total columnas: 31
-' Última actualización: 21/04/2026 - Agregada columna "Auditoria Procesos Resultado"
+' Total columnas: 40
+' Última actualización: 21/04/2026 - Migración inspecciones recurrentes (cols 32-40)
 ' ----------------------------------------------------------------------
 ' COLUMNAS VERIFICADAS (21/04/2026):
 '   [01] ID Inspeccion               - String (UUID único, PK)
@@ -540,7 +540,7 @@ End Function
 '   [17] TA puntos maximos           - Double (máximo posible sección TA)
 '   [18] TA puntos no aplica         - Double (puntos no aplicables en TA)
 '   [19] TA porcentaje               - Double (porcentaje final TA)
-'   [20] Auditoria Procesos Resultado - String (resultado auditoría de procesos - NUEVA col 21/04/2026)
+'   [20] Auditoria Procesos Resultado - String (resultado auditoría de procesos - col 20)
 '   [21] RPN calculado               - Double (Risk Priority Number calculado)
 '   [22] Categoria resultado         - String ("Categoría 1/2/3")
 '   [23] Requiere accion             - String ("Si"/"No" - si requiere acción)
@@ -552,12 +552,26 @@ End Function
 '   [29] Usuario calculo             - String (usuario que completó cálculos)
 '   [30] Fecha completado            - Date (timestamp de completado)
 '   [31] Usuario completado          - String (usuario que completó)
+'   
+'   NUEVAS COLUMNAS - INSPECCIONES RECURRENTES (21/04/2026):
+'   [32] Numero Inspeccion           - Long (secuencia: 1, 2, 3... Default=1)
+'   [33] Es Inspeccion Recurrente    - String ("Si"/"No" - Default="No")
+'   [34] Puesto Evaluado             - String (puesto específico en esta inspección)
+'   [35] RPN Anterior Manual         - Double (RPN ingresado manualmente - Nullable)
+'   [36] ID Inspeccion Anterior      - String (UUID inspección previa - Nullable)
+'   [37] RPN Promedio                - Double ((RPN Ant + RPN Act)/2 - Nullable)
+'   [38] Porcentaje Recuperacion     - Double (futuro: datos microbiología - Default=0)
+'   [39] Porcentaje OOL              - Double (futuro: Out Of Limits micro - Default=0)
+'   [40] RPN Total                   - Double (RPN Prom + %Rec + %OOL - Nullable)
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - InspectionRepository.bas (CrearInspeccion, ActualizarCalculosInspeccion - ESCRITURA)
 '   - InspectionScheduler.bas (ObtenerUltimaInspeccion - LECTURA)
 '   - ChecklistOrchestrator.bas (GuardarInspeccionCompleta vía Repository)
 '   - CertificadoPDFGenerator.bas (ObtenerDatosInspeccion - LECTURA col 20-22, 27)
+'   - InspectionHistoryService.bas (BuscarInspeccionesPrevias - LECTURA cols 32-40)
+'   - RecurrentInspectionCalculator.bas (CalcularRPNPromedio - LECTURA/ESCRITURA cols 35-40)
+'   - frmChecklistVirtual.frm (Captura datos recurrentes - ESCRITURA cols 32-36)
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------

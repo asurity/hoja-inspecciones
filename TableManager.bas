@@ -647,3 +647,371 @@ End Sub
 Public Sub AbrirGestorTablas()
     frmGestorTablas.Show vbModal
 End Sub
+
+' ======================================================================
+' SECCIÓN 8: MIGRACIÓN DE BASE DE DATOS - INSPECCIONES RECURRENTES
+' Fecha: 21/04/2026
+' Propósito: Agregar 9 nuevas columnas a tblInspecciones para soportar
+'            el sistema de inspecciones recurrentes con RPN histórico.
+' ======================================================================
+
+' ----------------------------------------------------------------------
+' AgregarColumnasInspeccionesRecurrentes
+' Propósito: Ejecuta la migración completa de tblInspecciones:
+'            - Agrega columnas 32-40
+'            - Backfill de "Puesto Evaluado" desde histórico
+'            - Validación de integridad
+' ADVERTENCIA: Este procedimiento modifica la estructura de BD.
+'              Ejecutar solo UNA VEZ. Requiere backup previo.
+' ----------------------------------------------------------------------
+Public Sub AgregarColumnasInspeccionesRecurrentes()
+    On Error GoTo ErrorHandler
+    
+    Dim wsHistorico As Worksheet
+    Dim tbl As ListObject
+    Dim registrosAntes As Long
+    Dim registrosDespues As Long
+    Dim columnasAntes As Long
+    Dim i As Long
+    
+    ' FASE 1: Pre-validación
+    Debug.Print "========================================="
+    Debug.Print "MIGRACIÓN: Inspecciones Recurrentes"
+    Debug.Print "Fecha: " & Now
+    Debug.Print "========================================="
+    
+    Set wsHistorico = ThisWorkbook.Sheets(Configuration2.SHEET_HISTORICO)
+    Set tbl = wsHistorico.ListObjects(Configuration2.TABLE_INSPECCIONES)
+    
+    If tbl Is Nothing Then
+        MsgBox "ERROR: No se encontró tblInspecciones", vbCritical
+        Exit Sub
+    End If
+    
+    registrosAntes = tbl.ListRows.Count
+    columnasAntes = tbl.ListColumns.Count
+    
+    Debug.Print "Registros actuales: " & registrosAntes
+    Debug.Print "Columnas actuales: " & columnasAntes
+    
+    ' Validar que tiene 31 columnas
+    If columnasAntes <> 31 Then
+        MsgBox "ERROR: Se esperaban 31 columnas, se encontraron " & columnasAntes & vbCrLf & _
+               "La migración no puede continuar.", vbCritical
+        Exit Sub
+    End If
+    
+    ' Confirmar con usuario
+    Dim respuesta As VbMsgBoxResult
+    respuesta = MsgBox("¿Desea agregar 9 columnas nuevas a tblInspecciones?" & vbCrLf & vbCrLf & _
+                       "Registros: " & registrosAntes & vbCrLf & _
+                       "Columnas actuales: 31 → Columnas nuevas: 40" & vbCrLf & vbCrLf & _
+                       "ADVERTENCIA: Esta operación modificará la estructura de la BD.", _
+                       vbYesNo + vbQuestion, "Confirmación de Migración")
+    
+    If respuesta = vbNo Then
+        Debug.Print "Migración cancelada por el usuario"
+        Exit Sub
+    End If
+    
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    ' FASE 1.5: Desproteger hoja (crítico para agregar columnas)
+    Debug.Print vbCrLf & "[FASE 1.5] Desprotegiendo hoja..."
+    Dim hojaEstabProtegida As Boolean
+    hojaEstabProtegida = wsHistorico.ProtectContents
+    
+    If hojaEstabProtegida Then
+        On Error Resume Next
+        Call SheetProtector2.UnprotectSheet(wsHistorico, Configuration2.APP_PASSWORD)
+        If Err.Number <> 0 Then
+            Application.ScreenUpdating = True
+            Application.Calculation = xlCalculationAutomatic
+            MsgBox "ERROR: No se pudo desproteger la hoja. Verifique la contraseña.", vbCritical
+            Exit Sub
+        End If
+        On Error GoTo ErrorHandler
+        Debug.Print "  Hoja desprotegida OK"
+    Else
+        Debug.Print "  Hoja no estaba protegida"
+    End If
+    
+    ' FASE 2: Agregar columnas AL FINAL (evita conflicto de movimiento de celdas)
+    Debug.Print vbCrLf & "[FASE 2] Agregando columnas..."
+    
+    ' ESTRATEGIA: Primero agregar TODAS las columnas, luego llenar valores
+    ' Esto evita problemas de referencias mientras Excel actualiza la estructura
+    
+    Dim colNumeroInsp As Long, colEsRecurrente As Long, colPuestoEval As Long
+    
+    ' Columna 32: Numero Inspeccion
+    Debug.Print "  Agregando columna: Numero Inspeccion..."
+    tbl.ListColumns.Add
+    colNumeroInsp = tbl.ListColumns.Count
+    tbl.ListColumns(colNumeroInsp).Name = "Numero Inspeccion"
+    
+    ' Columna 33: Es Inspeccion Recurrente
+    Debug.Print "  Agregando columna: Es Inspeccion Recurrente..."
+    tbl.ListColumns.Add
+    colEsRecurrente = tbl.ListColumns.Count
+    tbl.ListColumns(colEsRecurrente).Name = "Es Inspeccion Recurrente"
+    
+    ' Columna 34: Puesto Evaluado (CRÍTICA)
+    Debug.Print "  Agregando columna: Puesto Evaluado..."
+    tbl.ListColumns.Add
+    colPuestoEval = tbl.ListColumns.Count
+    tbl.ListColumns(colPuestoEval).Name = "Puesto Evaluado"
+    
+    ' Columna 35: RPN Anterior Manual
+    Debug.Print "  Agregando columna: RPN Anterior Manual..."
+    tbl.ListColumns.Add
+    tbl.ListColumns(tbl.ListColumns.Count).Name = "RPN Anterior Manual"
+    
+    ' Columna 36: ID Inspeccion Anterior
+    Debug.Print "  Agregando columna: ID Inspeccion Anterior..."
+    tbl.ListColumns.Add
+    tbl.ListColumns(tbl.ListColumns.Count).Name = "ID Inspeccion Anterior"
+    
+    ' Columna 37: RPN Promedio
+    Debug.Print "  Agregando columna: RPN Promedio..."
+    tbl.ListColumns.Add
+    tbl.ListColumns(tbl.ListColumns.Count).Name = "RPN Promedio"
+    
+    ' Columna 38: Porcentaje Recuperacion
+    Debug.Print "  Agregando columna: Porcentaje Recuperacion..."
+    tbl.ListColumns.Add
+    tbl.ListColumns(tbl.ListColumns.Count).Name = "Porcentaje Recuperacion"
+    
+    ' Columna 39: Porcentaje OOL
+    Debug.Print "  Agregando columna: Porcentaje OOL..."
+    tbl.ListColumns.Add
+    tbl.ListColumns(tbl.ListColumns.Count).Name = "Porcentaje OOL"
+    
+    ' Columna 40: RPN Total
+    Debug.Print "  Agregando columna: RPN Total..."
+    tbl.ListColumns.Add
+    tbl.ListColumns(tbl.ListColumns.Count).Name = "RPN Total"
+    
+    Debug.Print "[FASE 2] ✓ 9 columnas agregadas correctamente"
+    
+    ' FASE 2.5: Llenar valores por defecto
+    Debug.Print vbCrLf & "[FASE 2.5] Llenando valores por defecto..."
+    
+    If Not tbl.DataBodyRange Is Nothing Then
+        Debug.Print "  Llenando 'Numero Inspeccion' = 1..."
+        tbl.ListColumns(colNumeroInsp).DataBodyRange.Value = 1
+        
+        Debug.Print "  Llenando 'Es Inspeccion Recurrente' = No..."
+        tbl.ListColumns(colEsRecurrente).DataBodyRange.Value = "No"
+        
+        Debug.Print "  Llenando 'Puesto Evaluado' = (vacío)..."
+        tbl.ListColumns(colPuestoEval).DataBodyRange.Value = ""
+        
+        Debug.Print "[FASE 2.5] ✓ Valores por defecto asignados"
+    Else
+        Debug.Print "[FASE 2.5] ⚠ Tabla vacía, sin valores que llenar"
+    End If
+    
+    ' FASE 3: Backfill de Puesto Evaluado
+    If Not tbl.DataBodyRange Is Nothing Then
+        Debug.Print vbCrLf & "[FASE 3] Backfill de 'Puesto Evaluado'..."
+        Call InferirPuestoHistorico(tbl)
+    End If
+    
+    ' FASE 4: Validación
+    Debug.Print vbCrLf & "[FASE 4] Validación post-migración..."
+    
+    registrosDespues = tbl.ListRows.Count
+    
+    If registrosAntes <> registrosDespues Then
+        MsgBox "ERROR: Pérdida de datos detectada!" & vbCrLf & _
+               "Antes: " & registrosAntes & " | Después: " & registrosDespues, vbCritical
+        Exit Sub
+    End If
+    
+    If tbl.ListColumns.Count <> 40 Then
+        MsgBox "ERROR: Número de columnas incorrecto: " & tbl.ListColumns.Count, vbCritical
+        Exit Sub
+    End If
+    
+    ' Contar registros sin puesto asignado
+    Dim sinPuesto As Long
+    Dim colPuestoValidacion As Long
+    sinPuesto = 0
+    
+    If Not tbl.DataBodyRange Is Nothing Then
+        colPuestoValidacion = tbl.ListColumns("Puesto Evaluado").Index
+        Dim fila As ListRow
+        For Each fila In tbl.ListRows
+            Dim puestoVal As String
+            puestoVal = Trim(CStr(fila.Range.Cells(1, colPuestoValidacion).Value))
+            If Len(puestoVal) = 0 Or puestoVal = "DESCONOCIDO" Then
+                sinPuesto = sinPuesto + 1
+            End If
+        Next fila
+    End If
+    
+    Debug.Print "  Registros antes: " & registrosAntes
+    Debug.Print "  Registros después: " & registrosDespues
+    Debug.Print "  Columnas actuales: " & tbl.ListColumns.Count
+    Debug.Print "  Registros con Puesto Evaluado: " & (registrosDespues - sinPuesto)
+    Debug.Print "  Registros sin puesto/desconocido: " & sinPuesto
+    
+    ' FASE 5: Reproteger hoja si estaba protegida
+    If hojaEstabProtegida Then
+        Debug.Print vbCrLf & "[FASE 5] Reprotegiendo hoja..."
+        On Error Resume Next
+        Call SheetProtector2.ProtectSheet(wsHistorico, Configuration2.APP_PASSWORD)
+        On Error GoTo ErrorHandler
+        Debug.Print "  Hoja reprotegida OK"
+    End If
+    
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    
+    ' Mensaje final
+    Dim mensaje As String
+    mensaje = "✓ MIGRACIÓN COMPLETADA" & vbCrLf & vbCrLf & _
+              "Columnas: 31 → 40" & vbCrLf & _
+              "Registros: " & registrosDespues & vbCrLf & _
+              "Registros con puesto asignado: " & (registrosDespues - sinPuesto)
+    
+    If sinPuesto > 0 Then
+        mensaje = mensaje & vbCrLf & vbCrLf & _
+                  "⚠ ADVERTENCIA: " & sinPuesto & " registros requieren revisión manual" & vbCrLf & _
+                  "(campo 'Puesto Evaluado' vacío o DESCONOCIDO)"
+    End If
+    
+    MsgBox mensaje, vbInformation, "Migración Completada"
+    
+    Debug.Print vbCrLf & "========================================="
+    Debug.Print "MIGRACIÓN COMPLETADA EXITOSAMENTE"
+    Debug.Print "========================================="
+    
+    Exit Sub
+    
+ErrorHandler:
+    ' Restaurar configuración
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    
+    ' Intentar reproteger hoja si estaba protegida
+    On Error Resume Next
+    If hojaEstabProtegida Then
+        Call SheetProtector2.ProtectSheet(wsHistorico, Configuration2.APP_PASSWORD)
+    End If
+    On Error GoTo 0
+    
+    MsgBox "ERROR en migración: " & Err.Description, vbCritical
+    Debug.Print "ERROR: " & Err.Description
+End Sub
+
+' ----------------------------------------------------------------------
+' InferirPuestoHistorico (PRIVADA)
+' Propósito: Para cada registro histórico en tblInspecciones, infiere
+'            el "Puesto Evaluado" buscando en tblPlantillas.
+' Lógica:
+'   1. Leer ID Plantilla (col 11)
+'   2. Buscar en tblPlantillas → obtener Puesto
+'   3. Escribir en Puesto Evaluado (col 34)
+'   4. Si no encuentra → "DESCONOCIDO" (requiere corrección manual)
+' ----------------------------------------------------------------------
+Private Sub InferirPuestoHistorico(ByRef tbl As ListObject)
+    On Error GoTo ErrorHandler
+    
+    Dim wsChecklist As Worksheet
+    Dim tblPlantillas As ListObject
+    Dim fila As ListRow
+    Dim idPlantilla As String
+    Dim puestoInferido As String
+    Dim contador As Long
+    Dim exitos As Long
+    Dim fallidos As Long
+    Dim colPuestoIndex As Long
+    Dim colIDPlantillaIndex As Long
+    
+    Set wsChecklist = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
+    Set tblPlantillas = wsChecklist.ListObjects(Configuration2.TABLE_PLANTILLAS)
+    
+    ' Obtener índices por nombre (robusto ante cambios de posición)
+    colPuestoIndex = tbl.ListColumns("Puesto Evaluado").Index
+    colIDPlantillaIndex = tbl.ListColumns("ID Plantilla").Index
+    
+    contador = 0
+    exitos = 0
+    fallidos = 0
+    
+    Debug.Print "  Inferencia de puesto desde tblPlantillas..."
+    
+    For Each fila In tbl.ListRows
+        contador = contador + 1
+        
+        ' Leer ID Plantilla (por nombre de columna)
+        idPlantilla = Trim(CStr(fila.Range.Cells(1, colIDPlantillaIndex).Value))
+        
+        If Len(idPlantilla) = 0 Then
+            ' Sin plantilla → marcar como desconocido
+            fila.Range.Cells(1, colPuestoIndex).Value = "DESCONOCIDO"
+            fallidos = fallidos + 1
+        Else
+            ' Buscar puesto en tblPlantillas
+            puestoInferido = BuscarPuestoPorPlantilla(tblPlantillas, idPlantilla)
+            
+            If puestoInferido = "" Then
+                fila.Range.Cells(1, colPuestoIndex).Value = "DESCONOCIDO"
+                fallidos = fallidos + 1
+            Else
+                fila.Range.Cells(1, colPuestoIndex).Value = puestoInferido
+                exitos = exitos + 1
+            End If
+        End If
+        
+        ' Progress cada 50 registros
+        If contador Mod 50 = 0 Then
+            Debug.Print "    Procesados: " & contador & " registros..."
+        End If
+    Next fila
+    
+    Debug.Print "[FASE 3] ✓ Backfill completado"
+    Debug.Print "  Total procesado: " & contador
+    Debug.Print "  Éxitos: " & exitos
+    Debug.Print "  Desconocidos: " & fallidos
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "ERROR en InferirPuestoHistorico: " & Err.Description
+End Sub
+
+' ----------------------------------------------------------------------
+' BuscarPuestoPorPlantilla (PRIVADA)
+' Propósito: Busca en tblPlantillas el puesto correspondiente a un ID Plantilla.
+' Retorna: Nombre del puesto, o "" si no se encuentra.
+' ----------------------------------------------------------------------
+Private Function BuscarPuestoPorPlantilla(ByRef tblPlantillas As ListObject, _
+                                           ByVal idPlantilla As String) As String
+    On Error Resume Next
+    
+    Dim filaPlantilla As ListRow
+    Dim idActual As String
+    Dim puesto As String
+    
+    BuscarPuestoPorPlantilla = ""
+    
+    If tblPlantillas.DataBodyRange Is Nothing Then Exit Function
+    
+    For Each filaPlantilla In tblPlantillas.ListRows
+        idActual = Trim(CStr(filaPlantilla.Range.Cells(1, _
+                   tblPlantillas.ListColumns("ID Plantilla").Index).Value))
+        
+        If idActual = Trim(idPlantilla) Then
+            puesto = Trim(CStr(filaPlantilla.Range.Cells(1, _
+                     tblPlantillas.ListColumns("Puesto").Index).Value))
+            
+            BuscarPuestoPorPlantilla = puesto
+            Exit Function
+        End If
+    Next filaPlantilla
+    
+End Function

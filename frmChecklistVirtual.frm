@@ -127,6 +127,14 @@ Private mRespuestas As Object
 Private mPreguntaIDs As Collection      ' Collection de ID_Pregunta por sección
 Private mPreguntaSecciones As Object    ' Dictionary: IDPregunta → IDSeccion
 
+' --- Estado inspecciones recurrentes (FASE 2 - 21/04/2026) ---
+Private mEsInspeccionRecurrente As Boolean
+Private mNumeroInspeccion As Long
+Private mRPNAnteriorManual As Double
+Private mRPNAnteriorAuto As Double
+Private mIDInspeccionAnterior As String
+Private mModoRPN As String  ' "AUTO" o "MANUAL"
+
 ' ======================================================================
 ' PROPIEDADES PÚBLICAS (Let/Get)
 ' ======================================================================
@@ -226,6 +234,31 @@ Public Property Get IDSeccionProcesos() As String
     IDSeccionProcesos = mIDSeccionProcesos
 End Property
 
+' --- Propiedades inspecciones recurrentes (FASE 2 - 21/04/2026) ---
+Public Property Get EsInspeccionRecurrente() As Boolean
+    EsInspeccionRecurrente = mEsInspeccionRecurrente
+End Property
+
+Public Property Get NumeroInspeccion() As Long
+    NumeroInspeccion = mNumeroInspeccion
+End Property
+
+Public Property Get RPNAnteriorManual() As Double
+    RPNAnteriorManual = mRPNAnteriorManual
+End Property
+
+Public Property Get RPNAnteriorAuto() As Double
+    RPNAnteriorAuto = mRPNAnteriorAuto
+End Property
+
+Public Property Get IDInspeccionAnterior() As String
+    IDInspeccionAnterior = mIDInspeccionAnterior
+End Property
+
+Public Property Get ModoRPN() As String
+    ModoRPN = mModoRPN
+End Property
+
 ' ======================================================================
 ' INICIALIZACIÓN
 ' ======================================================================
@@ -237,6 +270,14 @@ Private Sub UserForm_Initialize()
     Set mPreguntaIDs = New Collection
     Set mPreguntaSecciones = CreateObject("Scripting.Dictionary")
     Set mSecciones = New Collection
+    
+    ' Inicializar estado inspecciones recurrentes (FASE 2)
+    mEsInspeccionRecurrente = False
+    mNumeroInspeccion = 1
+    mRPNAnteriorManual = 0
+    mRPNAnteriorAuto = 0
+    mIDInspeccionAnterior = ""
+    mModoRPN = "NINGUNO"
     
     ' --- Configurar todos los controles ---
     Call ConfigurarFormulario
@@ -722,6 +763,157 @@ Private Sub ConfigurarCabecera()
         .Style = fmStyleDropDownList
         .TabIndex = 10
     End With
+    rowIdx = rowIdx + 1
+    
+    ' ═══════════════════════════════════════════════════════════════════
+    ' SECCIÓN: INSPECCIONES RECURRENTES (FASE 2 - 21/04/2026)
+    ' ═══════════════════════════════════════════════════════════════════
+    
+    ' Calcular posición del frame contenedor
+    Dim recTop As Single
+    recTop = rowTop + (rowIdx * ROW_HEIGHT) + 8  ' Gap de 8pt
+    
+    ' Frame contenedor
+    With Me.fraRecurrentInspection
+        .Left = lblLeft
+        .Top = recTop
+        .Width = mLeftColWidth - 8
+        .Height = 165  ' Ajustado para contener todos los controles
+        .Caption = " Inspección Recurrente "
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = &H5B3A1A  ' Marrón medio
+        .BackColor = &HF5F5F5  ' Gris muy claro
+        .BorderStyle = fmBorderStyleSingle
+        .BorderColor = &HD0C8C0
+        .SpecialEffect = fmSpecialEffectFlat
+    End With
+    
+    ' Checkboxprincipal
+    With Me.chkEsRecurrente
+        .Left = 6
+        .Top = 18
+        .Width = mLeftColWidth - 20
+        .Height = 18
+        .Caption = "Esta NO es la primera inspección de este personal"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = False
+        .Value = False
+        .TabIndex = 11
+    End With
+    
+    ' Botón búsqueda histórico
+    With Me.btnBuscarHistorico
+        .Left = 6
+        .Top = 40
+        .Width = 140
+        .Height = 24
+        .Caption = "🔍 Buscar historial"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .TabIndex = 12
+        .BackColor = &HE0E0E0
+    End With
+    
+    ' Label info histórico
+    With Me.lblInfoHistorico
+        .Left = 6
+        .Top = 70
+        .Width = mLeftColWidth - 20
+        .Height = 16
+        .Caption = "(Información de inspecciones previas aparecerá aquí)"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 8
+        .ForeColor = &H808080  ' Gris
+        .BackStyle = fmBackStyleTransparent
+    End With
+    
+    ' Label número inspección
+    With Me.lblNumeroInspeccion
+        .Left = 6
+        .Top = 92
+        .Width = 90
+        .Height = 18
+        .Caption = "Inspección N°:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .BackStyle = fmBackStyleTransparent
+        .Visible = False
+    End With
+    
+    ' TextBox número inspección
+    With Me.txtNumeroInspeccion
+        .Left = 100
+        .Top = 90
+        .Width = 50
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Locked = True
+        .BackColor = COLOR_READONLY
+        .TabStop = False
+        .Visible = False
+    End With
+    
+    ' Label RPN Anterior
+    With Me.lblRPNAnterior
+        .Left = 6
+        .Top = 116
+        .Width = 90
+        .Height = 18
+        .Caption = "RPN anterior:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .BackStyle = fmBackStyleTransparent
+        .Visible = False
+    End With
+    
+    ' TextBox RPN Anterior Automático
+    With Me.txtRPNAnteriorAuto
+        .Left = 100
+        .Top = 114
+        .Width = 70
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Locked = True
+        .BackColor = &HE0FFE0  ' Verde claro
+        .TabStop = False
+        .Visible = False
+    End With
+    
+    ' TextBox RPN Anterior Manual
+    With Me.txtRPNAnteriorManual
+        .Left = 100
+        .Top = 114
+        .Width = 70
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Locked = False
+        .BackColor = &HFFFFE0  ' Amarillo claro
+        .Visible = False
+    End With
+    
+    ' Label estado modo
+    With Me.lblModoRPN
+        .Left = 6
+        .Top = 140
+        .Width = mLeftColWidth - 20
+        .Height = 18
+        .Caption = "[Modo RPN: no determinado]"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 8
+        .ForeColor = &H808080  ' Gris
+        .BackStyle = fmBackStyleTransparent
+        .Visible = False
+    End With
 End Sub
 
 Private Sub ConfigurarMultiPage()
@@ -1085,6 +1277,11 @@ End Sub
 
 Private Sub btnGuardar_Click()
     On Error GoTo ErrorHandler
+    
+    ' FASE 2: Validar datos de inspección recurrente si aplica
+    If Not ValidarDatosRecurrentes() Then
+        Exit Sub
+    End If
     
     ' Delegar al orquestador (él se encarga de recopilar y validar)
     Call ChecklistOrchestrator.GuardarInspeccionCompleta(Me)
@@ -1739,3 +1936,184 @@ Private Sub RecopilarObservaciones()
 ErrorHandler:
     Call ErrorLogger2.Log("frmChecklistVirtual.RecopilarObservaciones", Err.Description, Err.Number)
 End Sub
+
+' ======================================================================
+' EVENTOS: INSPECCIONES RECURRENTES (FASE 2 - 21/04/2026)
+' ======================================================================
+
+' ----------------------------------------------------------------------
+' chkEsRecurrente_Click
+' Propósito: Muestra/oculta controles de inspección recurrente al marcar el checkbox
+' ----------------------------------------------------------------------
+Private Sub chkEsRecurrente_Click()
+    On Error GoTo ErrorHandler
+    
+    If chkEsRecurrente.Value = True Then
+        ' Mostrar controles de inspección recurrente
+        lblNumeroInspeccion.Visible = True
+        txtNumeroInspeccion.Visible = True
+        lblRPNAnterior.Visible = True
+        lblModoRPN.Visible = True
+        
+        mEsInspeccionRecurrente = True
+        
+        ' El usuario debe hacer clic en "Buscar historial" o ingresar datos manualmente
+        If mNumeroInspeccion <= 1 Then
+            txtNumeroInspeccion.Value = "2"  ' Default: segunda inspección
+            mNumeroInspeccion = 2
+        Else
+            txtNumeroInspeccion.Value = CStr(mNumeroInspeccion)
+        End If
+    Else
+        ' Ocultar y resetear controles
+        lblNumeroInspeccion.Visible = False
+        txtNumeroInspeccion.Visible = False
+        lblRPNAnterior.Visible = False
+        txtRPNAnteriorAuto.Visible = False
+        txtRPNAnteriorManual.Visible = False
+        lblModoRPN.Visible = False
+        
+        mEsInspeccionRecurrente = False
+        mNumeroInspeccion = 1
+        mRPNAnteriorManual = 0
+        mRPNAnteriorAuto = 0
+        mIDInspeccionAnterior = ""
+        mModoRPN = "NINGUNO"
+        
+        txtNumeroInspeccion.Value = ""
+        txtRPNAnteriorAuto.Value = ""
+        txtRPNAnteriorManual.Value = ""
+        lblModoRPN.Caption = "[Modo RPN: no determinado]"
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.chkEsRecurrente_Click", Err.Description, Err.Number)
+End Sub
+
+' ----------------------------------------------------------------------
+' btnBuscarHistorico_Click
+' Propósito: Busca inspecciones previas del personal evaluado
+'            y autocompleta los campos de inspección recurrente
+' ----------------------------------------------------------------------
+Private Sub btnBuscarHistorico_Click()
+    On Error GoTo ErrorHandler
+    
+    ' Validar que hay personal seleccionado
+    If Len(mEvaluado) = 0 Or Len(mIDPlantilla) = 0 Then
+        MsgBox "Debe seleccionar un personal y plantilla antes de buscar historial.", _
+               vbExclamation, "Datos incompletos"
+        Exit Sub
+    End If
+    
+    ' TODO FASE 3: Llamar a InspectionHistoryService.BuscarInspeccionesPrevias()
+    ' Por ahora, simulación básica
+    
+    MsgBox "NOTA TEMPORAL (FASE 2):" & vbCrLf & vbCrLf & _
+           "La búsqueda de historial se implementará en FASE 3." & vbCrLf & _
+           "Por ahora, puede marcar el checkbox e ingresar los datos manualmente:" & vbCrLf & vbCrLf & _
+           "1. Marque 'Esta NO es la primera inspección'" & vbCrLf & _
+           "2. Ingrese el RPN anterior en el campo manual", _
+           vbInformation, "Función en desarrollo - FASE 3"
+    
+    ' Activar checkbox automáticamente para facilitar el flujo
+    chkEsRecurrente.Value = True
+    
+    ' Habilitar modo manual (ya que no hay búsqueda automática aún)
+    txtRPNAnteriorManual.Visible = True
+    txtRPNAnteriorAuto.Visible = False
+    mModoRPN = "MANUAL"
+    lblModoRPN.Caption = "[Modo: MANUAL - Ingrese RPN anterior]"
+    lblModoRPN.ForeColor = &H0080FF  ' Naranja
+    
+    ' Simular datos temporales para prueba (esto se reemplazará en FASE 3)
+    lblInfoHistorico.Caption = "Búsqueda histórica pendiente (FASE 3)"
+    lblInfoHistorico.ForeColor = &H808080
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.btnBuscarHistorico_Click", Err.Description, Err.Number)
+    MsgBox "Error al buscar historial: " & Err.Description, vbCritical, "Error"
+End Sub
+
+' ----------------------------------------------------------------------
+' ValidarDatosRecurrentes
+' Propósito: Valida que los campos de inspección recurrente estén completos
+'            antes de guardar la inspección.
+' Retorna: True si los datos son válidos, False en caso contrario
+' ----------------------------------------------------------------------
+Public Function ValidarDatosRecurrentes() As Boolean
+    ValidarDatosRecurrentes = True  ' Asumimos válido por defecto
+    
+    On Error GoTo ErrorHandler
+    
+    ' Si NO es inspección recurrente, no hay nada que validar
+    If Not mEsInspeccionRecurrente Then
+        Exit Function
+    End If
+    
+    ' Validar número de inspección
+    If mNumeroInspeccion < 2 Then
+        MsgBox "El número de inspección debe ser >= 2 para inspecciones recurrentes.", _
+               vbExclamation, "Validación"
+        ValidarDatosRecurrentes = False
+        Exit Function
+    End If
+    
+    ' Validar que hay RPN anterior (manual o automático)
+    Dim tieneRPNManual As Boolean
+    Dim tieneRPNAuto As Boolean
+    
+    tieneRPNManual = (Len(Trim(txtRPNAnteriorManual.Value)) > 0)
+    tieneRPNAuto = (Len(Trim(txtRPNAnteriorAuto.Value)) > 0)
+    
+    If Not tieneRPNManual And Not tieneRPNAuto Then
+        MsgBox "Debe proporcionar el RPN anterior (automático o manual) para inspecciones recurrentes.", _
+               vbExclamation, "Validación"
+        ValidarDatosRecurrentes = False
+        Exit Function
+    End If
+    
+    ' Validar formato numérico del RPN manual si se proporcionó
+    If tieneRPNManual Then
+        If Not IsNumeric(txtRPNAnteriorManual.Value) Then
+            MsgBox "El RPN anterior manual debe ser un valor numérico.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        Dim rpnVal As Double
+        rpnVal = CDbl(txtRPNAnteriorManual.Value)
+        
+        If rpnVal <= 0 Or rpnVal > 100 Then
+            MsgBox "El RPN anterior debe estar entre 0 y 100.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        ' Guardar valor validado
+        mRPNAnteriorManual = rpnVal
+        mModoRPN = "MANUAL"
+    End If
+    
+    ' Si llegamos aquí, todo es válido
+    Debug.Print "Validación inspección recurrente OK:"
+    Debug.Print "  Número inspección: " & mNumeroInspeccion
+    Debug.Print "  Modo RPN: " & mModoRPN
+    If mModoRPN = "MANUAL" Then
+        Debug.Print "  RPN anterior (manual): " & mRPNAnteriorManual
+    Else
+        Debug.Print "  RPN anterior (auto): " & mRPNAnteriorAuto
+        Debug.Print "  ID inspección anterior: " & mIDInspeccionAnterior
+    End If
+    
+    Exit Function
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.ValidarDatosRecurrentes", Err.Description, Err.Number)
+    ValidarDatosRecurrentes = False
+End Function
