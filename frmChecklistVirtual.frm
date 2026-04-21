@@ -781,7 +781,7 @@ Private Sub ConfigurarCabecera()
         .Left = lblLeft
         .Top = recTop
         .Width = mLeftColWidth - 8
-        .Height = 200  ' Aumentado para que todo sea visible con scroll en fraCabecera
+        .Height = 180  ' Altura optimizada
         .Caption = " Inspección Recurrente "
         .Font.Name = "Segoe UI"
         .Font.Size = 8  ' Fuente más pequeña para ahorrar espacio
@@ -793,12 +793,12 @@ Private Sub ConfigurarCabecera()
         .SpecialEffect = fmSpecialEffectFlat
     End With
     
-    ' Checkbox principal (compacto)
+    ' Checkbox principal (mejor posicionado)
     With Me.chkEsRecurrente
-        .Left = 6
-        .Top = 16
-        .Width = mLeftColWidth - 20
-        .Height = 16
+        .Left = 8
+        .Top = 18
+        .Width = 220
+        .Height = 18
         .Caption = "Esta NO es la primera inspección"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
@@ -807,12 +807,12 @@ Private Sub ConfigurarCabecera()
         .TabIndex = 11
     End With
     
-    ' Botón búsqueda histórico (compacto)
+    ' Botón búsqueda histórico (mejor posicionado)
     With Me.btnBuscarHistorico
-        .Left = 6
-        .Top = 36
-        .Width = 120
-        .Height = 22
+        .Left = 8
+        .Top = 40
+        .Width = 140
+        .Height = 24
         .Caption = "🔍 Buscar historial"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
@@ -820,12 +820,12 @@ Private Sub ConfigurarCabecera()
         .BackColor = &HE0E0E0
     End With
     
-    ' Label info histórico (más compacto con WordWrap)
+    ' Label info histórico (mejor posicionado con WordWrap)
     With Me.lblInfoHistorico
-        .Left = 6
-        .Top = 62
-        .Width = mLeftColWidth - 20
-        .Height = 28  ' Altura para 2 líneas
+        .Left = 8
+        .Top = 68
+        .Width = 220
+        .Height = 20
         .Caption = "(Info de inspecciones previas aparecerá aquí)"
         .Font.Name = "Segoe UI"
         .Font.Size = 7
@@ -834,83 +834,85 @@ Private Sub ConfigurarCabecera()
         .WordWrap = True
     End With
     
-    ' Label número inspección (compacto)
+    ' Label número inspección (mejor alineado)
     With Me.lblNumeroInspeccion
-        .Left = 6
-        .Top = 96
-        .Width = 80
-        .Height = 16
+        .Left = 8
+        .Top = 92
+        .Width = 100
+        .Height = 18
         .Caption = "Inspección N°:"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
         .Font.Bold = True
         .ForeColor = COLOR_LABEL
         .BackStyle = fmBackStyleTransparent
+        .TextAlign = fmTextAlignLeft
         .Visible = False
     End With
     
-    ' TextBox número inspección (compacto)
+    ' TextBox número inspección (mejor posicionado)
     With Me.txtNumeroInspeccion
-        .Left = 90
-        .Top = 94
-        .Width = 45
-        .Height = 18
+        .Left = 112
+        .Top = 92
+        .Width = 50
+        .Height = 20
         .Font.Name = "Segoe UI"
-        .Font.Size = 8
+        .Font.Size = 9
         .Locked = True
         .BackColor = COLOR_READONLY
         .TabStop = False
         .Visible = False
     End With
     
-    ' Label RPN Anterior (compacto)
+    ' Label RPN Anterior (mejor alineado)
     With Me.lblRPNAnterior
-        .Left = 6
+        .Left = 8
         .Top = 118
-        .Width = 80
-        .Height = 16
+        .Width = 100
+        .Height = 18
         .Caption = "RPN anterior:"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
         .Font.Bold = True
         .ForeColor = COLOR_LABEL
         .BackStyle = fmBackStyleTransparent
+        .TextAlign = fmTextAlignLeft
         .Visible = False
     End With
     
-    ' TextBox RPN Anterior Automático (compacto)
+    ' TextBox RPN Anterior Automático (mejor posicionado)
     With Me.txtRPNAnteriorAuto
-        .Left = 90
-        .Top = 116
-        .Width = 60
-        .Height = 18
+        .Left = 112
+        .Top = 118
+        .Width = 70
+        .Height = 20
         .Font.Name = "Segoe UI"
-        .Font.Size = 8
+        .Font.Size = 9
         .Locked = True
         .BackColor = &HE0FFE0  ' Verde claro
         .TabStop = False
         .Visible = False
     End With
     
-    ' TextBox RPN Anterior Manual (compacto)
+    ' TextBox RPN Anterior Manual (mejor posicionado)
     With Me.txtRPNAnteriorManual
-        .Left = 90
-        .Top = 116
-        .Width = 60
-        .Height = 18
+        .Left = 112
+        .Top = 118
+        .Width = 70
+        .Height = 20
         .Font.Name = "Segoe UI"
-        .Font.Size = 8
+        .Font.Size = 9
         .Locked = False
         .BackColor = &HFFFFE0  ' Amarillo claro
         .Visible = False
     End With
     
-    ' Label estado modo (compacto con WordWrap)
+    ' Label estado modo (mejor posicionado con WordWrap)
     With Me.lblModoRPN
-        .Left = 6
-        .Top = 140
-        .Width = mLeftColWidth - 20
-        .Height = 28  ' Altura para 2 líneas
+        .Left = 8
+        .Top = 144
+        .Width = 220
+        .Height = 26
         .Caption = "[Modo RPN: no determinado]"
         .Font.Name = "Segoe UI"
         .Font.Size = 7
