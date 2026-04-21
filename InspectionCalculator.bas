@@ -14,17 +14,23 @@ Option Explicit
 '            respuestas del usuario.
 ' Parámetros:
 '   respuestas: Collection de Dictionary con claves:
-'     "IDPregunta", "IDOpcion", "ValorNumerico", "IDSeccion"
+'     "IDPregunta", "IDOpcion", "ValorNumerico", "IDSeccion", "IDCriticidad"
 '   idSeccionTA: ID de la sección de Técnica Aséptica
+'   idPlantilla: ID de la plantilla para calcular máximos dinámicos
 ' Retorna: Dictionary con claves:
-'   "puntaje"    - TA puntaje obtenido (suma de valores numéricos)
-'   "maximos"    - TA puntos máximos (de tblConfiguracion)
-'   "noaplica"   - TA puntos no aplica (ajuste del denominador)
+'   "puntaje"    - TA puntaje obtenido (suma de valores SOLO de respuestas que NO son "No Aplica")
+'   "maximos"    - TA puntos máximos (suma de valores de criticidad de todas las preguntas TA)
+'   "noaplica"   - TA puntos no aplica (suma de valores de criticidad de respuestas "No Aplica")
 '   "porcentaje" - TA porcentaje calculado
 ' ----------------------------------------------------------------------
 Public Function CalcularScoringTA(ByVal respuestas As Collection, _
-                                   ByVal idSeccionTA As String) As Object
+                                   ByVal idSeccionTA As String, _
+                                   ByVal idPlantilla As String) As Object
     On Error GoTo ErrorHandler
+    
+    Debug.Print "  [CalcularScoringTA] INICIO"
+    Debug.Print "    ID Sección TA: " & idSeccionTA
+    Debug.Print "    ID Plantilla: " & idPlantilla
     
     Dim resultado As Object
     Set resultado = CreateObject("Scripting.Dictionary")
@@ -34,43 +40,108 @@ Public Function CalcularScoringTA(ByVal respuestas As Collection, _
     Dim noAplica As Double
     Dim porcentaje As Double
     
-    ' Obtener máximo base de tblConfiguracion
-    maximos = ObtenerParametroNumerico("PUNTAJE_MAXIMO_TA_BASE")
-    If maximos = 0 Then maximos = 57 ' Valor por defecto
+    ' ===================================================================
+    ' PASO 1: Calcular máximos dinámicos sumando valores de criticidad
+    ' de todas las preguntas de TA de esta plantilla
+    ' ===================================================================
+    Debug.Print "    [PASO 1] Calculando máximos dinámicos..."
     
-    ' Obtener valor de la opción "No" para esta sección (para ajuste No Aplica)
-    Dim valorNo As Double
-    valorNo = ObtenerValorOpcionNo(idSeccionTA)
+    Dim preguntasTA As Collection
+    Set preguntasTA = ChecklistRepository.ObtenerPreguntasPorPlantillaYSeccion(idPlantilla, idSeccionTA)
     
-    ' Recorrer respuestas filtrando solo las de la sección TA
+    Debug.Print "      Total preguntas TA en plantilla: " & preguntasTA.Count
+    
+    Dim preg As Variant
+    For Each preg In preguntasTA
+        Dim idCriticidadPreg As String
+        idCriticidadPreg = CStr(preg(4)) ' preg(4) = ID Criticidad
+        
+        Dim valorCriticidad As Double
+        valorCriticidad = ObtenerValorCriticidad(idCriticidadPreg)
+        
+        maximos = maximos + valorCriticidad
+        
+        Debug.Print "      Pregunta " & preg(1) & " | Criticidad: " & idCriticidadPreg & " | Valor: " & valorCriticidad
+    Next preg
+    
+    Debug.Print "      Máximos calculados: " & maximos
+    
+    ' ===================================================================
+    ' PASO 2: Procesar respuestas para calcular puntaje y ajuste No Aplica
+    ' ===================================================================
+    Debug.Print "    [PASO 2] Procesando respuestas..."
+    Debug.Print "      Total respuestas recibidas: " & respuestas.Count
+    
     Dim resp As Variant
+    Dim contadorTA As Long
+    contadorTA = 0
+    
     For Each resp In respuestas
         Dim dictResp As Object
         Set dictResp = resp
         
+        ' Filtrar solo respuestas de la sección TA
         If dictResp("IDSeccion") = idSeccionTA Then
+            contadorTA = contadorTA + 1
+            
+            Dim idPregunta As String
+            Dim idOpcion As String
             Dim valorNumerico As Double
+            Dim idCriticidad As String
+            
+            idPregunta = CStr(dictResp("IDPregunta"))
+            idOpcion = CStr(dictResp("IDOpcion"))
             valorNumerico = CDbl(dictResp("ValorNumerico"))
+            idCriticidad = CStr(dictResp("IDCriticidad"))
             
-            ' Sumar al puntaje total (incluye valores negativos de No Aplica)
-            puntaje = puntaje + valorNumerico
+            ' Obtener texto de la opción para identificar "No Aplica"
+            Dim textoOpcion As String
+            textoOpcion = ObtenerTextoOpcionPorID(idOpcion)
             
-            ' Si es "No Aplica" (valor -1), acumular ajuste del denominador
-            ' usando el valor de "No" en lugar de -1
-            If valorNumerico = -1 Then
-                noAplica = noAplica + valorNo
+            Debug.Print "        Respuesta #" & contadorTA
+            Debug.Print "          IDPregunta: " & idPregunta
+            Debug.Print "          IDOpcion: " & idOpcion
+            Debug.Print "          TextoOpcion: " & textoOpcion
+            Debug.Print "          ValorNumerico: " & valorNumerico
+            Debug.Print "          IDCriticidad: " & idCriticidad
+            
+            ' Verificar si es "No Aplica"
+            If UCase(Trim(textoOpcion)) = "NO APLICA" Then
+                ' Es No Aplica: NO sumar al puntaje, SÍ ajustar denominador
+                Dim valorCrit As Double
+                valorCrit = ObtenerValorCriticidad(idCriticidad)
+                noAplica = noAplica + valorCrit
+                
+                Debug.Print "          >>> ES NO APLICA -> No suma a puntaje, ajuste denominador: +" & valorCrit
+            Else
+                ' NO es No Aplica: sumar valor al puntaje
+                puntaje = puntaje + valorNumerico
+                
+                Debug.Print "          >>> NO es No Aplica -> Suma a puntaje: +" & valorNumerico
             End If
         End If
     Next resp
     
-    ' Calcular porcentaje: (puntaje × 100) / (maximos - noaplica)
+    Debug.Print "      Respuestas TA procesadas: " & contadorTA
+    Debug.Print "      Puntaje obtenido: " & puntaje
+    Debug.Print "      No Aplica (ajuste): " & noAplica
+    
+    ' ===================================================================
+    ' PASO 3: Calcular porcentaje con denominador ajustado
+    ' ===================================================================
+    Debug.Print "    [PASO 3] Calculando porcentaje..."
+    
     Dim denominador As Double
     denominador = maximos - noAplica
     
+    Debug.Print "      Denominador (maximos - noaplica): " & maximos & " - " & noAplica & " = " & denominador
+    
     If denominador > 0 Then
         porcentaje = (puntaje * 100) / denominador
+        Debug.Print "      Porcentaje: (" & puntaje & " × 100) / " & denominador & " = " & porcentaje
     Else
         porcentaje = 0 ' Todas las respuestas son "No Aplica"
+        Debug.Print "      Porcentaje: 0 (denominador = 0, todas No Aplica)"
     End If
     
     ' Redondear a 2 decimales
@@ -81,10 +152,13 @@ Public Function CalcularScoringTA(ByVal respuestas As Collection, _
     resultado("noaplica") = noAplica
     resultado("porcentaje") = porcentaje
     
+    Debug.Print "  [CalcularScoringTA] FIN - Porcentaje final: " & Format(porcentaje, "0.00") & "%"
+    
     Set CalcularScoringTA = resultado
     Exit Function
     
 ErrorHandler:
+    Debug.Print "  [CalcularScoringTA] ERROR: " & Err.Description
     Set resultado = CreateObject("Scripting.Dictionary")
     resultado("puntaje") = 0
     resultado("maximos") = 0
@@ -306,38 +380,61 @@ ErrorHandler:
 End Function
 
 '' ----------------------------------------------------------------------
-' Función: ObtenerValorOpcionNo
-' Propósito: Obtiene el valor numérico de la opción "No" para una sección.
-'            Se usa para calcular el ajuste del denominador cuando hay
-'            respuestas "No Aplica".
+' Función: ObtenerValorCriticidad
+' Propósito: Obtiene el valor numérico de una criticidad dado su ID.
+' Parámetros:
+'   idCriticidad: ID de la criticidad (FK a tblCriticidad)
+' Retorna: Valor numérico de la criticidad (ej: Crítica=8, Mayor=4, Menor=1)
 ' ----------------------------------------------------------------------
-Private Function ObtenerValorOpcionNo(ByVal idSeccion As String) As Double
+Private Function ObtenerValorCriticidad(ByVal idCriticidad As String) As Double
     On Error GoTo ErrorHandler
     
-    Dim opciones As Collection
-    Set opciones = ChecklistRepository.ObtenerOpcionesRespuesta(idSeccion)
+    Dim wsChecklist As Worksheet
+    Dim tblCriticidad As ListObject
+    Dim critRow As ListRow
     
-    Dim op As Variant
-    For Each op In opciones
-        Dim arrOp() As Variant
-        arrOp = op
+    Set wsChecklist = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
+    Set tblCriticidad = wsChecklist.ListObjects(Configuration2.TABLE_CRITICIDAD)
+    
+    If tblCriticidad.DataBodyRange Is Nothing Then
+        ObtenerValorCriticidad = 1 ' Fallback: Menor
+        Exit Function
+    End If
+    
+    ' Buscar manualmente sin usar .Index
+    Dim idColIdx As Long
+    Dim valorColIdx As Long
+    idColIdx = 0
+    valorColIdx = 0
+    
+    Dim col As ListColumn
+    For Each col In tblCriticidad.ListColumns
+        If col.Name = "ID Criticidad" Then idColIdx = col.Index
+        If col.Name = "Valor" Then valorColIdx = col.Index
+    Next col
+    
+    If idColIdx = 0 Or valorColIdx = 0 Then
+        ObtenerValorCriticidad = 1 ' Fallback
+        Exit Function
+    End If
+    
+    For Each critRow In tblCriticidad.ListRows
+        Dim idActual As String
+        idActual = Trim(CStr(critRow.Range.Cells(1, idColIdx).Value))
         
-        Dim textoOpcion As String
-        textoOpcion = Trim(CStr(arrOp(1)))
-        
-        If textoOpcion = "No" Then
-            ObtenerValorOpcionNo = CDbl(arrOp(2))
+        If idActual = Trim(idCriticidad) Then
+            ObtenerValorCriticidad = CDbl(critRow.Range.Cells(1, valorColIdx).Value)
             Exit Function
         End If
-    Next op
+    Next critRow
     
-    ' Fallback: valor por defecto de "No" = 4
-    ObtenerValorOpcionNo = 4
+    ' Fallback: si no se encuentra, retornar 1 (Menor)
+    ObtenerValorCriticidad = 1
     Exit Function
     
 ErrorHandler:
-    ObtenerValorOpcionNo = 4
-    Call ErrorLogger2.Log("InspectionCalculator.ObtenerValorOpcionNo", Err.Description, Err.Number)
+    ObtenerValorCriticidad = 1
+    Call ErrorLogger2.Log("InspectionCalculator.ObtenerValorCriticidad", Err.Description, Err.Number)
 End Function
 
 '' ----------------------------------------------------------------------
@@ -357,4 +454,384 @@ Private Function CategorizarPorRangoDefault(ByVal rpn As Double) As Long
     Else
         CategorizarPorRangoDefault = 1
     End If
+End Function
+
+'' ----------------------------------------------------------------------
+' Función: ContarRespuestasPorCriticidad
+' Propósito: Cuenta las respuestas de la sección Auditoría de Procesos
+'            agrupadas por criticidad de la pregunta.
+' Parámetros:
+'   respuestas: Collection de Dictionary con claves:
+'     "IDPregunta", "IDOpcion", "ValorNumerico", "IDSeccion", "IDCriticidad"
+'   idSeccionProcesos: ID de la sección de Auditoría de Procesos
+' Retorna: Dictionary con claves por nombre de criticidad:
+'   "Crítica_Cumple", "Crítica_NoCumple", "Crítica_NoAplica"
+'   "Mayor_Cumple", "Mayor_NoCumple", "Mayor_NoAplica"
+'   "Menor_Cumple", "Menor_NoCumple", "Menor_NoAplica"
+' ----------------------------------------------------------------------
+Public Function ContarRespuestasPorCriticidad(ByVal respuestas As Collection, _
+                                               ByVal idSeccionProcesos As String) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim resultado As Object
+    Set resultado = CreateObject("Scripting.Dictionary")
+    
+    ' Inicializar contadores
+    resultado("Crítica_Cumple") = 0
+    resultado("Crítica_NoCumple") = 0
+    resultado("Crítica_NoAplica") = 0
+    resultado("Mayor_Cumple") = 0
+    resultado("Mayor_NoCumple") = 0
+    resultado("Mayor_NoAplica") = 0
+    resultado("Menor_Cumple") = 0
+    resultado("Menor_NoCumple") = 0
+    resultado("Menor_NoAplica") = 0
+    
+    ' Recorrer respuestas filtrando solo las de la sección Auditoría de Procesos
+     Debug.Print "  [ContarRespuestasPorCriticidad] Total respuestas recibidas: " & respuestas.Count
+    Debug.Print "  [ContarRespuestasPorCriticidad] ID Sección Procesos buscada: " & idSeccionProcesos
+    
+    Dim resp As Variant
+    Dim contadorProcesadas As Long
+    contadorProcesadas = 0
+    
+    For Each resp In respuestas
+        Dim dictResp As Object
+        Set dictResp = resp
+        
+        ' Debug: Mostrar IDSeccion de cada respuesta
+        Debug.Print "    Respuesta - IDSeccion: " & dictResp("IDSeccion") & " | IDPregunta: " & dictResp("IDPregunta")
+        
+        ' Solo procesar respuestas de la sección de Auditoría de Procesos
+        If dictResp("IDSeccion") = idSeccionProcesos Then
+            contadorProcesadas = contadorProcesadas + 1
+            
+            ' Obtener criticidad de la pregunta
+            Dim idCriticidad As String
+            Dim nombreCriticidad As String
+            idCriticidad = dictResp("IDCriticidad")
+            nombreCriticidad = ObtenerNombreCriticidad(idCriticidad)
+            
+            ' Obtener texto de la opción seleccionada
+            Dim idOpcion As String
+            Dim textoOpcion As String
+            idOpcion = dictResp("IDOpcion")
+            textoOpcion = ObtenerTextoOpcionPorID(idOpcion)
+            
+            ' Debug detallado
+            Debug.Print "      >>> PROCESANDO RESPUESTA #" & contadorProcesadas
+            Debug.Print "          IDCriticidad: " & idCriticidad
+            Debug.Print "          NombreCriticidad: " & nombreCriticidad
+            Debug.Print "          IDOpcion: " & idOpcion
+            Debug.Print "          TextoOpcion: " & textoOpcion
+            
+            ' Incrementar contador correspondiente
+            Dim clave As String
+            Select Case UCase(Trim(textoOpcion))
+                Case "CUMPLE"
+                    clave = nombreCriticidad & "_Cumple"
+                    If resultado.Exists(clave) Then
+                        resultado(clave) = resultado(clave) + 1
+                        Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
+                    Else
+                        Debug.Print "          ERROR: Clave no existe: " & clave
+                    End If
+                    
+                Case "NO CUMPLE"
+                    clave = nombreCriticidad & "_NoCumple"
+                    If resultado.Exists(clave) Then
+                        resultado(clave) = resultado(clave) + 1
+                        Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
+                    Else
+                        Debug.Print "          ERROR: Clave no existe: " & clave
+                    End If
+                    
+                Case "NO APLICA"
+                    clave = nombreCriticidad & "_NoAplica"
+                    If resultado.Exists(clave) Then
+                        resultado(clave) = resultado(clave) + 1
+                        Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
+                    Else
+                        Debug.Print "          ERROR: Clave no existe: " & clave
+                    End If
+                    
+                Case Else
+                    Debug.Print "          ADVERTENCIA: TextoOpcion no reconocido: " & textoOpcion
+            End Select
+        End If
+    Next resp
+    
+    Debug.Print "  [ContarRespuestasPorCriticidad] Total respuestas procesadas: " & contadorProcesadas
+    
+    Set ContarRespuestasPorCriticidad = resultado
+    Exit Function
+    
+ErrorHandler:
+    Set resultado = CreateObject("Scripting.Dictionary")
+    resultado("Crítica_Cumple") = 0
+    resultado("Crítica_NoCumple") = 0
+    resultado("Crítica_NoAplica") = 0
+    resultado("Mayor_Cumple") = 0
+    resultado("Mayor_NoCumple") = 0
+    resultado("Mayor_NoAplica") = 0
+    resultado("Menor_Cumple") = 0
+    resultado("Menor_NoCumple") = 0
+    resultado("Menor_NoAplica") = 0
+    Set ContarRespuestasPorCriticidad = resultado
+    Call ErrorLogger2.Log("InspectionCalculator.ContarRespuestasPorCriticidad", Err.Description, Err.Number)
+End Function
+
+'' ----------------------------------------------------------------------
+' Función: EvaluarAuditoriaProcesos
+' Propósito: Determina el resultado final de Auditoría de Procesos según
+'            las reglas de negocio basadas en criticidad.
+' Reglas (en orden de prioridad):
+'   1. Si hay 2 o más "No Cumple" de criticidad "Crítica" → "No Cumple"
+'   2. Si hay 1 "No Cumple" de criticidad "Crítica" Y 2 o más "No Cumple"
+'      de criticidad "Mayor" → "No Cumple"
+'   3. Si hay 4 o más "No Cumple" de criticidad "Mayor" → "No Cumple"
+'   4. En cualquier otro caso → "Cumple"
+' Parámetros:
+'   conteo: Dictionary retornado por ContarRespuestasPorCriticidad
+' Retorna: "Cumple" o "No Cumple"
+' ----------------------------------------------------------------------
+Public Function EvaluarAuditoriaProcesos(ByVal conteo As Object) As String
+    On Error GoTo ErrorHandler
+    
+    Dim criticaNoCumple As Long
+    Dim mayorNoCumple As Long
+    
+    ' Obtener contadores
+    criticaNoCumple = CLng(conteo("Crítica_NoCumple"))
+    mayorNoCumple = CLng(conteo("Mayor_NoCumple"))
+    
+    ' Aplicar reglas de negocio en orden de prioridad
+    
+    ' Regla 1: 2 o más "No Cumple" de criticidad "Crítica"
+    If criticaNoCumple >= 2 Then
+        EvaluarAuditoriaProcesos = "No Cumple"
+        Exit Function
+    End If
+    
+    ' Regla 2: 1 "No Cumple" de criticidad "Crítica" Y 
+    '          2 o más "No Cumple" de criticidad "Mayor"
+    If criticaNoCumple >= 1 And mayorNoCumple >= 2 Then
+        EvaluarAuditoriaProcesos = "No Cumple"
+        Exit Function
+    End If
+    
+    ' Regla 3: 4 o más "No Cumple" de criticidad "Mayor"
+    If mayorNoCumple >= 4 Then
+        EvaluarAuditoriaProcesos = "No Cumple"
+        Exit Function
+    End If
+    
+    ' Regla 4: En cualquier otro caso → "Cumple"
+    EvaluarAuditoriaProcesos = "Cumple"
+    Exit Function
+    
+ErrorHandler:
+    EvaluarAuditoriaProcesos = "Cumple" ' Por defecto en caso de error
+    Call ErrorLogger2.Log("InspectionCalculator.EvaluarAuditoriaProcesos", Err.Description, Err.Number)
+End Function
+
+'' ----------------------------------------------------------------------
+' Función: ObtenerNombreCriticidad
+' Propósito: Obtiene el nombre de criticidad a partir del ID.
+' Parámetros:
+'   idCriticidad: ID de la criticidad (FK a tblCriticidad)
+' Retorna: Nombre de la criticidad ("Crítica", "Mayor", "Menor")
+' ----------------------------------------------------------------------
+Private Function ObtenerNombreCriticidad(ByVal idCriticidad As String) As String
+    On Error GoTo ErrorHandler
+    
+    Debug.Print "        [ObtenerNombreCriticidad] Buscando ID: '" & idCriticidad & "'"
+    
+    Dim wsConfig As Worksheet
+    Dim tblCriticidad As ListObject
+    Dim critRow As ListRow
+    
+    Set wsConfig = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
+    Set tblCriticidad = wsConfig.ListObjects(Configuration2.TABLE_CRITICIDAD)
+    
+    If tblCriticidad.DataBodyRange Is Nothing Then
+        Debug.Print "        [ObtenerNombreCriticidad] ERROR: Tabla vacía, retornando 'Menor'"
+        ObtenerNombreCriticidad = "Menor" ' Fallback
+        Exit Function
+    End If
+    
+    Debug.Print "        [ObtenerNombreCriticidad] Filas en tblCriticidad: " & tblCriticidad.ListRows.Count
+    
+    ' Buscar índices de columnas de forma robusta SIN usar .Index
+    Dim colIDIndex As Long
+    Dim colNombreIndex As Long
+    Dim col As ListColumn
+    Dim i As Long
+    
+    ' Buscar columna "ID Criticidad"
+    colIDIndex = 0
+    On Error Resume Next
+    For i = 1 To tblCriticidad.ListColumns.Count
+        If InStr(1, tblCriticidad.ListColumns(i).Name, "Criticidad", vbTextCompare) > 0 And _
+           InStr(1, tblCriticidad.ListColumns(i).Name, "ID", vbTextCompare) > 0 Then
+            colIDIndex = i
+            Exit For
+        End If
+    Next i
+    On Error GoTo ErrorHandler
+    
+    If colIDIndex = 0 Then colIDIndex = 1  ' Fallback a columna 1
+    Debug.Print "        [ObtenerNombreCriticidad] Usando columna ID: " & colIDIndex
+    
+    ' Buscar columna "Nombre de criticidad"
+    colNombreIndex = 0
+    On Error Resume Next
+    For i = 1 To tblCriticidad.ListColumns.Count
+        If InStr(1, tblCriticidad.ListColumns(i).Name, "Nombre", vbTextCompare) > 0 And _
+           InStr(1, tblCriticidad.ListColumns(i).Name, "criticidad", vbTextCompare) > 0 Then
+            colNombreIndex = i
+            Exit For
+        End If
+    Next i
+    On Error GoTo ErrorHandler
+    
+    If colNombreIndex = 0 Then colNombreIndex = 2  ' Fallback a columna 2
+    Debug.Print "        [ObtenerNombreCriticidad] Usando columna Nombre: " & colNombreIndex
+    
+    Dim contador As Long
+    contador = 0
+    For Each critRow In tblCriticidad.ListRows
+        contador = contador + 1
+        Dim idActual As String
+        On Error Resume Next
+        idActual = Trim(CStr(critRow.Range.Cells(1, colIDIndex).Value))
+        On Error GoTo ErrorHandler
+        
+        If contador <= 3 Then  ' Solo mostrar primeras 3 para no saturar
+            Debug.Print "        [ObtenerNombreCriticidad] Fila " & contador & " - ID: '" & idActual & "'"
+        End If
+        
+        If idActual = Trim(idCriticidad) Then
+            Dim nombreEncontrado As String
+            On Error Resume Next
+            nombreEncontrado = Trim(CStr(critRow.Range.Cells(1, colNombreIndex).Value))
+            On Error GoTo ErrorHandler
+            Debug.Print "        [ObtenerNombreCriticidad] ¡MATCH! Retornando: '" & nombreEncontrado & "'"
+            ObtenerNombreCriticidad = nombreEncontrado
+            Exit Function
+        End If
+    Next critRow
+    
+    ' Si no se encuentra, retornar "Menor" como fallback
+    Debug.Print "        [ObtenerNombreCriticidad] NO ENCONTRADO. Retornando 'Menor' como fallback"
+    ObtenerNombreCriticidad = "Menor"
+    Exit Function
+    
+ErrorHandler:
+    Debug.Print "        [ObtenerNombreCriticidad] ERROR: " & Err.Description
+    ObtenerNombreCriticidad = "Menor"
+    Call ErrorLogger2.Log("InspectionCalculator.ObtenerNombreCriticidad", Err.Description, Err.Number)
+End Function
+
+'' ----------------------------------------------------------------------
+' Función: ObtenerTextoOpcionPorID
+' Propósito: Obtiene el texto de una opción a partir de su ID.
+' Parámetros:
+'   idOpcion: ID de la opción (FK a tblOpcionesDeRespuesta)
+' Retorna: Texto de la opción ("Cumple", "No Cumple", "No Aplica", etc.)
+' ----------------------------------------------------------------------
+Private Function ObtenerTextoOpcionPorID(ByVal idOpcion As String) As String
+    On Error GoTo ErrorHandler
+    
+    Debug.Print "        [ObtenerTextoOpcionPorID] Buscando ID: '" & idOpcion & "'"
+    
+    Dim wsConfig As Worksheet
+    Dim tblOpciones As ListObject
+    Dim opcionRow As ListRow
+    
+    Set wsConfig = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
+    Set tblOpciones = wsConfig.ListObjects(Configuration2.TABLE_OPCIONES)
+    
+    If tblOpciones.DataBodyRange Is Nothing Then
+        Debug.Print "        [ObtenerTextoOpcionPorID] ERROR: Tabla vacía"
+        ObtenerTextoOpcionPorID = ""
+        Exit Function
+    End If
+    
+    Debug.Print "        [ObtenerTextoOpcionPorID] Filas en tblOpciones: " & tblOpciones.ListRows.Count
+    
+    ' Buscar índices de columnas de forma robusta SIN usar .Index
+    Dim colIDIndex As Long
+    Dim colTextoIndex As Long
+    Dim i As Long
+    
+    ' Buscar columna "ID Opcion" o "ID Opción"
+    colIDIndex = 0
+    On Error Resume Next
+    For i = 1 To tblOpciones.ListColumns.Count
+        Dim nombreCol As String
+        nombreCol = tblOpciones.ListColumns(i).Name
+        If (InStr(1, nombreCol, "ID", vbTextCompare) > 0 And _
+            InStr(1, nombreCol, "Opcion", vbTextCompare) > 0) Or _
+           (InStr(1, nombreCol, "ID", vbTextCompare) > 0 And _
+            InStr(1, nombreCol, "Opción", vbTextCompare) > 0) Then
+            colIDIndex = i
+            Exit For
+        End If
+    Next i
+    On Error GoTo ErrorHandler
+    
+    If colIDIndex = 0 Then colIDIndex = 1  ' Fallback a columna 1
+    Debug.Print "        [ObtenerTextoOpcionPorID] Usando columna ID: " & colIDIndex
+    
+    ' Buscar columna "Opción texto" o "Opcion texto"
+    colTextoIndex = 0
+    On Error Resume Next
+    For i = 1 To tblOpciones.ListColumns.Count
+        nombreCol = tblOpciones.ListColumns(i).Name
+        If (InStr(1, nombreCol, "texto", vbTextCompare) > 0 And _
+            InStr(1, nombreCol, "Opcion", vbTextCompare) > 0) Or _
+           (InStr(1, nombreCol, "texto", vbTextCompare) > 0 And _
+            InStr(1, nombreCol, "Opción", vbTextCompare) > 0) Then
+            colTextoIndex = i
+            Exit For
+        End If
+    Next i
+    On Error GoTo ErrorHandler
+    
+    If colTextoIndex = 0 Then colTextoIndex = 2  ' Fallback a columna 2
+    Debug.Print "        [ObtenerTextoOpcionPorID] Usando columna Texto: " & colTextoIndex
+    
+    Dim contador As Long
+    contador = 0
+    For Each opcionRow In tblOpciones.ListRows
+        contador = contador + 1
+        Dim idActual As String
+        On Error Resume Next
+        idActual = Trim(CStr(opcionRow.Range.Cells(1, colIDIndex).Value))
+        On Error GoTo ErrorHandler
+        
+        If contador <= 3 Then ' Solo mostrar primeros 3 para no saturar
+            Debug.Print "        [ObtenerTextoOpcionPorID] Fila " & contador & " - ID: '" & idActual & "'"
+        End If
+        
+        If idActual = Trim(idOpcion) Then
+            Dim textoEncontrado As String
+            On Error Resume Next
+            textoEncontrado = Trim(CStr(opcionRow.Range.Cells(1, colTextoIndex).Value))
+            On Error GoTo ErrorHandler
+            Debug.Print "        [ObtenerTextoOpcionPorID] ¡MATCH! Retornando: '" & textoEncontrado & "'"
+            ObtenerTextoOpcionPorID = textoEncontrado
+            Exit Function
+        End If
+    Next opcionRow
+    
+    Debug.Print "        [ObtenerTextoOpcionPorID] NO ENCONTRADO. Retornando vacío"
+    ObtenerTextoOpcionPorID = ""
+    Exit Function
+    
+ErrorHandler:
+    Debug.Print "        [ObtenerTextoOpcionPorID] ERROR: " & Err.Description
+    ObtenerTextoOpcionPorID = ""
+    Call ErrorLogger2.Log("InspectionCalculator.ObtenerTextoOpcionPorID", Err.Description, Err.Number)
 End Function

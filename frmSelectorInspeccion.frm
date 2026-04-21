@@ -363,14 +363,9 @@ Private Sub cboPlantillas_Change()
     Dim plantillaInfo As String: plantillaInfo = cboPlantillas.Value
     Dim posApertura As Long: posApertura = InStrRev(plantillaInfo, "(")
     
-    ' CORRECCIÓN: Extraer solo el contenido entre paréntesis sin los paréntesis
+    ' Extraer solo el contenido entre paréntesis sin los paréntesis
     mIDPlantilla = Trim(Mid(plantillaInfo, posApertura + 1, Len(plantillaInfo) - posApertura - 1))
     mNombrePlantilla = Trim(Left(plantillaInfo, posApertura - 1))
-    
-    Debug.Print "cboPlantillas_Change:"
-    Debug.Print "  plantillaInfo: " & plantillaInfo
-    Debug.Print "  mNombrePlantilla: " & mNombrePlantilla
-    Debug.Print "  mIDPlantilla: " & mIDPlantilla
     
     ' Habilitar botón Aceptar si tenemos planta
     If Len(mPlanta) > 0 Then
@@ -384,17 +379,10 @@ End Sub
 
 '' ----------------------------------------------------------------------
 ' Evento: btnAceptar_Click
-' Propósito: Confirma la selección y pasa los datos al ChecklistOrchestrator
-'            para que abra frmChecklistVirtual de forma segura.
+' Propósito: Confirma la selección y abre el ChecklistVirtual
 ' ----------------------------------------------------------------------
 Private Sub btnAceptar_Click()
     On Error GoTo ErrorHandler
-    
-    Debug.Print "=== btnAceptar_Click INICIADO ==="
-    Debug.Print "mPuestoSeleccionado: " & mPuestoSeleccionado
-    Debug.Print "mPersonalSeleccionado: " & mPersonalSeleccionado
-    Debug.Print "mIDPlantilla: " & mIDPlantilla
-    Debug.Print "mPlanta: " & mPlanta
     
     ' Validar que todos los campos estén completos
     If Len(mPuestoSeleccionado) = 0 Then
@@ -417,42 +405,21 @@ Private Sub btnAceptar_Click()
         Exit Sub
     End If
     
-    ' Opción 1: Si existe ChecklistOrchestrator, delegarle la apertura
-    ' On Error Resume Next
-    ' Call ChecklistOrchestrator.AbrirChecklist(mPersonalSeleccionado, mPuestoSeleccionado, mIDPlantilla, mPlanta)
-    ' On Error GoTo ErrorHandler
-    
-    ' Opción 2: Abrir frmChecklistVirtual directamente y luego ocultar este formulario
-    Debug.Print "Creando instancia de frmChecklistVirtual..."
-    Set oChecklistFormInstance = New frmChecklistVirtual
-    
-    Debug.Print "Asignando propiedades..."
-    With oChecklistFormInstance
-        .Evaluado = mPersonalSeleccionado             ' Iniciales
-        .Puesto = mPuestoSeleccionado
-        .IDPlantilla = mIDPlantilla
-        .Planta = mPlanta
-        .IDCronograma = ""                             ' Nueva inspección
-        
-        Debug.Print "Propiedades asignadas:"
-        Debug.Print "  .Evaluado: " & .Evaluado
-        Debug.Print "  .Puesto: " & .Puesto
-        Debug.Print "  .IDPlantilla: " & .IDPlantilla
-        Debug.Print "  .Planta: " & .Planta
-    End With
-    
-    ' Ocultar este formulario PRIMERO (antes de mostrar el checklist)
+    ' Marcar como NO cancelado
     mCancelado = False
+    
+    ' Ocultar ANTES de abrir el siguiente formulario
     Me.Hide
     
-    ' LUEGO mostrar el formulario de checklist (sin conflicto de contexto)
-    Debug.Print "Mostrando formulario..."
-    oChecklistFormInstance.Show vbModeless
+    ' Abrir checklist virtual directamente
+    ' idCronograma = "" porque es una inspección ad-hoc (no viene de tabla cronograma)
+    Call ChecklistOrchestrator.AbrirChecklistVirtual(mPersonalSeleccionado, mIDPlantilla, mPuestoSeleccionado, "")
     
-    Debug.Print "btnAceptar_Click completado OK"
+    ' Cerrar este formulario después de que ChecklistVirtual se cierre
+    Unload Me
+    
     Exit Sub
 ErrorHandler:
-    Debug.Print "ERROR btnAceptar_Click: " & Err.Description
     MsgBox "Error al abrir Checklist Virtual: " & Err.Description, vbCritical, "Error"
 End Sub
 

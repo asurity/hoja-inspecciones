@@ -224,10 +224,13 @@ End Function
 
 '' ----------------------------------------------------------------------
 ' Función: ObtenerOpcionesRespuesta
-' Propósito: Obtiene las opciones de respuesta para una sección dada.
+' Propósito: Obtiene las opciones de respuesta para una sección y criticidad dadas.
 ' Retorna: Collection de arrays (ID_Opcion, Texto_opcion, Valor_puntaje).
+' Parámetros:
+'   idSeccion: ID de la sección para filtrar
+'   idCriticidad: (Opcional) ID de criticidad para filtrar. Si es "", no filtra por criticidad
 ' ----------------------------------------------------------------------
-Public Function ObtenerOpcionesRespuesta(ByVal idSeccion As String) As Collection
+Public Function ObtenerOpcionesRespuesta(ByVal idSeccion As String, Optional ByVal idCriticidad As String = "") As Collection
     On Error GoTo ErrorHandler
     
     Dim wsChecklist As Worksheet
@@ -238,72 +241,50 @@ Public Function ObtenerOpcionesRespuesta(ByVal idSeccion As String) As Collectio
     Set wsChecklist = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
     Set tblOpciones = wsChecklist.ListObjects(Configuration2.TABLE_OPCIONES)
     
-    Debug.Print "=== ObtenerOpcionesRespuesta === IDSeccion: " & idSeccion
-    Debug.Print "Tabla: " & tblOpciones.Name
-    Debug.Print "Columnas disponibles: " & tblOpciones.ListColumns.Count
-    
-    ' Listar todas las columnas disponibles
-    Dim col As ListColumn
-    For Each col In tblOpciones.ListColumns
-        Debug.Print "  - Columna " & col.Index & ": " & col.Name
-    Next col
-    
     If tblOpciones.DataBodyRange Is Nothing Then
-        Debug.Print "ADVERTENCIA: DataBodyRange vacío"
         Set ObtenerOpcionesRespuesta = resultado
         Exit Function
     End If
     
     ' Validar que existen las columnas necesarias antes de usarlas
-    Dim colIDSeccion As Long, colIDOpcion As Long, colOpcion As Long, colValorPuntaje As Long
+    Dim colIDSeccion As Long, colIDOpcion As Long, colOpcion As Long, colValorPuntaje As Long, colIDCriticidad As Long
     
     On Error Resume Next
     colIDSeccion = tblOpciones.ListColumns("ID Seccion").Index
-    If Err.Number <> 0 Then
-        Debug.Print "ERROR: No existe columna 'ID Seccion'"
-        Err.Clear
-        GoTo ErrorHandler
-    End If
-    
     colIDOpcion = tblOpciones.ListColumns("ID Opcion").Index
-    If Err.Number <> 0 Then
-        Debug.Print "ERROR: No existe columna 'ID Opcion'"
-        Err.Clear
-        GoTo ErrorHandler
-    End If
-    
     colOpcion = tblOpciones.ListColumns("Opción texto").Index
-    If Err.Number <> 0 Then
-        Debug.Print "ERROR: No existe columna 'Opción texto'"
-        Err.Clear
-        GoTo ErrorHandler
-    End If
-    
     colValorPuntaje = tblOpciones.ListColumns("Valor puntaje").Index
+    colIDCriticidad = tblOpciones.ListColumns("ID Criticidad").Index
+    
     If Err.Number <> 0 Then
-        Debug.Print "ERROR: No existe columna 'Valor puntaje'"
+        Debug.Print "ERROR ObtenerOpcionesRespuesta: Falta columna requerida"
         Err.Clear
         GoTo ErrorHandler
     End If
     On Error GoTo ErrorHandler
     
-    Debug.Print "Columnas encontradas OK. Buscando opciones..."
-    
     For Each opcionRow In tblOpciones.ListRows
         Dim opSeccion As String
-        opSeccion = Trim(opcionRow.Range.Cells(1, colIDSeccion).Value)
+        Dim opCriticidad As String
         
-        If opSeccion = Trim(idSeccion) Then
-            Dim op(0 To 2) As Variant
-            op(0) = opcionRow.Range.Cells(1, colIDOpcion).Value
-            op(1) = opcionRow.Range.Cells(1, colOpcion).Value
-            op(2) = opcionRow.Range.Cells(1, colValorPuntaje).Value
-            resultado.Add op
-            Debug.Print "  Encontrada opción: " & op(0) & " - " & op(1) & " (" & op(2) & ")"
-        End If
+        opSeccion = Trim(opcionRow.Range.Cells(1, colIDSeccion).Value)
+        opCriticidad = Trim(opcionRow.Range.Cells(1, colIDCriticidad).Value)
+        
+        ' Filtrar por sección (obligatorio)
+        If opSeccion <> Trim(idSeccion) Then GoTo SiguienteOpcion
+        
+        ' Filtrar por criticidad (si se especificó)
+        If Len(idCriticidad) > 0 And opCriticidad <> Trim(idCriticidad) Then GoTo SiguienteOpcion
+        
+        ' Opción válida - agregar al resultado
+        Dim op(0 To 2) As Variant
+        op(0) = opcionRow.Range.Cells(1, colIDOpcion).Value
+        op(1) = opcionRow.Range.Cells(1, colOpcion).Value
+        op(2) = opcionRow.Range.Cells(1, colValorPuntaje).Value
+        resultado.Add op
+        
+SiguienteOpcion:
     Next opcionRow
-    
-    Debug.Print "Total opciones encontradas: " & resultado.Count
     Set ObtenerOpcionesRespuesta = resultado
     Exit Function
     

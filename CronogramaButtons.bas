@@ -1,4 +1,3 @@
-Attribute VB_Name = "CronogramaButtons"
 ' ----------------------------------------------------------------------
 ' Módulo: CronogramaButtons
 ' Descripción: Vincula los botones de la hoja Cronograma con las funciones
@@ -152,41 +151,13 @@ Public Sub AbrirSelectorInspeccion()
     ' Crear instancia del formulario selector
     Dim frmSelector As New frmSelectorInspeccion
     
-    ' Mostrar modal (espera hasta que el usuario acepte o cancele)
+    ' Mostrar modal (el formulario se encarga de abrir ChecklistVirtual)
     frmSelector.Show vbModal
     
-    ' Verificar si el usuario canceló
-    If frmSelector.Cancelado Then
-        Unload frmSelector
-        Exit Sub
-    End If
-    
-    ' Obtener datos seleccionados
-    Dim puesto As String
-    Dim iniciales As String
-    Dim idPlantilla As String
-    Dim planta As String
-    
-    puesto = frmSelector.PuestoSeleccionado
-    iniciales = frmSelector.PersonalSeleccionado
-    idPlantilla = frmSelector.IDPlantilla
-    planta = frmSelector.Planta
-    
-    ' Liberar formulario
-    Unload frmSelector
-    
-    ' Validar datos
-    If Len(idPlantilla) = 0 Or Len(iniciales) = 0 Then
-        MsgBox "Datos incompletos. No se puede iniciar la inspección.", vbExclamation, "Error"
-        Exit Sub
-    End If
-    
-    ' Abrir checklist virtual
-    ' idCronograma = "" porque es una inspección ad-hoc (no viene de tabla cronograma)
-    Call ChecklistOrchestrator.AbrirChecklistVirtual(iniciales, idPlantilla, puesto, "")
-    
+    Debug.Print "=== AbrirSelectorInspeccion COMPLETADO ==="
     Exit Sub
 ErrorHandler:
+    Debug.Print "ERROR en AbrirSelectorInspeccion: " & Err.Description
     MsgBox "Error en selector: " & Err.Description, vbCritical, "Error"
 End Sub
 

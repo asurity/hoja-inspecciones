@@ -28,6 +28,7 @@
 '     - lblArea, cboArea (ComboBox)
 '     - lblLineaAuditada, cboLineaAuditada (ComboBox)
 '     - lblFecha, txtFecha (TextBox)
+'     - lblFechaAuditada, txtFechaAuditada (TextBox)
 '     - lblHoraInicio, txtHoraInicio (TextBox)
 '     - lblHoraTermino, txtHoraTermino (TextBox)
 '     - lblEvaluador, cboEvaluador (ComboBox)
@@ -114,6 +115,7 @@ Private mIDCronograma As String
 Private mPlanta As String
 Private mFrecuenciaMeses As Long
 Private mIDSeccionTA As String
+Private mIDSeccionProcesos As String
 
 ' Colección de secciones: cada item es un array(ID, Nombre, TipoRespuesta)
 Private mSecciones As Collection
@@ -168,6 +170,10 @@ Public Property Get FechaInspeccion() As String
     FechaInspeccion = Trim(txtFecha.Value)
 End Property
 
+Public Property Get FechaAuditada() As String
+    FechaAuditada = Trim(txtFechaAuditada.Value)
+End Property
+
 Public Property Get HoraInicio() As String
     HoraInicio = Trim(txtHoraInicio.Value)
 End Property
@@ -214,6 +220,10 @@ End Property
 
 Public Property Get IDSeccionTA() As String
     IDSeccionTA = mIDSeccionTA
+End Property
+
+Public Property Get IDSeccionProcesos() As String
+    IDSeccionProcesos = mIDSeccionProcesos
 End Property
 
 ' ======================================================================
@@ -454,6 +464,7 @@ Private Sub ConfigurarCabecera()
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Style = fmStyleDropDownList
+        .TabIndex = 0
     End With
     rowIdx = rowIdx + 1
     
@@ -479,6 +490,7 @@ Private Sub ConfigurarCabecera()
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Style = fmStyleDropDownList
+        .TabIndex = 1
     End With
     rowIdx = rowIdx + 1
     
@@ -503,10 +515,36 @@ Private Sub ConfigurarCabecera()
         .Height = 20
         .Font.Name = "Segoe UI"
         .Font.Size = 9
+        .TabIndex = 2
     End With
     rowIdx = rowIdx + 1
     
-    ' FILA 7: Hora inicio
+    ' FILA 7: Fecha Auditada
+    With Me.lblFechaAuditada
+        .Left = lblLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = LABEL_WIDTH
+        .Height = 18
+        .Caption = "Fecha Auditada:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .TextAlign = fmTextAlignLeft
+        .BackStyle = fmBackStyleTransparent
+    End With
+    With Me.txtFechaAuditada
+        .Left = ctrlLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = ctrlW
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .TabIndex = 3
+    End With
+    rowIdx = rowIdx + 1
+    
+    ' FILA 8: Hora inicio
     With Me.lblHoraInicio
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
@@ -527,10 +565,11 @@ Private Sub ConfigurarCabecera()
         .Height = 20
         .Font.Name = "Segoe UI"
         .Font.Size = 9
+        .TabIndex = 4
     End With
     rowIdx = rowIdx + 1
     
-    ' FILA 8: Hora término
+    ' FILA 9: Hora término
     With Me.lblHoraTermino
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
@@ -551,10 +590,11 @@ Private Sub ConfigurarCabecera()
         .Height = 20
         .Font.Name = "Segoe UI"
         .Font.Size = 9
+        .TabIndex = 5
     End With
     rowIdx = rowIdx + 1
     
-    ' FILA 9: Evaluador
+    ' FILA 10: Evaluador
     With Me.lblEvaluador
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
@@ -576,10 +616,11 @@ Private Sub ConfigurarCabecera()
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Style = fmStyleDropDownList
+        .TabIndex = 6
     End With
     rowIdx = rowIdx + 1
     
-    ' FILA 10: Ayudante 1
+    ' FILA 11: Ayudante 1
     With Me.lblAY1
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
@@ -601,10 +642,11 @@ Private Sub ConfigurarCabecera()
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Style = fmStyleDropDownList
+        .TabIndex = 7
     End With
     rowIdx = rowIdx + 1
     
-    ' FILA 11: Ayudante 2
+    ' FILA 12: Ayudante 2
     With Me.lblAY2
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
@@ -626,10 +668,11 @@ Private Sub ConfigurarCabecera()
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Style = fmStyleDropDownList
+        .TabIndex = 8
     End With
     rowIdx = rowIdx + 1
     
-    ' FILA 12: Operador
+    ' FILA 13: Operador
     With Me.lblOP
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
@@ -651,10 +694,11 @@ Private Sub ConfigurarCabecera()
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Style = fmStyleDropDownList
+        .TabIndex = 9
     End With
     rowIdx = rowIdx + 1
     
-    ' FILA 13: Lugar auditoría
+    ' FILA 14: Lugar auditoría
     With Me.lblLugar
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
@@ -676,6 +720,7 @@ Private Sub ConfigurarCabecera()
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Style = fmStyleDropDownList
+        .TabIndex = 10
     End With
 End Sub
 
@@ -693,6 +738,7 @@ Private Sub ConfigurarMultiPage()
         .Font.Bold = True
         .Style = fmTabStyleTabs
         .MultiRow = False
+        .TabIndex = 11
     End With
 End Sub
 
@@ -723,6 +769,7 @@ Private Sub ConfigurarObservacionGeneral()
         .ScrollBars = fmScrollBarsVertical
         .EnterKeyBehavior = True
         .WordWrap = True
+        .TabIndex = 12
     End With
 End Sub
 
@@ -742,6 +789,7 @@ Private Sub ConfigurarBotones()
         .Font.Size = 10
         .Font.Bold = True
         .BackColor = COLOR_GUARDAR
+        .TabIndex = 13
     End With
     
     ' --- Botón Cancelar (derecha) ---
@@ -754,6 +802,7 @@ Private Sub ConfigurarBotones()
         .Font.Name = "Segoe UI"
         .Font.Size = 10
         .BackColor = COLOR_CANCELAR
+        .TabIndex = 14
     End With
 End Sub
 
@@ -845,6 +894,7 @@ Private Sub UserForm_Activate()
     txtPuesto.Value = mPuesto
     txtPlanta.Value = mPlanta
     txtFecha.Value = Format(Date, "dd/mm/yyyy")
+    txtFechaAuditada.Value = Format(Date, "dd/mm/yyyy")
     On Error GoTo ErrorHandler
     
     Debug.Print "Campos básicos cargados OK"
@@ -945,18 +995,23 @@ End Function
 
 '' ----------------------------------------------------------------------
 ' Función: ObtenerRespuestasConSeccion
-' Propósito: Retorna la colección de respuestas incluyendo IDSeccion
+' Propósito: Retorna la colección de respuestas incluyendo IDSeccion e IDCriticidad
 '            para cálculos de scoring (InspectionCalculator).
 ' Retorna: Collection de Dictionary con claves:
-'   "IDPregunta", "IDOpcion", "ValorNumerico", "Observacion", "IDSeccion"
+'   "IDPregunta", "IDOpcion", "ValorNumerico", "Observacion", "IDSeccion", "IDCriticidad"
 ' ----------------------------------------------------------------------
 Public Function ObtenerRespuestasConSeccion() As Collection
     On Error GoTo ErrorHandler
     
+    Debug.Print "[frmChecklistVirtual.ObtenerRespuestasConSeccion] Iniciando - Total respuestas en mRespuestas: " & mRespuestas.Count
+    
     Dim resultado As New Collection
     Dim key As Variant
+    Dim contador As Long
+    contador = 0
     
     For Each key In mRespuestas.Keys
+        contador = contador + 1
         Dim dictOrig As Object
         Set dictOrig = mRespuestas(key)
         
@@ -967,9 +1022,14 @@ Public Function ObtenerRespuestasConSeccion() As Collection
         dictResp("ValorNumerico") = dictOrig("ValorNumerico")
         dictResp("Observacion") = dictOrig("Observacion")
         dictResp("IDSeccion") = dictOrig("IDSeccion")
+        dictResp("IDCriticidad") = dictOrig("IDCriticidad")
+        
+        Debug.Print "  [ObtenerRespuestasConSeccion] Respuesta #" & contador & " - IDPregunta: " & key & ", IDSeccion: " & dictOrig("IDSeccion") & ", IDCriticidad: " & dictOrig("IDCriticidad") & ", IDOpcion: " & dictOrig("IDOpcion")
         
         resultado.Add dictResp
     Next key
+    
+    Debug.Print "[frmChecklistVirtual.ObtenerRespuestasConSeccion] Completado - Total items en Collection: " & resultado.Count
     
     Set ObtenerRespuestasConSeccion = resultado
     Exit Function
@@ -1209,6 +1269,11 @@ Private Sub CargarSecciones()
            InStr(1, LCase(nombreSeccion), "técnica") > 0 Then
             mIDSeccionTA = CStr(arrSec(0))
             Debug.Print "  >> Identificada sección TA: " & mIDSeccionTA
+        ElseIf InStr(1, LCase(nombreSeccion), "procesos") > 0 Or _
+               InStr(1, LCase(nombreSeccion), "auditoría de procesos") > 0 Or _
+               InStr(1, LCase(nombreSeccion), "auditoria de procesos") > 0 Then
+            mIDSeccionProcesos = CStr(arrSec(0))
+            Debug.Print "  >> Identificada sección Auditoría de Procesos: " & mIDSeccionProcesos
         End If
     Next sec
     
@@ -1228,18 +1293,9 @@ End Sub
 Private Sub CargarPreguntasDinamicas()
     On Error GoTo ErrorHandler
     
-    Debug.Print "  >> CargarPreguntasDinamicas iniciado"
-    
     ' Validar precondiciones
-    If mSecciones Is Nothing Then
-        Debug.Print "  >> ERROR: mSecciones es Nothing"
-        Exit Sub
-    End If
-    
-    If mSecciones.Count = 0 Then
-        Debug.Print "  >> ADVERTENCIA: No hay secciones cargadas"
-        Exit Sub
-    End If
+    If mSecciones Is Nothing Then Exit Sub
+    If mSecciones.Count = 0 Then Exit Sub
     
     Dim pageIndex As Long
     Dim arrSec() As Variant
@@ -1259,61 +1315,29 @@ Private Sub CargarPreguntasDinamicas()
     Dim sec As Variant
     For Each sec In mSecciones
         ' --- GUARDIA: No procesar más secciones que páginas disponibles ---
-        If pageIndex >= maxPages Then
-            Debug.Print "  >> ADVERTENCIA: Sección ignorada, no hay más páginas. pageIndex=" & pageIndex & ", maxPages=" & maxPages
-            GoTo SiguienteSeccion
-        End If
+        If pageIndex >= maxPages Then GoTo SiguienteSeccion
         
-        ' --- PASO 1: Extraer datos de la sección ---
-        Debug.Print "  >> [Paso 1] Extrayendo datos de sección, pageIndex=" & pageIndex
+        ' --- Extraer datos de la sección ---
         arrSec = sec
         idSeccion = CStr(arrSec(0))
         nombreSeccion = CStr(arrSec(1))
-        Debug.Print "  >> Procesando sección: " & idSeccion & " - " & nombreSeccion
         
-        ' --- PASO 2: Verificar que la página existe en el MultiPage ---
-        Debug.Print "  >> [Paso 2] Verificando página en MultiPage..."
-        If pageIndex >= mpPreguntas.Pages.Count Then
-            Debug.Print "    - ERROR: Page " & pageIndex & " no existe. Saltando."
-            GoTo SiguienteSeccion
-        End If
+        ' --- Verificar que la página existe en el MultiPage ---
+        If pageIndex >= mpPreguntas.Pages.Count Then GoTo SiguienteSeccion
         
         ' Configurar caption de la página
         mpPreguntas.Pages(pageIndex).Caption = nombreSeccion
-        Debug.Print "    - Caption configurado: " & nombreSeccion
         
-        ' --- PASO 3: Obtener preguntas ---
-        Debug.Print "  >> [Paso 3] Obteniendo preguntas de plantilla " & mIDPlantilla & " y sección " & idSeccion
+        ' --- Obtener preguntas ---
         Set preguntas = Nothing
         
         On Error Resume Next
         Set preguntas = ChecklistRepository.ObtenerPreguntasPorPlantillaYSeccion(mIDPlantilla, idSeccion)
         On Error GoTo ErrorHandler
         
-        If preguntas Is Nothing Then
-            Debug.Print "    - ERROR: No se pudo obtener preguntas"
-            GoTo SiguienteSeccion
-        End If
+        If preguntas Is Nothing Then GoTo SiguienteSeccion
         
-        Debug.Print "    - Preguntas obtenidas: " & preguntas.Count
-        
-        ' --- PASO 4: Obtener opciones de respuesta ---
-        Debug.Print "  >> [Paso 4] Obteniendo opciones de respuesta..."
-        Set opciones = Nothing
-        
-        On Error Resume Next
-        Set opciones = ChecklistRepository.ObtenerOpcionesRespuesta(idSeccion)
-        On Error GoTo ErrorHandler
-        
-        If opciones Is Nothing Then
-            Debug.Print "    - ERROR: No se pudieron obtener opciones"
-            GoTo SiguienteSeccion
-        End If
-        
-        Debug.Print "    - Opciones obtenidas: " & opciones.Count
-        
-        ' --- PASO 5: Acceder al frame existente en el diseñador ---
-        Debug.Print "  >> [Paso 5] Accediendo frame existente..."
+        ' --- Acceder al frame existente en el diseñador ---
         Set fraContainer = Nothing
         fraName = "fraPreguntas" & pageIndex
         
@@ -1321,21 +1345,14 @@ Private Sub CargarPreguntasDinamicas()
         Set fraContainer = mpPreguntas.Pages(pageIndex).Controls(fraName)
         On Error GoTo ErrorHandler
         
-        If fraContainer Is Nothing Then
-            Debug.Print "    - ERROR: Frame '" & fraName & "' no existe en el diseñador"
-            GoTo SiguienteSeccion
-        End If
-        
-        Debug.Print "    - Frame '" & fraName & "' accedido OK"
+        If fraContainer Is Nothing Then GoTo SiguienteSeccion
         
         ' --- Activar la página antes de crear controles dinámicos ---
         mpPreguntas.Value = pageIndex
         DoEvents
         
-        ' --- PASO 6: Crear controles dinámicos ---
-        Debug.Print "  >> [Paso 6] Creando controles dinámicos..."
-        Call CrearControlesPreguntas(fraContainer, preguntas, opciones, idSeccion)
-        Debug.Print "  >> [Paso 6] Controles creados OK para sección " & idSeccion
+        ' --- Crear controles dinámicos ---
+        Call CrearControlesPreguntas(fraContainer, preguntas, idSeccion)
         
 SiguienteSeccion:
         pageIndex = pageIndex + 1
@@ -1348,11 +1365,9 @@ SiguienteSeccion:
     DoEvents
     On Error GoTo ErrorHandler
     
-    Debug.Print "  >> CargarPreguntasDinamicas completado. Páginas: " & pageIndex
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "  >> ERROR CargarPreguntasDinamicas (Paso actual, pageIndex=" & pageIndex & "): [" & Err.Number & "] " & Err.Description
     Call ErrorLogger2.Log("frmChecklistVirtual.CargarPreguntasDinamicas", "pageIndex=" & pageIndex & " | " & Err.Description, Err.Number)
 End Sub
 
@@ -1398,33 +1413,17 @@ End Function
 ' Parámetros:
 '   fra: Frame contenedor
 '   preguntas: Collection de arrays (ID, Numero, Texto, IDSeccion, IDCriticidad, Orden)
-'   opciones: Collection de arrays (IDOpcion, Texto, ValorPuntaje)
 '   idSeccion: ID de la sección para vincular respuestas
-' CAMBIOS: Sanitizar nombres, mejor manejo de errores, logging detallado
+' CAMBIOS: Ahora obtiene opciones por cada pregunta según su ID Criticidad
 ' ----------------------------------------------------------------------
 Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
                                     ByVal preguntas As Collection, _
-                                    ByVal opciones As Collection, _
                                     ByVal idSeccion As String)
     On Error GoTo ErrorHandler
     
-    Debug.Print "    >> CrearControlesPreguntas iniciado. Preguntas: " & preguntas.Count & ", Opciones: " & opciones.Count
-    
     ' Validar parámetros
-    If fra Is Nothing Then
-        Debug.Print "    >> ERROR: Frame es Nothing"
-        Exit Sub
-    End If
-    
-    If preguntas.Count = 0 Then
-        Debug.Print "    >> ADVERTENCIA: No hay preguntas"
-        Exit Sub
-    End If
-    
-    If opciones.Count = 0 Then
-        Debug.Print "    >> ADVERTENCIA: No hay opciones"
-        Exit Sub
-    End If
+    If fra Is Nothing Then Exit Sub
+    If preguntas.Count = 0 Then Exit Sub
     
     Dim topPos As Single
     topPos = PREG_MARGIN
@@ -1444,16 +1443,25 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
         Dim idPregunta As String
         Dim numPregunta As String
         Dim textoPregunta As String
+        Dim idCriticidad As String
         Dim nomSanitizado As String
         
         idPregunta = CStr(arrPreg(0))
         numPregunta = CStr(arrPreg(1))
         textoPregunta = CStr(arrPreg(2))
+        ' arrPreg(3) es idSeccion (ya lo tenemos como parámetro)
+        idCriticidad = CStr(arrPreg(4))  ' ID Criticidad de esta pregunta
         nomSanitizado = SanitizarNombreControl(idPregunta)
         
         pregIndex = pregIndex + 1
         
-        Debug.Print "    >> Pregunta " & pregIndex & ": ID=[" & idPregunta & "] Num=[" & numPregunta & "] Nombre_Sanitizado=[" & nomSanitizado & "]"
+        ' --- OBTENER OPCIONES PARA ESTA PREGUNTA (filtradas por sección Y criticidad) ---
+        Dim opciones As Collection
+        On Error Resume Next
+        Set opciones = ChecklistRepository.ObtenerOpcionesRespuesta(idSeccion, idCriticidad)
+        On Error GoTo ErrorHandler
+        
+        If opciones Is Nothing Then GoTo SiguientePregunta
         
         ' --- Label: número + texto de la pregunta ---
         On Error Resume Next
@@ -1473,9 +1481,7 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
                 .Tag = idPregunta  ' Guardar ID original en Tag
             End With
             topPos = topPos + PREG_LABEL_HEIGHT + 2
-            Debug.Print "      ✓ Label creado"
         Else
-            Debug.Print "      ✗ ERROR: No se pudo crear Label (ID: " & idPregunta & ")"
             On Error GoTo ErrorHandler
             GoTo SiguientePregunta
         End If
@@ -1493,19 +1499,17 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
                 .Width = 160
                 .Height = PREG_COMBO_HEIGHT
                 .Style = fmStyleDropDownList
-                .Tag = idPregunta & "|" & idSeccion  ' ID original en Tag
+                .Tag = idPregunta & "|" & idSeccion & "|" & idCriticidad  ' Guardar IDs en Tag
             End With
             
-            ' Cargar opciones
+            ' Cargar opciones (ya filtradas por sección y criticidad)
             Dim op As Variant
             For Each op In opciones
                 Dim arrOp() As Variant
                 arrOp = op
                 cboResp.AddItem CStr(arrOp(1))
             Next op
-            Debug.Print "      ✓ ComboBox creado, opciones cargadas: " & opciones.Count
         Else
-            Debug.Print "      ✗ ERROR: No se pudo crear ComboBox (ID: " & idPregunta & ")"
             On Error GoTo ErrorHandler
             GoTo SiguientePregunta
         End If
@@ -1526,9 +1530,6 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
                 .Font.Size = 8
                 .Tag = idPregunta
             End With
-            Debug.Print "      ✓ Label 'Obs:' creado"
-        Else
-            Debug.Print "      ✗ ADVERTENCIA: No se pudo crear Label 'Obs:' (ignorando)"
         End If
         
         On Error GoTo ErrorHandler
@@ -1548,9 +1549,6 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
                 .Font.Size = 8
                 .Tag = idPregunta
             End With
-            Debug.Print "      ✓ TextBox creado"
-        Else
-            Debug.Print "      ✗ ADVERTENCIA: No se pudo crear TextBox (ignorando)"
         End If
         
         On Error GoTo ErrorHandler
@@ -1567,7 +1565,10 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
         dictResp("ValorNumerico") = 0
         dictResp("Observacion") = ""
         dictResp("IDSeccion") = idSeccion
+        dictResp("IDCriticidad") = idCriticidad
         mRespuestas(idPregunta) = dictResp
+        
+        Debug.Print "[frmChecklistVirtual.CrearControlesPreguntas] Pregunta " & idPregunta & " inicializada con IDCriticidad: " & idCriticidad
         
         On Error GoTo ErrorHandler
 
@@ -1580,19 +1581,14 @@ SiguientePregunta:
     newHeight = topPos + PREG_MARGIN
     
     ' Límite de seguridad: no exceder 5000
-    If newHeight > 5000 Then
-        newHeight = 5000
-        Debug.Print "    >> ADVERTENCIA: ScrollHeight limitado a 5000 (original: " & topPos + PREG_MARGIN & ")"
-    End If
+    If newHeight > 5000 Then newHeight = 5000
     
     fra.ScrollHeight = newHeight
     On Error GoTo ErrorHandler
     
-    Debug.Print "    >> CrearControlesPreguntas completado. Preguntas creadas: " & pregIndex
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "    >> ERROR CrearControlesPreguntas: [" & Err.Number & "] " & Err.Description
     Call ErrorLogger2.Log("frmChecklistVirtual.CrearControlesPreguntas", Err.Description, Err.Number)
 End Sub
 
@@ -1605,6 +1601,7 @@ End Sub
 ' Propósito: Recorre todos los ComboBox dinámicos de respuestas y
 '            actualiza el diccionario mRespuestas con las selecciones.
 '            Llamado antes de guardar.
+' CAMBIO: Ahora usa ID Criticidad del Tag para obtener opciones correctas
 ' ----------------------------------------------------------------------
 Private Sub RecopilarRespuestas()
     On Error GoTo ErrorHandler
@@ -1615,15 +1612,6 @@ Private Sub RecopilarRespuestas()
     
     Dim sec As Variant
     For Each sec In mSecciones
-        Dim arrSec() As Variant
-        arrSec = sec
-        Dim idSeccion As String
-        idSeccion = CStr(arrSec(0))
-        
-        ' Obtener opciones para buscar ID y valor numérico
-        Dim opciones As Collection
-        Set opciones = ChecklistRepository.ObtenerOpcionesRespuesta(idSeccion)
-        
         ' Recorrer controles del frame
         Dim fraName As String
         fraName = "fraPreguntas" & secIdx
@@ -1641,33 +1629,49 @@ Private Sub RecopilarRespuestas()
                     Dim cboResp As MSForms.ComboBox
                     Set cboResp = ctrl
                     
-                    ' Extraer IDPregunta del Tag
+                    ' Extraer IDPregunta, IDSeccion e IDCriticidad del Tag
                     Dim tagParts() As String
                     tagParts = Split(cboResp.Tag, "|")
                     Dim idPregunta As String
+                    Dim idSeccion As String
+                    Dim idCriticidad As String
+                    
                     idPregunta = tagParts(0)
+                    If UBound(tagParts) >= 1 Then idSeccion = tagParts(1)
+                    If UBound(tagParts) >= 2 Then idCriticidad = tagParts(2)
                     
                     If cboResp.ListIndex >= 0 Then
-                        ' Encontrar la opción seleccionada
-                        Dim textoSeleccionado As String
-                        textoSeleccionado = cboResp.Value
+                        ' Obtener opciones filtradas por sección Y criticidad
+                        Dim opciones As Collection
+                        On Error Resume Next
+                        Set opciones = ChecklistRepository.ObtenerOpcionesRespuesta(idSeccion, idCriticidad)
+                        On Error GoTo ErrorHandler
                         
-                        ' Buscar ID y valor en las opciones
-                        Dim op As Variant
-                        For Each op In opciones
-                            Dim arrOp() As Variant
-                            arrOp = op
-                            If CStr(arrOp(1)) = textoSeleccionado Then
-                                Dim dictResp As Object
-                                Set dictResp = CreateObject("Scripting.Dictionary")
-                                dictResp("IDOpcion") = CStr(arrOp(0))
-                                dictResp("ValorNumerico") = CDbl(arrOp(2))
-                                dictResp("Observacion") = ""
-                                dictResp("IDSeccion") = idSeccion
-                                Set mRespuestas(idPregunta) = dictResp
-                                Exit For
-                            End If
-                        Next op
+                        If Not opciones Is Nothing Then
+                            ' Encontrar la opción seleccionada
+                            Dim textoSeleccionado As String
+                            textoSeleccionado = cboResp.Value
+                            
+                            ' Buscar ID y valor en las opciones
+                            Dim op As Variant
+                            For Each op In opciones
+                                Dim arrOp() As Variant
+                                arrOp = op
+                                If CStr(arrOp(1)) = textoSeleccionado Then
+                                    Dim dictResp As Object
+                                    Set dictResp = CreateObject("Scripting.Dictionary")
+                                    dictResp("IDOpcion") = CStr(arrOp(0))
+                                    dictResp("ValorNumerico") = CDbl(arrOp(2))
+                                    dictResp("Observacion") = ""
+                                    dictResp("IDSeccion") = idSeccion
+                                    dictResp("IDCriticidad") = idCriticidad
+                                    Set mRespuestas(idPregunta) = dictResp
+                                    
+                                    Debug.Print "[frmChecklistVirtual.RecopilarRespuestas] Pregunta " & idPregunta & ": IDOpcion=" & arrOp(0) & ", ValorNum=" & arrOp(2) & ", IDCriticidad=" & idCriticidad
+                                    Exit For
+                                End If
+                            Next op
+                        End If
                     End If
                 End If
             Next ctrl

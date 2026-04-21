@@ -33,24 +33,23 @@ Public Function CrearInspeccion(ByVal datos As Object) As String
     Set newRow = tblInspecciones.ListRows.Add
     
     With newRow.Range
-        ' Campos obligatorios
         .Cells(1, tblInspecciones.ListColumns("ID Inspeccion").Index).Value = idInspeccion
         .Cells(1, tblInspecciones.ListColumns("Iniciales personal").Index).Value = datos("Iniciales")
         .Cells(1, tblInspecciones.ListColumns("ID Plantilla").Index).Value = datos("IDPlantilla")
-        .Cells(1, tblInspecciones.ListColumns("Planta ejecutora").Index).Value = datos("Planta")
+        .Cells(1, tblInspecciones.ListColumns("Planta").Index).Value = datos("Planta")
         .Cells(1, tblInspecciones.ListColumns("Fecha inspeccion").Index).Value = datos("FechaInspeccion")
         .Cells(1, tblInspecciones.ListColumns("Auditor").Index).Value = datos("Evaluador")
         .Cells(1, tblInspecciones.ListColumns("Estado").Index).Value = Configuration2.INSPECCION_EN_PROGRESO
         
         ' Campos nuevos del checklist virtual
         .Cells(1, tblInspecciones.ListColumns("Area").Index).Value = datos("Area")
-        .Cells(1, tblInspecciones.ListColumns("Linea auditada").Index).Value = datos("LineaAuditada")
+        .Cells(1, tblInspecciones.ListColumns("Linea Auditada").Index).Value = datos("LineaAuditada")
         .Cells(1, tblInspecciones.ListColumns("Hora inicio").Index).Value = datos("HoraInicio")
         .Cells(1, tblInspecciones.ListColumns("Hora termino").Index).Value = datos("HoraTermino")
         .Cells(1, tblInspecciones.ListColumns("Iniciales AY1").Index).Value = datos("AY1")
         .Cells(1, tblInspecciones.ListColumns("Iniciales AY2").Index).Value = datos("AY2")
         .Cells(1, tblInspecciones.ListColumns("Iniciales OP").Index).Value = datos("OP")
-        .Cells(1, tblInspecciones.ListColumns("Lugar auditoria").Index).Value = datos("LugarAuditoria")
+        .Cells(1, tblInspecciones.ListColumns("Lugar Auditoria").Index).Value = datos("LugarAuditoria")
         .Cells(1, tblInspecciones.ListColumns("Observaciones generales").Index).Value = datos("ObservacionGeneral")
     End With
     
@@ -78,27 +77,110 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
     Dim newRow As ListRow
     Dim resp As Variant
     
+    Debug.Print "[GuardarRespuestas] Inicio. ID Inspeccion: " & idInspeccion
+    
     Set wsHistorico = ThisWorkbook.Sheets(Configuration2.SHEET_HISTORICO)
+    Debug.Print "[GuardarRespuestas] Hoja Histórico obtenida: " & wsHistorico.Name
+    
     Set tblRespuestas = wsHistorico.ListObjects(Configuration2.TABLE_RESPUESTAS)
+    Debug.Print "[GuardarRespuestas] Tabla tblRespuestas obtenida con " & tblRespuestas.ListColumns.Count & " columnas"
+    
+    ' Leer nombres de columnas para verificar estructura
+    Dim colIdx As Long
+    For colIdx = 1 To tblRespuestas.ListColumns.Count
+        Debug.Print "  Columna " & colIdx & ": " & tblRespuestas.ListColumns(colIdx).Name
+    Next colIdx
     
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
     
+    Dim contador As Long
+    contador = 0
+    
+    ' Verificar si existe columna ID Criticidad (columna 8)
+    Dim tieneColumnaCriticidad As Boolean
+    tieneColumnaCriticidad = False
+    
+    Debug.Print "[GuardarRespuestas] Total columnas en tblRespuestas: " & tblRespuestas.ListColumns.Count
+    
+    If tblRespuestas.ListColumns.Count >= 8 Then
+        Dim nombreCol8 As String
+        nombreCol8 = tblRespuestas.ListColumns(8).Name
+        Debug.Print "[GuardarRespuestas] Nombre columna 8: '" & nombreCol8 & "'"
+        
+        If InStr(1, nombreCol8, "Criticidad", vbTextCompare) > 0 Then
+            tieneColumnaCriticidad = True
+            Debug.Print "[GuardarRespuestas] ✓ Columna ID Criticidad encontrada: " & nombreCol8
+        Else
+            Debug.Print "[GuardarRespuestas] ✗ ADVERTENCIA: Columna 8 existe pero no es ID Criticidad: " & nombreCol8
+            Debug.Print "[GuardarRespuestas] ✗ Ver: docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md"
+        End If
+    Else
+        Debug.Print "[GuardarRespuestas] ✗ ADVERTENCIA: No hay columna 8 (ID Criticidad)."
+        Debug.Print "[GuardarRespuestas] ✗ ACCIÓN REQUERIDA: Agregar columna 'ID Criticidad' como columna 8"
+        Debug.Print "[GuardarRespuestas] ✗ Ver: docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md"
+    End If
+    
     For Each resp In respuestas
+        contador = contador + 1
+        Debug.Print "[GuardarRespuestas] Procesando respuesta " & contador
+        
         Dim dictResp As Object
         Set dictResp = resp
         
+        Debug.Print "  IDPregunta: " & dictResp("IDPregunta")
+        Debug.Print "  IDOpcion: " & dictResp("IDOpcion")
+        Debug.Print "  ValorNumerico: " & dictResp("ValorNumerico")
+        If dictResp.Exists("IDCriticidad") Then
+            Debug.Print "  IDCriticidad: " & dictResp("IDCriticidad")
+        Else
+            Debug.Print "  IDCriticidad: (no presente en Dictionary)"
+        End If
+        
         Set newRow = tblRespuestas.ListRows.Add
+        Debug.Print "  Nueva fila agregada"
+        
+        ' Usar índices de columna en lugar de nombres para evitar problemas de acentos
+        ' Estructura de tblRespuestas:
+        ' [1] ID Respuesta, [2] ID Inspeccion, [3] ID Pregunta, 
+        ' [4] ID Opcion, [5] Valor numerico, [6] Observacion, [7] Fecha respuesta
+        ' [8] ID Criticidad (NUEVA - ver docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md)
         
         With newRow.Range
-            .Cells(1, tblRespuestas.ListColumns("ID Respuesta").Index).Value = GenerarUUID()
-            .Cells(1, tblRespuestas.ListColumns("ID Inspeccion").Index).Value = idInspeccion
-            .Cells(1, tblRespuestas.ListColumns("ID Pregunta").Index).Value = dictResp("IDPregunta")
-            .Cells(1, tblRespuestas.ListColumns("ID Opcion").Index).Value = dictResp("IDOpcion")
-            .Cells(1, tblRespuestas.ListColumns("Valor numerico").Index).Value = dictResp("ValorNumerico")
-            .Cells(1, tblRespuestas.ListColumns("Observacion").Index).Value = dictResp("Observacion")
-            .Cells(1, tblRespuestas.ListColumns("Fecha respuesta").Index).Value = Now
+            Debug.Print "  Estableciendo Columna 1 (ID Respuesta)..."
+            .Cells(1, 1).Value = GenerarUUID()
+            
+            Debug.Print "  Estableciendo Columna 2 (ID Inspeccion)..."
+            .Cells(1, 2).Value = idInspeccion
+            
+            Debug.Print "  Estableciendo Columna 3 (ID Pregunta)..."
+            .Cells(1, 3).Value = dictResp("IDPregunta")
+            
+            Debug.Print "  Estableciendo Columna 4 (ID Opcion)..."
+            .Cells(1, 4).Value = dictResp("IDOpcion")
+            
+            Debug.Print "  Estableciendo Columna 5 (Valor numerico)..."
+            .Cells(1, 5).Value = dictResp("ValorNumerico")
+            
+            Debug.Print "  Estableciendo Columna 6 (Observacion)..."
+            .Cells(1, 6).Value = dictResp("Observacion")
+            
+            Debug.Print "  Estableciendo Columna 7 (Fecha respuesta)..."
+            .Cells(1, 7).Value = Now
+            
+            ' Guardar ID Criticidad si la columna existe y el dato está presente
+            If tieneColumnaCriticidad Then
+                If dictResp.Exists("IDCriticidad") Then
+                    Debug.Print "  Estableciendo Columna 8 (ID Criticidad)..."
+                    .Cells(1, 8).Value = dictResp("IDCriticidad")
+                Else
+                    Debug.Print "  Columna 8 dejada vacía (IDCriticidad no presente en respuesta)"
+                    .Cells(1, 8).Value = ""
+                End If
+            End If
         End With
+        
+        Debug.Print "  Respuesta " & contador & " completada"
     Next resp
     
     Application.Calculation = xlCalculationAutomatic
@@ -108,6 +190,7 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
 ErrorHandler:
     Application.Calculation = xlCalculationAutomatic
     Application.ScreenUpdating = True
+    Debug.Print "[GuardarRespuestas] ERROR en respuesta " & contador & ": " & Err.Description
     Call ErrorLogger2.Log("InspectionRepository.GuardarRespuestas", Err.Description, Err.Number)
     Err.Raise Err.Number, "InspectionRepository.GuardarRespuestas", Err.Description
 End Sub
@@ -142,10 +225,38 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
         If currentID = Trim(idInspeccion) Then
             With inspeccionRow.Range
                 ' Scoring TA
-                .Cells(1, tblInspecciones.ListColumns("TA puntaje").Index).Value = calculos("TA_puntaje")
-                .Cells(1, tblInspecciones.ListColumns("TA maximos").Index).Value = calculos("TA_maximos")
-                .Cells(1, tblInspecciones.ListColumns("TA noaplica").Index).Value = calculos("TA_noaplica")
+                .Cells(1, tblInspecciones.ListColumns("TA puntaje obtenido").Index).Value = calculos("TA_puntaje")
+                .Cells(1, tblInspecciones.ListColumns("TA puntos maximos").Index).Value = calculos("TA_maximos")
+                .Cells(1, tblInspecciones.ListColumns("TA puntos no aplica").Index).Value = calculos("TA_noaplica")
                 .Cells(1, tblInspecciones.ListColumns("TA porcentaje").Index).Value = calculos("TA_porcentaje")
+                
+                ' Auditoría de Procesos (intentar guardar si la columna existe)
+                If calculos.Exists("Auditoria_Procesos_Resultado") Then
+                    On Error Resume Next
+                    Dim colIndexProcesos As Variant
+                    colIndexProcesos = Empty
+                    
+                    ' Intentar encontrar la columna por varios nombres posibles
+                    Dim nombresPosibles As Variant
+                    nombresPosibles = Array("Auditoria Procesos Resultado", "Auditoría Procesos Resultado", _
+                                           "Resultado Auditoria Procesos", "AP Resultado")
+                    
+                    Dim nombreCol As Variant
+                    For Each nombreCol In nombresPosibles
+                        colIndexProcesos = Application.Match(CStr(nombreCol), tblInspecciones.HeaderRowRange, 0)
+                        If Not IsError(colIndexProcesos) Then
+                            .Cells(1, CLng(colIndexProcesos)).Value = calculos("Auditoria_Procesos_Resultado")
+                            Debug.Print "[ActualizarCalculos] Auditoría Procesos guardada en columna '" & nombreCol & "' (" & colIndexProcesos & "): " & calculos("Auditoria_Procesos_Resultado")
+                            Exit For
+                        End If
+                    Next nombreCol
+                    
+                    If IsError(colIndexProcesos) Or IsEmpty(colIndexProcesos) Then
+                        Debug.Print "[ActualizarCalculos] ADVERTENCIA: No se encontró columna para Auditoría de Procesos. Dato: " & calculos("Auditoria_Procesos_Resultado")
+                        Debug.Print "[ActualizarCalculos] Columnas existentes: " & tblInspecciones.ListColumns.Count
+                    End If
+                    On Error GoTo ErrorHandler
+                End If
                 
                 ' RPN y categoría
                 .Cells(1, tblInspecciones.ListColumns("RPN calculado").Index).Value = calculos("RPN")
@@ -153,8 +264,8 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                 .Cells(1, tblInspecciones.ListColumns("Requiere accion").Index).Value = calculos("RequiereAccion")
                 
                 ' Programación
-                .Cells(1, tblInspecciones.ListColumns("Fecha proxima").Index).Value = calculos("FechaProxima")
-                .Cells(1, tblInspecciones.ListColumns("Dias vencimiento").Index).Value = calculos("DiasVencimiento")
+                .Cells(1, tblInspecciones.ListColumns("Fecha proxima inspeccion").Index).Value = calculos("FechaProxima")
+                .Cells(1, tblInspecciones.ListColumns("Dias para vencimiento").Index).Value = calculos("DiasVencimiento")
                 .Cells(1, tblInspecciones.ListColumns("Estado programacion").Index).Value = calculos("EstadoProgramacion")
                 
                 ' Estado final

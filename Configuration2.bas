@@ -193,6 +193,38 @@ Public Const INSPECCION_EN_PROGRESO As String = "En progreso"
 Public Const INSPECCION_COMPLETADO As String = "Completado"
 Public Const INSPECCION_CANCELADO As String = "Cancelado"
 
+' ============================================================================
+' CONFIGURACIÓN DE CERTIFICADOS PDF
+' Última actualización: 15/04/2026 - Fase 0: Preparación infraestructura
+' ============================================================================
+
+' ----------------------------------------------------------------------
+' Constante: SHEET_PLANTILLA_CERTIFICADO
+' Propósito: Nombre de la hoja oculta que sirve como plantilla para
+'            generar certificados PDF de inspecciones completadas.
+' Estado: Hoja muy oculta (xlSheetVeryHidden)
+' ----------------------------------------------------------------------
+Public Const SHEET_PLANTILLA_CERTIFICADO As String = "Plantilla Certificado"
+
+' ----------------------------------------------------------------------
+' Constantes: Configuración de exportación PDF
+' ----------------------------------------------------------------------
+Public Const PDF_PREFIJO_NOMBRE As String = "CERTIFICADO"
+Public Const PDF_CALIDAD As Long = 0  ' 0 = xlQualityStandard, 1 = xlQualityMinimum
+Public Const PDF_ABRIR_AUTOMATICO As Boolean = True
+
+' ----------------------------------------------------------------------
+' Constantes: Anchos de columnas para tabla de preguntas en certificado
+' Valores en puntos de Excel (1 punto ˜ 0.35 mm)
+' ----------------------------------------------------------------------
+Public Const CERT_ANCHO_COL_NUMERO As Double = 20
+Public Const CERT_ANCHO_COL_PREGUNTA As Double = 350
+Public Const CERT_ANCHO_COL_RESPUESTA As Double = 80
+Public Const CERT_ANCHO_COL_OBSERVACION As Double = 90
+
+
+
+
 ' ----------------------------------------------------------------------
 ' Array de nombres de columnas de puestos en tblPersonal
 ' Nota: Este array debe mantenerse sincronizado con la estructura de tblPersonal
@@ -485,9 +517,10 @@ End Function
 ' Propósito: Registro de inspecciones completadas con resultados de scoring,
 '            RPN y categorización. Cada inspección está vinculada a un
 '            personal, plantilla y tiene múltiples respuestas en tblRespuestas.
-' Total columnas: 30
+' Total columnas: 31
+' Última actualización: 21/04/2026 - Agregada columna "Auditoria Procesos Resultado"
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (15/04/2026):
+' COLUMNAS VERIFICADAS (21/04/2026):
 '   [01] ID Inspeccion               - String (UUID único, PK)
 '   [02] Area                        - String (área donde se realizó la inspección)
 '   [03] Linea Auditada              - String (línea de producción/proceso auditada)
@@ -507,22 +540,24 @@ End Function
 '   [17] TA puntos maximos           - Double (máximo posible sección TA)
 '   [18] TA puntos no aplica         - Double (puntos no aplicables en TA)
 '   [19] TA porcentaje               - Double (porcentaje final TA)
-'   [20] RPN calculado               - Double (Risk Priority Number calculado)
-'   [21] Categoria resultado         - String ("Categoría 1/2/3")
-'   [22] Requiere accion             - String ("Si"/"No" - si requiere acción)
-'   [23] Fecha proxima inspeccion    - Date (fecha calculada próxima inspección)
-'   [24] Dias para vencimiento       - Long (días hasta vencimiento)
-'   [25] Estado programacion         - String (ver ESTADO_* constantes)
-'   [26] Observaciones generales     - String (observaciones de la inspección)
-'   [27] Fecha calculo               - Date (timestamp de cálculos)
-'   [28] Usuario calculo             - String (usuario que completó cálculos)
-'   [29] Fecha completado            - Date (timestamp de completado)
-'   [30] Usuario completado          - String (usuario que completó)
+'   [20] Auditoria Procesos Resultado - String (resultado auditoría de procesos - NUEVA col 21/04/2026)
+'   [21] RPN calculado               - Double (Risk Priority Number calculado)
+'   [22] Categoria resultado         - String ("Categoría 1/2/3")
+'   [23] Requiere accion             - String ("Si"/"No" - si requiere acción)
+'   [24] Fecha proxima inspeccion    - Date (fecha calculada próxima inspección)
+'   [25] Dias para vencimiento       - Long (días hasta vencimiento)
+'   [26] Estado programacion         - String (ver ESTADO_* constantes)
+'   [27] Observaciones generales     - String (observaciones de la inspección)
+'   [28] Fecha calculo               - Date (timestamp de cálculos)
+'   [29] Usuario calculo             - String (usuario que completó cálculos)
+'   [30] Fecha completado            - Date (timestamp de completado)
+'   [31] Usuario completado          - String (usuario que completó)
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - InspectionRepository.bas (CrearInspeccion, ActualizarCalculosInspeccion - ESCRITURA)
 '   - InspectionScheduler.bas (ObtenerUltimaInspeccion - LECTURA)
 '   - ChecklistOrchestrator.bas (GuardarInspeccionCompleta vía Repository)
+'   - CertificadoPDFGenerator.bas (ObtenerDatosInspeccion - LECTURA col 20-22, 27)
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------
@@ -531,9 +566,9 @@ End Function
 ' Propósito: Respuestas individuales de cada pregunta en una inspección.
 '            Cada respuesta vincula una inspección con una pregunta y su
 '            opción seleccionada, incluyendo observaciones opcionales.
-' Total columnas: 7
+' Total columnas: 8
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (15/04/2026):
+' COLUMNAS VERIFICADAS (20/04/2026):
 '   [1] ID Respuesta            - String (UUID único, PK)
 '   [2] ID Inspeccion           - String (FK a tblInspecciones)
 '   [3] ID Pregunta             - String (FK a tblPreguntas)
@@ -541,37 +576,10 @@ End Function
 '   [5] Valor numerico          - Double (valor numérico de la opción para scoring)
 '   [6] Observacion             - String (observaciones opcionales de la respuesta)
 '   [7] Fecha respuesta         - Date (timestamp de registro de respuesta)
+'   [8] ID Criticidad           - String (FK a tblCriticidad - copiado de pregunta para cálculos)
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - InspectionRepository.bas (GuardarRespuestas - ESCRITURA)
 '   - frmChecklistVirtual.frm (ObtenerRespuestas, RecopilarRespuestas)
+'   - InspectionCalculator.bas (CalcularScoringTA usa IDCriticidad para ajuste "No Aplica")
 ' ----------------------------------------------------------------------
-
-' ============================================================================
-' CONFIGURACIÓN DE CERTIFICADOS PDF
-' Última actualización: 15/04/2026 - Fase 0: Preparación infraestructura
-' ============================================================================
-
-' ----------------------------------------------------------------------
-' Constante: SHEET_PLANTILLA_CERTIFICADO
-' Propósito: Nombre de la hoja oculta que sirve como plantilla para
-'            generar certificados PDF de inspecciones completadas.
-' Estado: Hoja muy oculta (xlSheetVeryHidden)
-' ----------------------------------------------------------------------
-Public Const SHEET_PLANTILLA_CERTIFICADO As String = "Plantilla Certificado"
-
-' ----------------------------------------------------------------------
-' Constantes: Configuración de exportación PDF
-' ----------------------------------------------------------------------
-Public Const PDF_PREFIJO_NOMBRE As String = "CERTIFICADO"
-Public Const PDF_CALIDAD As Long = 0  ' 0 = xlQualityStandard, 1 = xlQualityMinimum
-Public Const PDF_ABRIR_AUTOMATICO As Boolean = True
-
-' ----------------------------------------------------------------------
-' Constantes: Anchos de columnas para tabla de preguntas en certificado
-' Valores en puntos de Excel (1 punto ≈ 0.35 mm)
-' ----------------------------------------------------------------------
-Public Const CERT_ANCHO_COL_NUMERO As Double = 20
-Public Const CERT_ANCHO_COL_PREGUNTA As Double = 350
-Public Const CERT_ANCHO_COL_RESPUESTA As Double = 80
-Public Const CERT_ANCHO_COL_OBSERVACION As Double = 90

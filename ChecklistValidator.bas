@@ -50,6 +50,8 @@ Public Function ValidarCabecera(ByVal datos As Object) As String
         Exit Function
     End If
     
+    ' Los campos opcionales AY1, AY2, OP pueden estar vacíos
+    
     If Trim(CStr(datos("LugarAuditoria"))) = "" Then
         ValidarCabecera = "Debe seleccionar el Lugar de auditoría (Dentro/Fuera del área)."
         Exit Function
@@ -71,6 +73,25 @@ Public Function ValidarCabecera(ByVal datos As Object) As String
     
     If CDate(fechaStr) > Date Then
         ValidarCabecera = "La Fecha evaluada no puede ser posterior a hoy."
+        Exit Function
+    End If
+    
+    ' --- Fecha Auditada ---
+    Dim fechaAuditadaStr As String
+    fechaAuditadaStr = Trim(CStr(datos("FechaAuditada")))
+    
+    If fechaAuditadaStr = "" Then
+        ValidarCabecera = "Debe ingresar la Fecha Auditada."
+        Exit Function
+    End If
+    
+    If Not IsDate(fechaAuditadaStr) Then
+        ValidarCabecera = "La Fecha Auditada no tiene un formato válido (DD/MM/AAAA)."
+        Exit Function
+    End If
+    
+    If CDate(fechaAuditadaStr) > Date Then
+        ValidarCabecera = "La Fecha Auditada no puede ser posterior a hoy."
         Exit Function
     End If
     
@@ -119,21 +140,26 @@ End Function
 ' Función: ValidarRespuestasCompletas
 ' Propósito: Verifica que todas las preguntas hayan sido respondidas.
 ' Parámetros:
-'   respuestas: Dictionary con Key=ID_Pregunta, Value=texto de respuesta
+'   respuestas: Dictionary con Key=ID_Pregunta, Value=ID_Opcion
 '   totalPreguntas: número total de preguntas esperadas
 ' Retorna: "" si válido, o mensaje con preguntas faltantes.
 ' ----------------------------------------------------------------------
 Public Function ValidarRespuestasCompletas(ByVal respuestas As Object, ByVal totalPreguntas As Long) As String
     On Error GoTo ErrorHandler
     
-    If respuestas.Count < totalPreguntas Then
+    ' Verificar que se hayan respondido todas las preguntas
+    Dim preguntasRespondidas As Long
+    preguntasRespondidas = respuestas.Count
+    
+    If preguntasRespondidas < totalPreguntas Then
         Dim faltantes As Long
-        faltantes = totalPreguntas - respuestas.Count
-        ValidarRespuestasCompletas = "Faltan " & faltantes & " pregunta(s) por responder."
+        faltantes = totalPreguntas - preguntasRespondidas
+        ValidarRespuestasCompletas = "Faltan " & faltantes & " pregunta(s) por responder." & vbCrLf & _
+                                     "Todas las preguntas deben tener una opción seleccionada."
         Exit Function
     End If
     
-    ' Verificar que ninguna respuesta esté vacía
+    ' Verificar que ninguna respuesta esté vacía (doble verificación de seguridad)
     Dim key As Variant
     Dim vacias As Long
     vacias = 0
@@ -145,7 +171,8 @@ Public Function ValidarRespuestasCompletas(ByVal respuestas As Object, ByVal tot
     Next key
     
     If vacias > 0 Then
-        ValidarRespuestasCompletas = "Hay " & vacias & " pregunta(s) sin respuesta seleccionada."
+        ValidarRespuestasCompletas = "Hay " & vacias & " pregunta(s) sin respuesta seleccionada." & vbCrLf & _
+                                     "Todas las preguntas deben tener una opción seleccionada."
         Exit Function
     End If
     
@@ -160,28 +187,32 @@ End Function
 '' ----------------------------------------------------------------------
 ' Función: ValidarTodo
 ' Propósito: Ejecuta todas las validaciones (cabecera + respuestas).
-' Retorna: "" si todo válido, o primer error encontrado.
+'            Acumula TODOS los errores encontrados para mostrarlos juntos.
+' Retorna: "" si todo válido, o lista de errores encontrados.
 ' ----------------------------------------------------------------------
 Public Function ValidarTodo(ByVal datos As Object, ByVal respuestas As Object, ByVal totalPreguntas As Long) As String
     On Error GoTo ErrorHandler
     
-    Dim errorMsg As String
+    Dim errores As String
+    errores = ""
     
     ' Validar cabecera
-    errorMsg = ValidarCabecera(datos)
-    If errorMsg <> "" Then
-        ValidarTodo = errorMsg
-        Exit Function
+    Dim errorCabecera As String
+    errorCabecera = ValidarCabecera(datos)
+    If errorCabecera <> "" Then
+        errores = "DATOS DE LA INSPECCIÓN:" & vbCrLf & _
+                  "  • " & errorCabecera & vbCrLf & vbCrLf
     End If
     
     ' Validar respuestas
-    errorMsg = ValidarRespuestasCompletas(respuestas, totalPreguntas)
-    If errorMsg <> "" Then
-        ValidarTodo = errorMsg
-        Exit Function
+    Dim errorRespuestas As String
+    errorRespuestas = ValidarRespuestasCompletas(respuestas, totalPreguntas)
+    If errorRespuestas <> "" Then
+        errores = errores & "RESPUESTAS DE PREGUNTAS:" & vbCrLf & _
+                  "  • " & errorRespuestas & vbCrLf
     End If
     
-    ValidarTodo = ""
+    ValidarTodo = errores
     Exit Function
     
 ErrorHandler:
