@@ -394,6 +394,9 @@ Private Sub ConfigurarCabecera()
         .BorderStyle = fmBorderStyleSingle
         .BorderColor = &HD0C8C0
         .SpecialEffect = fmSpecialEffectFlat
+        .ScrollBars = fmScrollBarsVertical  ' FASE 2: Scroll para contenido extenso
+        .ScrollHeight = 580  ' Altura total del contenido interno (ajustado para 14 filas + frame recurrente)
+        .KeepScrollBarsVisible = fmScrollBarsVertical
     End With
     
     ' --- Layout interno: 1 columna ---
@@ -771,17 +774,17 @@ Private Sub ConfigurarCabecera()
     
     ' Calcular posición del frame contenedor
     Dim recTop As Single
-    recTop = rowTop + (rowIdx * ROW_HEIGHT) + 8  ' Gap de 8pt
+    recTop = rowTop + (rowIdx * ROW_HEIGHT) + 12  ' Gap de 12pt (aumentado)
     
-    ' Frame contenedor
+    ' Frame contenedor (altura aumentada para scroll visible)
     With Me.fraRecurrentInspection
         .Left = lblLeft
         .Top = recTop
         .Width = mLeftColWidth - 8
-        .Height = 165  ' Ajustado para contener todos los controles
+        .Height = 200  ' Aumentado para que todo sea visible con scroll en fraCabecera
         .Caption = " Inspección Recurrente "
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8  ' Fuente más pequeña para ahorrar espacio
         .Font.Bold = True
         .ForeColor = &H5B3A1A  ' Marrón medio
         .BackColor = &HF5F5F5  ' Gris muy claro
@@ -790,128 +793,130 @@ Private Sub ConfigurarCabecera()
         .SpecialEffect = fmSpecialEffectFlat
     End With
     
-    ' Checkboxprincipal
+    ' Checkbox principal (compacto)
     With Me.chkEsRecurrente
         .Left = 6
-        .Top = 18
+        .Top = 16
         .Width = mLeftColWidth - 20
-        .Height = 18
-        .Caption = "Esta NO es la primera inspección de este personal"
+        .Height = 16
+        .Caption = "Esta NO es la primera inspección"
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8
         .Font.Bold = False
         .Value = False
         .TabIndex = 11
     End With
     
-    ' Botón búsqueda histórico
+    ' Botón búsqueda histórico (compacto)
     With Me.btnBuscarHistorico
         .Left = 6
-        .Top = 40
-        .Width = 140
-        .Height = 24
+        .Top = 36
+        .Width = 120
+        .Height = 22
         .Caption = "🔍 Buscar historial"
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8
         .TabIndex = 12
         .BackColor = &HE0E0E0
     End With
     
-    ' Label info histórico
+    ' Label info histórico (más compacto con WordWrap)
     With Me.lblInfoHistorico
         .Left = 6
-        .Top = 70
+        .Top = 62
         .Width = mLeftColWidth - 20
-        .Height = 16
-        .Caption = "(Información de inspecciones previas aparecerá aquí)"
+        .Height = 28  ' Altura para 2 líneas
+        .Caption = "(Info de inspecciones previas aparecerá aquí)"
         .Font.Name = "Segoe UI"
-        .Font.Size = 8
+        .Font.Size = 7
         .ForeColor = &H808080  ' Gris
         .BackStyle = fmBackStyleTransparent
+        .WordWrap = True
     End With
     
-    ' Label número inspección
+    ' Label número inspección (compacto)
     With Me.lblNumeroInspeccion
         .Left = 6
-        .Top = 92
-        .Width = 90
-        .Height = 18
+        .Top = 96
+        .Width = 80
+        .Height = 16
         .Caption = "Inspección N°:"
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8
         .Font.Bold = True
         .ForeColor = COLOR_LABEL
         .BackStyle = fmBackStyleTransparent
         .Visible = False
     End With
     
-    ' TextBox número inspección
+    ' TextBox número inspección (compacto)
     With Me.txtNumeroInspeccion
-        .Left = 100
-        .Top = 90
-        .Width = 50
-        .Height = 20
+        .Left = 90
+        .Top = 94
+        .Width = 45
+        .Height = 18
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8
         .Locked = True
         .BackColor = COLOR_READONLY
         .TabStop = False
         .Visible = False
     End With
     
-    ' Label RPN Anterior
+    ' Label RPN Anterior (compacto)
     With Me.lblRPNAnterior
         .Left = 6
-        .Top = 116
-        .Width = 90
-        .Height = 18
+        .Top = 118
+        .Width = 80
+        .Height = 16
         .Caption = "RPN anterior:"
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8
         .Font.Bold = True
         .ForeColor = COLOR_LABEL
         .BackStyle = fmBackStyleTransparent
         .Visible = False
     End With
     
-    ' TextBox RPN Anterior Automático
+    ' TextBox RPN Anterior Automático (compacto)
     With Me.txtRPNAnteriorAuto
-        .Left = 100
-        .Top = 114
-        .Width = 70
-        .Height = 20
+        .Left = 90
+        .Top = 116
+        .Width = 60
+        .Height = 18
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8
         .Locked = True
         .BackColor = &HE0FFE0  ' Verde claro
         .TabStop = False
         .Visible = False
     End With
     
-    ' TextBox RPN Anterior Manual
+    ' TextBox RPN Anterior Manual (compacto)
     With Me.txtRPNAnteriorManual
-        .Left = 100
-        .Top = 114
-        .Width = 70
-        .Height = 20
+        .Left = 90
+        .Top = 116
+        .Width = 60
+        .Height = 18
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8
         .Locked = False
         .BackColor = &HFFFFE0  ' Amarillo claro
         .Visible = False
     End With
     
-    ' Label estado modo
+    ' Label estado modo (compacto con WordWrap)
     With Me.lblModoRPN
         .Left = 6
         .Top = 140
         .Width = mLeftColWidth - 20
-        .Height = 18
+        .Height = 28  ' Altura para 2 líneas
         .Caption = "[Modo RPN: no determinado]"
         .Font.Name = "Segoe UI"
-        .Font.Size = 8
+        .Font.Size = 7
         .ForeColor = &H808080  ' Gris
         .BackStyle = fmBackStyleTransparent
+        .WordWrap = True
         .Visible = False
     End With
 End Sub
@@ -2024,7 +2029,7 @@ Private Sub btnBuscarHistorico_Click()
     txtRPNAnteriorManual.Visible = True
     txtRPNAnteriorAuto.Visible = False
     mModoRPN = "MANUAL"
-    lblModoRPN.Caption = "[Modo: MANUAL - Ingrese RPN anterior]"
+    lblModoRPN.Caption = "[Modo MANUAL - Ingrese RPN]"
     lblModoRPN.ForeColor = &H0080FF  ' Naranja
     
     ' Simular datos temporales para prueba (esto se reemplazará en FASE 3)
