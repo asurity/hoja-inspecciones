@@ -25,7 +25,7 @@ Public Sub DisplayUserName()
     userName = Application.userName
     Set ws = ThisWorkbook.Sheets(Configuration2.MAIN_MENU_SHEET)
     Call SheetProtector2.UnprotectSheet(ws, Configuration2.APP_PASSWORD)
-    ws.Range(Configuration2.USER_DISPLAY_CELL).Value = "Usuario activo: " & userName
+    ws.Range(Configuration2.USER_DISPLAY_CELL).Value = "Usuario: " & userName
     Call SheetProtector2.ProtectSheet(ws, Configuration2.APP_PASSWORD)
     Exit Sub
 ErrorHandler:

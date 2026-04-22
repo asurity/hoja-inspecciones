@@ -144,7 +144,21 @@ Public Sub ShowAuditTrailGroup()
     ThisWorkbook.Sheets("Menú principal").Visible = xlSheetVisible
     
     ' Paso 4: activar la primera hoja de Audit Trail.
-    ThisWorkbook.Sheets(Configuration2.AUDIT_BASE_NAME).Select
+    Dim primerAudit As String
+    primerAudit = AuditRotation2.ObtenerNombreHoja(1) ' Obtiene "Audit trail 1"
+    
+    On Error Resume Next
+    ThisWorkbook.Sheets(primerAudit).Select
+    If Err.Number <> 0 Then
+        ' Si no existe la primera, intentar activar cualquiera que esté visible
+        For Each ws In ThisWorkbook.Worksheets
+            If IsAuditSheet(ws.Name) And ws.Visible = xlSheetVisible Then
+                ws.Select
+                Exit For
+            End If
+        Next ws
+    End If
+    On Error GoTo ErrorHandler
     
     Application.ScreenUpdating = True
     Application.DisplayAlerts = True

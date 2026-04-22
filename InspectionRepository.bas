@@ -268,6 +268,100 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                 .Cells(1, tblInspecciones.ListColumns("Dias para vencimiento").Index).Value = calculos("DiasVencimiento")
                 .Cells(1, tblInspecciones.ListColumns("Estado programacion").Index).Value = calculos("EstadoProgramacion")
                 
+                ' ----------------------------------------------------------------------
+                ' DATOS RECURRENTES (Nuevos - Fase 5)
+                ' ----------------------------------------------------------------------
+                ' Guardar campos recurrentes si existen en calculos
+                If calculos.Exists("NumeroInspeccion") Then
+                    On Error Resume Next
+                    Dim colIdx As Long
+                    
+                    ' Numero Inspeccion (columna 32)
+                    colIdx = 0
+                    colIdx = Application.Match("Numero Inspeccion", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then
+                        .Cells(1, colIdx).Value = calculos("NumeroInspeccion")
+                        Debug.Print "[ActualizarCalculos] Numero Inspeccion: " & calculos("NumeroInspeccion")
+                    End If
+                    
+                    ' Es Inspeccion Recurrente (columna 33)
+                    colIdx = 0
+                    colIdx = Application.Match("Es Inspeccion Recurrente", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then
+                        Dim valorRecurrente As String
+                        valorRecurrente = IIf(calculos("EsInspeccionRecurrente"), "Si", "No")
+                        .Cells(1, colIdx).Value = valorRecurrente
+                        Debug.Print "[ActualizarCalculos] Es Recurrente: " & valorRecurrente
+                    End If
+                    
+                    ' Puesto Evaluado (columna 34)
+                    colIdx = 0
+                    colIdx = Application.Match("Puesto Evaluado", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then
+                        .Cells(1, colIdx).Value = calculos("PuestoEvaluado")
+                        Debug.Print "[ActualizarCalculos] Puesto Evaluado: " & calculos("PuestoEvaluado")
+                    End If
+                    
+                    ' Campos especificos de inspecciones recurrentes (2da+)
+                    If calculos("EsInspeccionRecurrente") Then
+                        Debug.Print "[ActualizarCalculos] Guardando datos recurrentes..."
+                        
+                        ' RPN Anterior (columna 35 si manual, vacia si auto)
+                        If calculos.Exists("RPNAnterior") Then
+                            colIdx = 0
+                            colIdx = Application.Match("RPN Anterior Manual", tblInspecciones.HeaderRowRange, 0)
+                            If colIdx > 0 And Len(calculos("IDInspeccionAnterior")) = 0 Then
+                                ' Solo guardar si fue manual (sin ID anterior)
+                                .Cells(1, colIdx).Value = calculos("RPNAnterior")
+                                Debug.Print "[ActualizarCalculos] RPN Anterior Manual: " & Format(calculos("RPNAnterior"), "0.00")
+                            End If
+                        End If
+                        
+                        ' ID Inspeccion Anterior (columna 36)
+                        If calculos.Exists("IDInspeccionAnterior") And Len(calculos("IDInspeccionAnterior")) > 0 Then
+                            colIdx = 0
+                            colIdx = Application.Match("ID Inspeccion Anterior", tblInspecciones.HeaderRowRange, 0)
+                            If colIdx > 0 Then
+                                .Cells(1, colIdx).Value = calculos("IDInspeccionAnterior")
+                                Debug.Print "[ActualizarCalculos] ID Inspeccion Anterior: " & calculos("IDInspeccionAnterior")
+                            End If
+                        End If
+                        
+                        ' RPN Promedio (columna 37)
+                        If calculos.Exists("RPNPromedio") Then
+                            colIdx = 0
+                            colIdx = Application.Match("RPN Promedio", tblInspecciones.HeaderRowRange, 0)
+                            If colIdx > 0 Then
+                                .Cells(1, colIdx).Value = calculos("RPNPromedio")
+                                Debug.Print "[ActualizarCalculos] RPN Promedio: " & Format(calculos("RPNPromedio"), "0.00")
+                            End If
+                        End If
+                        
+                        ' RPN Total (columna 40)
+                        If calculos.Exists("RPNTotal") Then
+                            colIdx = 0
+                            colIdx = Application.Match("RPN Total", tblInspecciones.HeaderRowRange, 0)
+                            If colIdx > 0 Then
+                                .Cells(1, colIdx).Value = calculos("RPNTotal")
+                                Debug.Print "[ActualizarCalculos] RPN Total: " & Format(calculos("RPNTotal"), "0.00")
+                            End If
+                        End If
+                        
+                        Debug.Print "[ActualizarCalculos] Datos recurrentes guardados OK"
+                    End If
+                    
+                    On Error GoTo ErrorHandler
+                Else
+                    ' No hay datos recurrentes, asumir 1ra inspeccion
+                    On Error Resume Next
+                    colIdx = Application.Match("Numero Inspeccion", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then .Cells(1, colIdx).Value = 1
+                    
+                    colIdx = Application.Match("Es Inspeccion Recurrente", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then .Cells(1, colIdx).Value = "No"
+                    On Error GoTo ErrorHandler
+                End If
+                
                 ' Estado final
                 .Cells(1, tblInspecciones.ListColumns("Estado").Index).Value = Configuration2.INSPECCION_COMPLETADO
                 

@@ -104,9 +104,14 @@ Public Sub RefrescarResumenCronograma()
         diasVencimiento = cronogramaRow.Range.Cells(1, tblCronograma.ListColumns("Dias para vencimiento").Index).Value
         estadoCrono = cronogramaRow.Range.Cells(1, tblCronograma.ListColumns("Estado cronograma").Index).Value
         
-        ' Si no tiene valor de días, asignar valor alto negativo (máxima urgencia)
-        If Not IsNumeric(diasVencimiento) Or IsEmpty(diasVencimiento) Then
-            diasVencimiento = -9999
+        ' RECALCULAR días de vencimiento considerando TODO EL MES
+        ' Si la fecha próxima es 22-Mayo-2026, tiene hasta 31-Mayo-2026
+        If IsDate(fechaProxima) Then
+            Dim ultimoDiaMes As Date
+            ultimoDiaMes = DateSerial(Year(fechaProxima), Month(fechaProxima) + 1, 0) ' Último día del mes
+            diasVencimiento = CLng(ultimoDiaMes - Date) ' Días hasta fin del mes
+        Else
+            diasVencimiento = -9999 ' Máxima urgencia si no hay fecha
         End If
         
         ' Almacenar como array: (iniciales, puesto, fechaProxima, diasVencimiento, idCronograma, idPlantilla, indiceCriticidad)
@@ -159,12 +164,15 @@ SiguienteRegistro:
         With newRow.Range
             .Cells(1, tblResumen.ListColumns("Iniciales").Index).Value = arrDatos(i, 1)
             .Cells(1, tblResumen.ListColumns("Puesto").Index).Value = arrDatos(i, 2)
-            .Cells(1, tblResumen.ListColumns("Fecha proxima").Index).Value = arrDatos(i, 3)
+            .Cells(1, tblResumen.ListColumns("Mes proxima inspeccion").Index).Value = ConvertirFechaAMes(arrDatos(i, 3))
             .Cells(1, tblResumen.ListColumns("Dias vencimiento").Index).Value = arrDatos(i, 4)
             .Cells(1, tblResumen.ListColumns("ID Cronograma").Index).Value = arrDatos(i, 5)
             .Cells(1, tblResumen.ListColumns("ID Plantilla").Index).Value = arrDatos(i, 6)
         End With
     Next i
+    
+    ' --- Aplicar formato condicional tipo semáforo ---
+    Call AplicarFormatoSemaforoVencimiento(tblResumen)
     
     Application.ScreenUpdating = True
     Exit Sub
@@ -172,6 +180,68 @@ SiguienteRegistro:
 ErrorHandler:
     Application.ScreenUpdating = True
     Call ErrorLogger2.Log("CronogramaResumen.RefrescarResumenCronograma", Err.Description, Err.Number)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: AplicarFormatoSemaforoVencimiento
+' Propósito: Aplica formato condicional tipo semáforo a la columna
+'            "Dias vencimiento" según los rangos de urgencia.
+' Parámetros:
+'   tblResumen: Tabla tblResumenCronograma
+' ----------------------------------------------------------------------
+Private Sub AplicarFormatoSemaforoVencimiento(ByRef tblResumen As ListObject)
+    On Error GoTo ErrorHandler
+    
+    ' Si no hay datos, salir
+    If tblResumen.DataBodyRange Is Nothing Then Exit Sub
+    
+    Dim colDiasVencimiento As Range
+    Dim colIndex As Long
+    Dim celda As Range
+    Dim diasValor As Variant
+    
+    ' Obtener columna "Dias vencimiento"
+    colIndex = tblResumen.ListColumns("Dias vencimiento").Index
+    Set colDiasVencimiento = tblResumen.ListColumns(colIndex).DataBodyRange
+    
+    ' Limpiar formato previo
+    colDiasVencimiento.Interior.Pattern = xlNone
+    colDiasVencimiento.Font.Bold = False
+    
+    ' Aplicar formato celda por celda
+    For Each celda In colDiasVencimiento.Cells
+        If IsNumeric(celda.Value) Then
+            diasValor = CLng(celda.Value)
+            
+            ' 🔴 VENCIDO: < 0
+            If diasValor < 0 Then
+                celda.Interior.Color = RGB(255, 199, 206) ' #FFC7CE - Rojo claro
+                celda.Font.Color = RGB(156, 0, 6)          ' #9C0006 - Rojo oscuro
+                celda.Font.Bold = True
+            
+            ' 🟠 URGENTE: 0-10 días
+            ElseIf diasValor >= 0 And diasValor <= 10 Then
+                celda.Interior.Color = RGB(255, 235, 156) ' #FFEB9C - Naranja claro
+                celda.Font.Color = RGB(156, 101, 0)       ' #9C6500 - Naranja oscuro
+                celda.Font.Bold = True
+            
+            ' 🟡 PRÓXIMO: 11-40 días
+            ElseIf diasValor > 10 And diasValor <= 40 Then
+                celda.Interior.Color = RGB(255, 255, 204) ' #FFFFCC - Amarillo claro
+                celda.Font.Color = RGB(100, 100, 0)       ' #646400 - Amarillo oscuro
+            
+            ' 🟢 OK: > 40 días
+            ElseIf diasValor > 40 Then
+                celda.Interior.Color = RGB(198, 239, 206) ' #C6EFCE - Verde claro
+                celda.Font.Color = RGB(0, 97, 0)          ' #006100 - Verde oscuro
+            End If
+        End If
+    Next celda
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "ERROR en AplicarFormatoSemaforoVencimiento: " & Err.Description
 End Sub
 
 '' ----------------------------------------------------------------------
@@ -252,3 +322,38 @@ Private Sub OrdenarArray2D(ByRef arr() As Variant, ByVal n As Long)
         If Not swapped Then Exit For
     Next i
 End Sub
+
+'' ----------------------------------------------------------------------
+' Función: ConvertirFechaAMes
+' Propósito: Convierte una fecha a formato de mes con primera letra mayúscula
+'            (ej: "Mayo", "Julio"). Solo muestra el mes porque el cliente
+'            tiene todo el mes para realizar la inspección.
+' Parámetros:
+'   fecha: Variant (Date o Empty)
+' Retorna: String con el nombre del mes capitalizado o "-" si está vacío
+' ----------------------------------------------------------------------
+Private Function ConvertirFechaAMes(ByVal fecha As Variant) As String
+    On Error GoTo ErrorHandler
+    
+    ' Si la fecha está vacía o no es válida, retornar "-"
+    If IsEmpty(fecha) Or Not IsDate(fecha) Then
+        ConvertirFechaAMes = "-"
+        Exit Function
+    End If
+    
+    ' Obtener el mes en formato completo (ej: "mayo")
+    Dim mesCompleto As String
+    mesCompleto = LCase(Format(fecha, "mmmm"))
+    
+    ' Capitalizar primera letra
+    If Len(mesCompleto) > 0 Then
+        ConvertirFechaAMes = UCase(Left(mesCompleto, 1)) & Mid(mesCompleto, 2)
+    Else
+        ConvertirFechaAMes = "-"
+    End If
+    
+    Exit Function
+    
+ErrorHandler:
+    ConvertirFechaAMes = "-"
+End Function

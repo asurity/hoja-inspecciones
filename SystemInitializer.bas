@@ -167,32 +167,67 @@ End Function
 
 '' ----------------------------------------------------------------------
 ' Subrutina: ConfigurarFiltroPlantaPorDefecto
-' Propósito: Configura el filtro de planta en la celda B13 del Menú Principal.
-'            Si la celda está vacía, asigna la primera planta disponible.
+' Propósito: Configura lista de validación de plantas en J15 del Menú Principal.
+'            Lee plantas desde tblPlanta, agrega "Todas" al inicio,
+'            crea validación de datos y asigna "Todas" por defecto.
 ' Parámetros:
-'   plantaPorDefecto: Nombre de la planta a asignar
+'   plantaPorDefecto: No usado (se mantiene por compatibilidad)
 ' ----------------------------------------------------------------------
 Private Sub ConfigurarFiltroPlantaPorDefecto(ByVal plantaPorDefecto As String)
     On Error GoTo ErrorHandler
     
     Dim wsMenu As Worksheet
-    Set wsMenu = ThisWorkbook.Sheets(Configuration2.MAIN_MENU_SHEET)
-    
+    Dim wsConfig As Worksheet
+    Dim tblPlanta As ListObject
     Dim celdaFiltro As Range
+    Dim plantaRow As ListRow
+    Dim listaValidacion As String
+    Dim plantaNombre As String
+    
+    Set wsMenu = ThisWorkbook.Sheets(Configuration2.MAIN_MENU_SHEET)
+    Set wsConfig = ThisWorkbook.Sheets(Configuration2.SHEET_CONFIGURACION)
+    Set tblPlanta = wsConfig.ListObjects(Configuration2.TABLE_PLANTA)
     Set celdaFiltro = wsMenu.Range(Configuration2.RESUMEN_FILTRO_PLANTA_CELDA)
     
-    ' Si la celda está vacía, asignar planta por defecto
+    ' --- Construir lista de validación: "Todas" + plantas desde tblPlanta ---
+    listaValidacion = "Todas"
+    
+    If Not tblPlanta.DataBodyRange Is Nothing Then
+        For Each plantaRow In tblPlanta.ListRows
+            plantaNombre = Trim(plantaRow.Range.Cells(1, tblPlanta.ListColumns("Planta").Index).Value)
+            If plantaNombre <> "" Then
+                listaValidacion = listaValidacion & "," & plantaNombre
+            End If
+        Next plantaRow
+    End If
+    
+    ' --- Configurar validación de datos en J15 ---
+    Call SheetProtector2.UnprotectSheet(wsMenu, Configuration2.APP_PASSWORD)
+    
+    With celdaFiltro.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Formula1:=listaValidacion
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .ShowInput = True
+        .ShowError = True
+    End With
+    
+    ' --- Asignar "Todas" por defecto si está vacía ---
     If Trim(celdaFiltro.Value) = "" Then
-        celdaFiltro.Value = plantaPorDefecto
-        Debug.Print "  → Filtro planta asignado: " & plantaPorDefecto
+        celdaFiltro.Value = "Todas"
+        Debug.Print "  → Filtro planta asignado: Todas (por defecto)"
     Else
         Debug.Print "  → Filtro planta ya configurado: " & celdaFiltro.Value
     End If
+    
+    Call SheetProtector2.ProtectSheet(wsMenu, Configuration2.APP_PASSWORD)
     
     Exit Sub
     
 ErrorHandler:
     Debug.Print "ERROR en ConfigurarFiltroPlantaPorDefecto: " & Err.Description
+    Call SheetProtector2.ProtectSheet(wsMenu, Configuration2.APP_PASSWORD)
 End Sub
 
 '' ----------------------------------------------------------------------

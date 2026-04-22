@@ -28,6 +28,17 @@ Public Sub NavigateToSheet(ByVal targetSheetName As String)
     ' evitar Error 1004 cuando la estructura del libro está protegida.
     Call SheetService2.HideAndProtectAllSheetsExcept(targetSheetName)
     ThisWorkbook.Sheets(targetSheetName).Select
+    
+    ' Registrar navegación en Audit Trail
+    Call AuditLogger2.LogAction( _
+        action:="Navegación", _
+        sheetName:=targetSheetName, _
+        dataModified:="Acceso a módulo", _
+        beforeChange:="N/A", _
+        afterChange:="Usuario accedió a: " & targetSheetName, _
+        moduleAndSubroutine:="NavigationService2.NavigateToSheet" _
+    )
+    
     Exit Sub
 ErrorHandler:
     Call ErrorLogger2.Log("NavigationService.NavigateToSheet", "No se pudo navegar a la hoja: " & targetSheetName, VBA.Err.Number)
@@ -66,8 +77,30 @@ Public Sub NavigateToConfiguracion()
     Call NavigateToSheet("Configuración")
 End Sub
 
+'' ----------------------------------------------------------------------
+' Subrutina: NavigateToPersonalProduccion
+' Propósito: Navega a la hoja "Personal" que contiene la tabla tblPersonal
+'            con todo el personal de producción del sistema.
+' Características:
+'   - Tabla tblPersonal con iniciales, nombre, puesto, planta
+'   - Personal activo/inactivo
+'   - Asignación de plantillas de inspección
+' ----------------------------------------------------------------------
 Public Sub NavigateToPersonalProduccion()
-    Call NavigateToSheet("PersonalProduccion")
+    Call NavigateToSheet(Configuration2.SHEET_PERSONAL)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: NavigateToAseguramientoCalidad
+' Propósito: Navega a la hoja "Aseguramiento de calidad" que contiene
+'            la tabla tblAseguramientoCalidad con el personal de QA.
+' Características:
+'   - Tabla tblAseguramientoCalidad
+'   - Personal de aseguramiento de calidad
+'   - Evaluadores autorizados para inspecciones
+' ----------------------------------------------------------------------
+Public Sub NavigateToAseguramientoCalidad()
+    Call NavigateToSheet(Configuration2.SHEET_ASEGURAMIENTO)
 End Sub
 
 Public Sub NavigateToTecControlProceso()
@@ -76,6 +109,17 @@ End Sub
 
 Public Sub NavigateToAuditTrail()
     On Error GoTo ErrorHandler
+    
+    ' Registrar navegación en Audit Trail (antes de mostrar las hojas para evitar recursión)
+    Call AuditLogger2.LogAction( _
+        action:="Navegación", _
+        sheetName:="Audit Trail (Grupo)", _
+        dataModified:="Acceso a módulo de auditoría", _
+        beforeChange:="N/A", _
+        afterChange:="Usuario accedió al grupo de hojas Audit Trail", _
+        moduleAndSubroutine:="NavigationService2.NavigateToAuditTrail" _
+    )
+    
     ' Muestra las 5 hojas de Audit Trail simultáneamente y oculta el resto.
     Call SheetService2.ShowAuditTrailGroup
     Exit Sub
@@ -91,4 +135,71 @@ End Sub
 Public Sub NavigateToMenu()
     ' Esta navegación está permitida para todos los usuarios, sin necesidad de validación.
     Call NavigateToSheet("Menú principal")
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: NavigateToChecklistVirtual
+' Propósito: Abre el formulario selector para iniciar una inspección
+'            con el checklist virtual. El selector permite elegir
+'            Puesto → Personal → Plantilla y luego abre frmChecklistVirtual.
+' Flujo:
+'   1. Abre frmSelectorInspeccion (modal)
+'   2. Usuario selecciona Personal y Plantilla
+'   3. Al aceptar, el formulario llama a ChecklistOrchestrator.AbrirChecklistVirtual
+' ----------------------------------------------------------------------
+Public Sub NavigateToChecklistVirtual()
+    On Error GoTo ErrorHandler
+    
+    ' Registrar apertura del selector en Audit Trail
+    Call AuditLogger2.LogAction( _
+        action:="Apertura Selector Inspección", _
+        sheetName:="Formulario", _
+        dataModified:="frmSelectorInspeccion", _
+        beforeChange:="N/A", _
+        afterChange:="Usuario solicitó nueva inspección", _
+        moduleAndSubroutine:="NavigationService2.NavigateToChecklistVirtual" _
+    )
+    
+    ' Abrir formulario selector modal
+    Dim frmSelector As frmSelectorInspeccion
+    Set frmSelector = New frmSelectorInspeccion
+    frmSelector.Show vbModal
+    
+    ' Limpiar referencia
+    Set frmSelector = Nothing
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("NavigationService.NavigateToChecklistVirtual", _
+                         "Error al abrir selector de inspección: " & Err.Description, Err.Number)
+    MsgBox "Error: No se pudo abrir el selector de inspección.", vbCritical, "Error"
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: NavigateToResultados
+' Propósito: Navega a la hoja "Historico" que contiene los resultados
+'            de inspecciones completadas (tabla tblInspecciones).
+'            Permite consultar historial y generar certificados PDF
+'            haciendo doble clic en una inspección.
+' Características:
+'   - Tabla con todas las inspecciones guardadas
+'   - Doble clic en fila → Genera certificado PDF
+'   - Permite filtros y búsquedas de inspecciones pasadas
+' ----------------------------------------------------------------------
+Public Sub NavigateToResultados()
+    Call NavigateToSheet(Configuration2.SHEET_HISTORICO)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: NavigateToConfiguracionChecklist
+' Propósito: Navega a la hoja "Checklist" que contiene la configuración
+'            de plantillas de inspección y sus ítems.
+' Características:
+'   - Configuración de plantillas
+'   - Definición de ítems de inspección
+'   - Administración de criterios de evaluación
+' ----------------------------------------------------------------------
+Public Sub NavigateToConfiguracionChecklist()
+    Call NavigateToSheet("Checklist")
 End Sub

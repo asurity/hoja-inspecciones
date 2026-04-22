@@ -494,7 +494,8 @@ Private Sub MapearDatosAFila(ByVal nombreLogico As String, _
         Case "PLANTILLAS"
             fila.Range.Cells(1, ObtenerIndiceColumna(tbl, "ID Plantilla")).Value = datos("ID")
             fila.Range.Cells(1, ObtenerIndiceColumna(tbl, "Nombre de plantilla")).Value = datos("Nombre")
-            fila.Range.Cells(1, ObtenerIndiceColumna(tbl, "Etapa")).Value = datos("Etapa")
+            ' Columna Área (antes Etapa) - usado para precarga de cboArea en frmChecklistVirtual
+            fila.Range.Cells(1, ObtenerIndiceColumna(tbl, "Área")).Value = datos("Etapa")
             fila.Range.Cells(1, ObtenerIndiceColumna(tbl, "Puesto")).Value = datos("Puesto")
             fila.Range.Cells(1, ObtenerIndiceColumna(tbl, "Frecuencia meses")).Value = datos("Frecuencia")
             

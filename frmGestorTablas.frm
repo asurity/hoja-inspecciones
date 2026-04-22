@@ -27,9 +27,9 @@ Private Const MARGIN_RIGHT As Single = 12
 Private Const CONTENT_WIDTH As Single = 596  ' FORM_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
 ' --- Constantes de colores ---
-Private Const COLOR_FONDO As Long = &HFAF8F5        ' Fondo formulario (beige claro)
+Private Const COLOR_FONDO As Long = &HFFFFFF        ' Fondo formulario (blanco)
 Private Const COLOR_TITULO As Long = &H724E27        ' Título (marrón oscuro)
-Private Const COLOR_FRAME As Long = &HFAF8F5         ' Fondo Frame
+Private Const COLOR_FRAME As Long = &HFFFFFF         ' Fondo Frame (blanco)
 Private Const COLOR_BOTON_NUEVO As Long = &HC0DCC0    ' Verde claro
 Private Const COLOR_BOTON_GUARDAR As Long = &HFFFFC0  ' Amarillo claro
 Private Const COLOR_BOTON_ELIMINAR As Long = &HC0C0FF ' Rojo claro
@@ -37,7 +37,7 @@ Private Const COLOR_BOTON_VALIDAR As Long = &HFFFFC0  ' Amarillo
 Private Const COLOR_BOTON_CERRAR As Long = &HC0C0C0   ' Gris
 Private Const COLOR_ESTADO_OK As Long = &H8000&       ' Verde (mensajes ok)
 Private Const COLOR_ESTADO_ERROR As Long = &HFF&      ' Rojo (mensajes error)
-Private Const COLOR_READONLY As Long = &HF0F0F0       ' Gris claro (campos no editables)
+Private Const COLOR_READONLY As Long = &HFFFFFF       ' Blanco (campos no editables)
 
 ' --- Estado interno ---
 Private mModoEdicion As String   ' "NUEVO" o "EDITAR"
@@ -313,7 +313,7 @@ Private Sub ConfigurarBarraEstado()
         .Font.Name = "Segoe UI"
         .Font.Size = 8
         .ForeColor = COLOR_ESTADO_OK
-        .BackColor = &HF0F0F0
+        .BackColor = &HFFFFFF
         .BackStyle = fmBackStyleOpaque
         .TextAlign = fmTextAlignLeft
     End With

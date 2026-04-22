@@ -85,7 +85,7 @@ Public Const MAIN_MENU_SHEET As String = "Menú principal"
 '            Permite cambiar la ubicación sin modificar código de UserManager2.
 ' Formato: Rango de Excel (ej: "B9", "C5", "A1")
 ' ----------------------------------------------------------------------
-Public Const USER_DISPLAY_CELL As String = "B9"
+Public Const USER_DISPLAY_CELL As String = "I9"
 
 ' ----------------------------------------------------------------------
 ' Constante: INITIAL_USER_ROLE
@@ -157,12 +157,13 @@ Public Const TABLE_PUESTO As String = "tblPuesto"
 Public Const TABLE_PUESTOS_INICIALES As String = "tblPuestosIniciales"
 Public Const TABLE_ASEGURAMIENTO As String = "tblAseguramientoCalidad"
 Public Const TABLE_RESUMEN_CRONOGRAMA As String = "tblResumenCronograma"
+Public Const TABLE_PLANTA As String = "tblPlanta"
 
 ' ----------------------------------------------------------------------
 ' Constantes de ubicación del cronograma resumen en Menú principal
 ' ----------------------------------------------------------------------
 Public Const RESUMEN_CRONOGRAMA_CELDA As String = "B14"
-Public Const RESUMEN_FILTRO_PLANTA_CELDA As String = "B13"
+Public Const RESUMEN_FILTRO_PLANTA_CELDA As String = "J15"
 
 ' ----------------------------------------------------------------------
 ' Constantes de lugar de auditoría
@@ -318,13 +319,16 @@ End Function
 '            por criticidad de puesto. Se usa para navegación con doble clic.
 ' Total columnas: 6
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (14/04/2026):
+' COLUMNAS VERIFICADAS (22/04/2026):
 '   [1] Iniciales           - String
 '   [2] Puesto              - String
-'   [3] Fecha proxima       - Date
-'   [4] Dias vencimiento    - Long
+'   [3] Mes proxima inspeccion - String (formato "Mayo", "Julio" - solo mes)
+'   [4] Dias vencimiento    - Long (calculado hasta último día del mes)
 '   [5] ID Cronograma       - String (para lookup)
 '   [6] ID Plantilla        - String (para lookup)
+'
+' NOTA: El sistema considera TODO EL MES para realizar la inspección.
+'       Si la inspección vence en "Mayo", tiene hasta el 31 de Mayo.
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - CronogramaResumen.bas (RefrescarResumenCronograma - ESCRITURA)
@@ -372,13 +376,21 @@ End Function
 ' Propósito: Plantillas de inspección. Cada plantilla define qué preguntas
 '            se hacen para un puesto específico y con qué frecuencia.
 ' Total columnas: 5
-' Columnas usadas por código: 4
-' Columnas no usadas: Etapa (datos adicionales, sin lógica de código)
+' Columnas usadas por código: 5 (todas)
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (14/04/2026):
+' COLUMNAS VERIFICADAS (22/04/2026):
 '   [1] ID Plantilla              - String (PK única, FK en tblCronogramaInspecciones)
 '   [2] Nombre de plantilla       - String (descripción de la plantilla)
-'   [3] Etapa                     - String (NO USADA POR CÓDIGO - datos adicionales)
+'   [3] Área                      - String (Área de trabajo, precarga cboArea en frmChecklistVirtual)
+'                                   VALORES POSIBLES:
+'                                   - "" (vacío), "TODAS", "GENERAL" → Plantilla genérica
+'                                     * Therapia iv Santiago: Usuario elige entre 3 áreas (Planta Azul NPT, Planta Blanca NPT, Oncología)
+'                                     * Therapia iv Concepción: Usuario elige entre 2 áreas (NPT, Oncología)
+'                                   - "NPT" → Plantilla NPT específica
+'                                     * Therapia iv Santiago: Usuario elige entre 2 opciones NPT (Planta Azul, Planta Blanca)
+'                                     * Therapia iv Concepción: Bloqueado en "NPT"
+'                                   - "ONCO" → Plantilla Oncología específica
+'                                     * Ambas plantas: Bloqueado en "Oncología"
 '   [4] Puesto                    - String (FK a GetPuestosColumns)
 '   [5] Frecuencia meses          - Long (1, 3, 6, 12 - intervalo de inspección)
 '
@@ -386,7 +398,10 @@ End Function
 '   - ChecklistRepository.bas (ObtenerPlantillaPorPuesto - LECTURA)
 '   - InspectionScheduler.bas (InicializarCronograma, RecalcularCronograma, ObtenerPlantillaPorIDPlantilla - LECTURA)
 '   - SystemInitializer.bas (ValidarDatosMaestros, InicializarCronogramaSilencioso - LECTURA)
-'   - TableManager.bas (TableManager.RemoveTableRows - INCLUIDA en tabla_list)
+'   - TableManager.bas (AddRowToTable - ESCRITURA columna Área, RemoveTableRows - INCLUIDA en tabla_list)
+'   - frmSelectorInspeccion.frm (CargarPlantillasDisponibles - LECTURA columna Área)
+'   - ChecklistOrchestrator.bas (AbrirChecklistVirtual - PASA área a formulario)
+'   - frmChecklistVirtual.frm (AplicarFiltroArea - LÓGICA CONDICIONAL área)
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------
@@ -492,12 +507,12 @@ End Function
 ' Propósito: Registro de evaluadores autorizados para realizar auditorías
 '            de aseguramiento de calidad.
 ' Total columnas: 4
-' Columnas usadas por código: 1 (columna 3 = Iniciales)
+' Columnas usadas por código: 2 (columnas 2 y 3)
 ' Columnas parcialmente usadas: ValidarDatosMaestros solo verifica existencia
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (14/04/2026):
+' COLUMNAS VERIFICADAS (22/04/2026):
 '   [1] Planta                    - String (planta del evaluador)
-'   [2] Nombre                    - String (nombre completo del evaluador)
+'   [2] Nombre                    - String (nombre completo del evaluador, para match con Application.UserName)
 '   [3] Iniciales                 - String (COLUMNA 3 - iniciales para cbo/lista)
 '   [4] Activo                    - String ("Si"/"No" - activo/inactivo)
 '
@@ -505,10 +520,15 @@ End Function
 '   - El código accede a Iniciales por posición (columna 3) no por nombre
 '   - Línea: iniciales = Trim(asegRow.Range.Cells(1, 3).Value)
 '   - ValidarDatosMaestros solo cuenta filas sin usar columnas específicas
+'   - ObtenerInicialesEvaluadorPorNombre usa columna 2 (Nombre) para match con Application.UserName (NO Environ("USERNAME"))
+'   - IMPORTANTE: Application.UserName retorna nombre completo (ej: "NIEVES CARRERO")
+'                 Environ("USERNAME") retorna cuenta de Windows (ej: "carre")
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - ChecklistRepository.bas (ObtenerEvaluadores - LECTURA columna 3)
+'   - ChecklistRepository.bas (ObtenerInicialesEvaluadorPorNombre - LECTURA columnas 2 y 3)
 '   - SystemInitializer.bas (ValidarDatosMaestros - LECTURA para validación)
+'   - frmChecklistVirtual.frm (CargarComboEvaluadores - USA ObtenerInicialesEvaluadorPorNombre para pre-selección)
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------

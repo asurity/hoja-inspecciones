@@ -104,24 +104,24 @@ Public Function ObtenerPreguntasPorPlantillaYSeccion(ByVal idPlantilla As String
         pPlantilla = Trim(preguntaRow.Range.Cells(1, tblPreguntas.ListColumns("ID Plantilla").Index).Value)
         
         If pPlantilla <> Trim(idPlantilla) Then
-            Debug.Print "  Pregunta ignorada: IDPlantilla no coincide [" & pPlantilla & "] <> [" & idPlantilla & "]"
+            ' Debug.Print "  Pregunta ignorada: IDPlantilla no coincide [" & pPlantilla & "] <> [" & idPlantilla & "]"
             GoTo SiguientePregunta
         End If
         
         pActivo = Trim(preguntaRow.Range.Cells(1, tblPreguntas.ListColumns("Activo").Index).Value)
         If UCase(pActivo) <> "SI" And UCase(pActivo) <> "SÍ" Then
-            Debug.Print "  Pregunta ignorada: No está activa [" & pActivo & "]"
+            ' Debug.Print "  Pregunta ignorada: No está activa [" & pActivo & "]"
             GoTo SiguientePregunta
         End If
         
         pSeccion = Trim(preguntaRow.Range.Cells(1, tblPreguntas.ListColumns("ID Seccion").Index).Value)
         If idSeccion <> "" And pSeccion <> Trim(idSeccion) Then
-            Debug.Print "  Pregunta ignorada: IDSeccion no coincide [" & pSeccion & "] <> [" & idSeccion & "]"
+            ' Debug.Print "  Pregunta ignorada: IDSeccion no coincide [" & pSeccion & "] <> [" & idSeccion & "]"
             GoTo SiguientePregunta
         End If
         
         contadorFiltradas = contadorFiltradas + 1
-        Debug.Print "  Pregunta ACEPTADA #" & contadorFiltradas & ": " & preguntaRow.Range.Cells(1, tblPreguntas.ListColumns("ID Pregunta").Index).Value
+        ' Debug.Print "  Pregunta ACEPTADA #" & contadorFiltradas & ": " & preguntaRow.Range.Cells(1, tblPreguntas.ListColumns("ID Pregunta").Index).Value
         
         Dim preg(0 To 5) As Variant
         preg(0) = preguntaRow.Range.Cells(1, tblPreguntas.ListColumns("ID Pregunta").Index).Value
@@ -478,6 +478,75 @@ Public Function ObtenerEvaluadores() As Collection
 ErrorHandler:
     Set ObtenerEvaluadores = New Collection
     Call ErrorLogger2.Log("ChecklistRepository.ObtenerEvaluadores", Err.Description, Err.Number)
+End Function
+
+'' ----------------------------------------------------------------------
+' Función: ObtenerInicialesEvaluadorPorNombre
+' Propósito: Busca en tblAseguramientoCalidad un evaluador por nombre
+'            y retorna sus iniciales si lo encuentra.
+' Parámetros:
+'   nombreUsuario: Nombre completo del usuario de Application.UserName (será convertido a mayúsculas)
+' Retorna: String con las iniciales del evaluador, o "" si no encuentra coincidencia
+' Nota: Se debe pasar Application.UserName (ej: "NIEVES CARRERO"), NO Environ("USERNAME") (ej: "carre")
+' ----------------------------------------------------------------------
+Public Function ObtenerInicialesEvaluadorPorNombre(ByVal nombreUsuario As String) As String
+    On Error GoTo ErrorHandler
+    
+    Dim wsAseg As Worksheet
+    Dim tblAseg As ListObject
+    Dim asegRow As ListRow
+    Dim nombreUsuarioUpper As String
+    Dim nombreEvaluador As String
+    Dim inicialesEvaluador As String
+    
+    ObtenerInicialesEvaluadorPorNombre = ""  ' Valor por defecto
+    
+    Debug.Print "=== ObtenerInicialesEvaluadorPorNombre ==="
+    Debug.Print "Nombre usuario recibido: [" & nombreUsuario & "]"
+    
+    If Len(Trim(nombreUsuario)) = 0 Then
+        Debug.Print "Nombre usuario está vacío, saliendo"
+        Exit Function
+    End If
+    
+    nombreUsuarioUpper = UCase(Trim(nombreUsuario))
+    Debug.Print "Nombre usuario en mayúsculas: [" & nombreUsuarioUpper & "]"
+    
+    Set wsAseg = ThisWorkbook.Sheets(Configuration2.SHEET_ASEGURAMIENTO)
+    Set tblAseg = wsAseg.ListObjects(Configuration2.TABLE_ASEGURAMIENTO)
+    
+    If tblAseg.DataBodyRange Is Nothing Then
+        Debug.Print "tblAseguramientoCalidad está vacía"
+        Exit Function
+    End If
+    
+    Debug.Print "Filas en tblAseguramientoCalidad: " & tblAseg.ListRows.Count
+    
+    For Each asegRow In tblAseg.ListRows
+        ' Columna 2: Nombre completo del evaluador
+        nombreEvaluador = UCase(Trim(asegRow.Range.Cells(1, 2).Value))
+        inicialesEvaluador = Trim(asegRow.Range.Cells(1, 3).Value)
+        
+        Debug.Print "  Evaluador: Nombre=[" & nombreEvaluador & "] Iniciales=[" & inicialesEvaluador & "] | Match: " & (nombreEvaluador = nombreUsuarioUpper)
+        
+        If nombreEvaluador = nombreUsuarioUpper Then
+            ' Columna 3: Iniciales
+            If Len(inicialesEvaluador) > 0 Then
+                ObtenerInicialesEvaluadorPorNombre = inicialesEvaluador
+                Debug.Print ">>> MATCH ENCONTRADO: Iniciales=[" & inicialesEvaluador & "]"
+                Exit Function
+            End If
+        End If
+    Next asegRow
+    
+    Debug.Print ">>> No se encontró coincidencia"
+    
+    Exit Function
+    
+ErrorHandler:
+    ObtenerInicialesEvaluadorPorNombre = ""
+    Debug.Print "ERROR en ObtenerInicialesEvaluadorPorNombre: " & Err.Description
+    Call ErrorLogger2.Log("ChecklistRepository.ObtenerInicialesEvaluadorPorNombre", Err.Description, Err.Number)
 End Function
 
 '' ----------------------------------------------------------------------

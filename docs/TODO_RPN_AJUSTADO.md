@@ -30,16 +30,16 @@ TableManager.bas                → Modificado: Agregar columnas nuevas
 
 ---
 
-## 📊 Fase 0: Análisis y Preparación (CHECKPOINT #0)
+## ✅ Fase 0: Análisis y Preparación (CHECKPOINT #0) - COMPLETADA
 
-### 0.1 Análisis de Configuration2.bas
+### 0.1 Análisis de Configuration2.bas ✅
 **CRÍTICO:** Validar estructura actual de tablas
 
 **Tareas:**
 - [x] Leer Configuration2.bas líneas 260-600 (estructuras de tablas)
-- [ ] Validar que documentación coincide con Excel real
-- [ ] Identificar todas las referencias a columnas por índice vs por nombre
-- [ ] Mapear dependencias de columnas críticas:
+- [x] Validar que documentación coincide con Excel real
+- [x] Identificar todas las referencias a columnas por índice vs por nombre
+- [x] Mapear dependencias de columnas críticas:
   - `tblInspecciones[10]` - Iniciales personal
   - `tblInspecciones[13]` - Fecha inspeccion
   - `tblInspecciones[20]` - RPN calculado
@@ -490,13 +490,13 @@ Si se requiere análisis detallado, agregar columnas opcionales:
 
 ---
 
-## 🎨 Fase 2: Interfaz de Usuario - frmChecklistVirtual (CHECKPOINT #2)
+## 🎨 Fase 2: Interfaz de Usuario - frmChecklistVirtual (CHECKPOINT #2) - COMPLETADA ✅
 
-### 2.1 Diseño de controles nuevos
+### 2.1 Diseño de controles nuevos ✅
 
-**Ubicación:** Después de selector de personal, antes de iniciar checklist
+**Ubicación:** Frame "Inspección Recurrente" en columna izquierda (debajo de 14 campos)
 
-**Controles a agregar:**
+**Controles implementados:**
 ```vb
 ' Frame contenedor
 Frame: frmRecurrentInspection
@@ -616,11 +616,73 @@ git push
 
 ---
 
-## 🔧 Fase 3: Servicio de Histórico (CHECKPOINT #3)
+## 🔧 Fase 3: Servicio de Histórico (CHECKPOINT #3) - COMPLETADA ✅
 
-### 3.1 Crear InspectionHistoryService.bas
+### 3.1 Crear InspectionHistoryService.bas ✅
 
 **Responsabilidad:** Consultas de inspecciones previas
+
+**Funciones implementadas:**
+
+✅ **BuscarInspeccionesPrevias()** - Busca todas las inspecciones previas con filtros
+- Parámetros: iniciales, filtroPorPuesto, puesto, idPlantilla
+- Retorna Collection ordenada por fecha DESC
+- Compatibilidad: Funciona con BD actual (detecta columnas nuevas si existen)
+
+✅ **ObtenerUltimaInspeccion()** - Obtiene la inspección más reciente
+- Usa BuscarInspeccionesPrevias()
+- Retorna Dictionary con datos completos
+- Retorna Nothing si no hay historial
+
+✅ **CalcularNumeroInspeccionSiguiente()** - Calcula próximo número
+- Si no hay inspecciones previas → 1
+- Si hay inspecciones → MAX(Numero Inspeccion) + 1
+
+✅ **ValidarRPNAnteriorManual()** - Valida RPN ingresado manualmente
+- Validaciones: RPN > 0, rango 0.1-100
+- Advertencia si difiere >50% del histórico
+- No bloquea pero registra en Debug
+
+✅ **FormatearInfoInspeccion()** - Formatea info para UI
+- Formato: "Inspección #N - DD/MM/YYYY - RPN: XX.XX - Cat: N"
+
+✅ **ObtenerResumenHistorial()** - Resumen para lblInfoHistorico
+- Muestra hasta N inspecciones más recientes
+- Texto multilinea listo para Label
+
+**Características implementadas:**
+- ✅ Filtrado flexible: Por iniciales + puesto (según Q1)
+- ✅ Compatibilidad retroactiva: Detecta si columnas nuevas existen o no
+- ✅ Ordenamiento DESC: Inspecciones más recientes primero
+- ✅ Manejo robusto de errores con ErrorLogger2
+- ✅ Debug logging completo para troubleshooting
+- ✅ Reutiliza RPN Total si existe, sino usa RPN calculado
+- ✅ Validación de entrada con excepciones claras
+- ✅ Funciones auxiliares para UI (formateo de texto)
+
+### 3.2 Implementación de queries ✅
+
+**Estrategia aplicada:**
+- ✅ Uso de nombres de columna (no índices hardcodeados)
+- ✅ Detección dinámica de columnas nuevas (On Error Resume Next)
+- ✅ Queries optimizadas con filtros en memoria
+- ✅ Manejo robusto de errores en cada función
+- ✅ Logging detallado con Debug.Print
+
+**Detalles técnicos:**
+- Recorre tblInspecciones completa aplicando filtros
+- Construye Collection de Dictionary para flexibilidad
+- Ordenamiento con algoritmo burbuja optimizado (early exit)
+- Compatible con BD actual (pre-migración) y futura (post-migración)
+
+**CHECKPOINT #3 - Módulo Creado:**
+```
+✅ InspectionHistoryService.bas - 500+ líneas
+   - 6 funciones públicas
+   - 1 función privada auxiliar
+   - Documentación completa en encabezados
+   - Sin errores de compilación
+```
 
 ```vb
 ' ══════════════════════════════════════════════════════════════
@@ -704,11 +766,49 @@ git push
 
 ---
 
-## 🧮 Fase 4: Calculadora de RPN Recurrente (CHECKPOINT #4)
+## 🧮 Fase 4: Calculadora de RPN Recurrente (CHECKPOINT #4) - COMPLETADA ✅
 
-### 4.1 Crear RecurrentInspectionCalculator.bas
+### 4.1 Crear RecurrentInspectionCalculator.bas ✅
+
+**Módulo creado exitosamente el 21/04/2026**
+
+**Funciones implementadas:**
+
+✅ **CalcularRPNPromedio()** - Calcula promedio aritmético simple entre RPN anterior y actual
+- Parámetros: rpnAnterior (Double), rpnActual (Double)
+- Retorna: (Double) Promedio (RPN Ant + RPN Act) / 2
+- Validaciones: Ambos valores > 0 y dentro de rango [0.01, 100]
+- Logger: Debug.Print detallado para auditoría
+
+✅ **CalcularRPNTotal()** - Calcula RPN Total sumando componentes
+- Parámetros: rpnPromedio (Double), porcRecuperacion (Double, opcional=0), porcOOL (Double, opcional=0)
+- Retorna: (Double) RPN Total = RPN Prom + %Recup + %OOL
+- Fase actual: Solo usa RPN Promedio (preparado para futura integración microbiología)
+- Validaciones: RPN Promedio > 0, porcentajes >= 0
+
+✅ **DeterminarCategoriaRPNTotal()** - Categoriza basándose en RPN Total
+- Parámetros: rpnTotal (Double)
+- Retorna: (Long) Categoría 1-5
+- Usa tblCategoriasRPN (misma tabla que sistema original)
+- Validaciones: Acceso a tabla, búsqueda de rango, fallback a Cat 5 si error
+
+✅ **ValidarConsistenciaRPN()** - Función auxiliar para detectar cambios bruscos
+- Parámetros: rpnAnterior (Double), rpnActual (Double)
+- Retorna: (Boolean) True si consistente, False si advertencia
+- Umbral: Advertir si cambio > 50% (no bloquea, solo alerta)
+
+**Características del módulo:**
+- ✅ Sin errores de compilación
+- ✅ Documentación completa inline (encabezados, descripciones, ejemplos)
+- ✅ Manejo robusto de errores con ErrorLogger2
+- ✅ Logging detallado con Debug.Print para troubleshooting
+- ✅ Constantes definidas (RPN_MIN, RPN_MAX, MODULO_NOMBRE)
+- ✅ Validaciones exhaustivas en cada función
+- ✅ Preparado para futura integración de microbiología
 
 **Responsabilidad:** Cálculos de RPN para inspecciones 2da+
+
+**Código de referencia:**
 
 ```vb
 ' ══════════════════════════════════════════════════════════════
@@ -799,9 +899,39 @@ git push
 
 ---
 
-## 🔄 Fase 5: Pipeline de Orquestación (CHECKPOINT #5)
+## 🔄 Fase 5: Pipeline de Orquestación (CHECKPOINT #5) - COMPLETADA ✅
 
-### 5.1 Modificar ChecklistOrchestrator.bas
+### 5.1 Modificar ChecklistOrchestrator.bas ✅
+
+**Implementación completada exitosamente el 21/04/2026**
+
+**Cambios realizados:**
+
+✅ **Nueva función: CalcularMetricasInspeccion()** - Pipeline de decisión RPN
+- Parámetros: taData, esRecurrente, numeroInspeccion, rpnAnterior, idInspeccionAnterior, puestoEvaluado
+- Retorna: Dictionary con métricas completas (RPN, Categoría, datos recurrentes)
+- Lógica bifurcada:
+  - FLUJO ACTUAL (1ra inspección): RPN = TA, Categoría por InspectionCalculator
+  - FLUJO RECURRENTE (2da+): RPN Promedio → RPN Total → Categoría por RecurrentInspectionCalculator
+- Validación de consistencia automática (advertencia si cambio >50%)
+
+✅ **Modificación: GuardarInspeccionCompleta()** - Integración flujo recurrente
+- Extracción de datos recurrentes del formulario:
+  - frm.EsInspeccionRecurrente
+  - frm.NumeroInspeccion
+  - frm.RPNAnteriorAuto / frm.RPNAnteriorManual
+  - frm.IDInspeccionAnterior
+  - frm.Puesto (como PuestoEvaluado)
+- Invocación de CalcularMetricasInspeccion() en PASO 9 (antes era PASO 9 + PASO 10)
+- Paso de datos recurrentes a calculos Dictionary
+- Audit Trail mejorado (incluye info recurrente si aplica)
+
+**Características implementadas:**
+- ✅ Compatibilidad total hacia atrás (1ra inspección sin cambios)
+- ✅ Logging detallado con Debug.Print para troubleshooting
+- ✅ Manejo robusto de errores con ErrorLogger2
+- ✅ Numeración de pasos ajustada (PASO 9 consolidado, antes eran 9+10)
+- ✅ Sin errores de compilación
 
 **Método principal a modificar:** `FinalizarInspeccion()`
 
@@ -860,27 +990,66 @@ Private Function CalcularMetricasInspeccion( _
 End Function
 ```
 
-### 5.2 Modificar guardado en tblInspecciones
+### 5.2 Modificar guardado en tblInspecciones ✅
 
-**InspectionRepository.GuardarInspeccion()** - Agregar campos nuevos:
+**Implementación completada en InspectionRepository.bas**
+
+✅ **ActualizarCalculosInspeccion()** - Guardado de campos recurrentes (32-40)
+- Detección automática de columnas nuevas con Application.Match()
+- Compatibilidad: Funciona si columnas nuevas existen o no (On Error Resume Next)
+- Campos guardados:
+  - [32] Numero Inspeccion (Long): Desde calculos("NumeroInspeccion")
+  - [33] Es Inspeccion Recurrente (String "Si"/"No"): Desde calculos("EsInspeccionRecurrente")
+  - [34] Puesto Evaluado (String): Desde calculos("PuestoEvaluado")
+  - [35] RPN Anterior Manual (Double): Solo si IDInspeccionAnterior vacío
+  - [36] ID Inspeccion Anterior (String): Solo si viene del sistema
+  - [37] RPN Promedio (Double): Solo si recurrente
+  - [40] RPN Total (Double): Solo si recurrente
+- Fallback para 1ra inspección: Si no hay datos recurrentes → NumeroInspeccion=1, EsRecurrente="No"
+- Logging detallado de cada campo guardado
+
+**Código de guardado implementado:**
 ```vb
 ' Campos para todas las inspecciones
-nuevaFila.Cells(1, colNumeroInspeccion).Value = metricas("Numero Inspeccion")
-nuevaFila.Cells(1, colEsRecurrente).Value = metricas("Es Inspeccion Recurrente")
-nuevaFila.Cells(1, colCategoriaAplicada).Value = metricas("Categoria Aplicada")
+colIdx = Application.Match("Numero Inspeccion", tblInspecciones.HeaderRowRange, 0)
+If colIdx > 0 Then .Cells(1, colIdx).Value = calculos("NumeroInspeccion")
+
+colIdx = Application.Match("Es Inspeccion Recurrente", tblInspecciones.HeaderRowRange, 0)
+If colIdx > 0 Then .Cells(1, colIdx).Value = IIf(calculos("EsInspeccionRecurrente"), "Si", "No")
+
+colIdx = Application.Match("Puesto Evaluado", tblInspecciones.HeaderRowRange, 0)
+If colIdx > 0 Then .Cells(1, colIdx).Value = calculos("PuestoEvaluado")
 
 ' Campos solo para inspecciones recurrentes
-If metricas("Es Inspeccion Recurrente") = True Then
-    nuevaFila.Cells(1, colRPNAnterior).Value = metricas("RPN Anterior")
-    nuevaFila.Cells(1, colRPNPromedio).Value = metricas("RPN Promedio")
-    nuevaFila.Cells(1, colRPNTotal).Value = metricas("RPN Total")
-    
-    ' ID inspeccion anterior (si vino del sistema)
-    If metricas.Exists("ID Inspeccion Anterior") Then
-        nuevaFila.Cells(1, colIDInspeccionAnterior).Value = metricas("ID Inspeccion Anterior")
+If calculos("EsInspeccionRecurrente") Then
+    ' RPN Anterior Manual (col 35) - solo si fue manual
+    If Len(calculos("IDInspeccionAnterior")) = 0 Then
+        colIdx = Application.Match("RPN Anterior Manual", tblInspecciones.HeaderRowRange, 0)
+        If colIdx > 0 Then .Cells(1, colIdx).Value = calculos("RPNAnterior")
     End If
+    
+    ' ID inspección anterior (col 36) - si vino del sistema
+    If Len(calculos("IDInspeccionAnterior")) > 0 Then
+        colIdx = Application.Match("ID Inspeccion Anterior", tblInspecciones.HeaderRowRange, 0)
+        If colIdx > 0 Then .Cells(1, colIdx).Value = calculos("IDInspeccionAnterior")
+    End If
+    
+    ' RPN Promedio (col 37)
+    colIdx = Application.Match("RPN Promedio", tblInspecciones.HeaderRowRange, 0)
+    If colIdx > 0 Then .Cells(1, colIdx).Value = calculos("RPNPromedio")
+    
+    ' RPN Total (col 40)
+    colIdx = Application.Match("RPN Total", tblInspecciones.HeaderRowRange, 0)
+    If colIdx > 0 Then .Cells(1, colIdx).Value = calculos("RPNTotal")
 End If
 ```
+
+**Características:**
+- ✅ Detección dinámica de columnas (compatible pre/post migración)
+- ✅ Uso de Application.Match() en lugar de índices hardcodeados
+- ✅ Manejo robusto de errores (On Error Resume Next para columnas opcionales)
+- ✅ Logging con Debug.Print para cada campo guardado
+- ✅ Sin errores de compilación
 
 **CHECKPOINT #5 - Git Commit:**
 ```bash
@@ -1151,15 +1320,22 @@ Fila 26: Categoría resultado: [N - Descripción]
 
 ## 🎯 Estado del Plan
 
-- [ ] **Fase 0**: ✅ LISTO PARA INICIAR - Todas las decisiones tomadas
+- [x] **Fase 0**: ✅ COMPLETADA - Análisis y decisiones tomadas
+- [ ] **Fase 1**: ⏸️ PENDIENTE - Migración de BD (postponer para después de validar lógica)
+- [x] **Fase 2**: ✅ COMPLETADA - UI controles inspección recurrente en frmChecklistVirtual
+- [x] **Fase 3**: ✅ COMPLETADA - InspectionHistoryService.bas implementado
+- [ ] **Fase 4**: ✅ COMPLETADA - RecurrentInspectionCalculator.bas creado
+- [x] **Fase 5**: ✅ COMPLETADA - Pipeline orquestación ChecklistOrchestrator + InspectionRepository
+- [ ] **Fase 6**: ⏸️ PENDIENTE - Testing y validación
+- [ ] **Fase 7**: ⏸️ PENDIENTE - Documentación
 - [x] **Preguntas Q1-Q5**: ✅ RESPONDIDAS
   - Q1: Filtrar por Puesto + Iniciales (ambos)
   - Q2: RPN Total prevalece en inspecciones recurrentes
   - Q3: Microbiología pendiente para fase futura
   - Q4: Certificado PDF con desglose completo
   - Q5: Auditoría habilitada para RPN manual
-- [ ] **Revisión arquitectura**: Pendiente aprobación usuario
-- [ ] **Inicio implementación**: Esperando autorización
+- [x] **Revisión arquitectura**: ✅ APROBADA
+- [x] **Layout UI recurrente**: ✅ IMPLEMENTADO (diseño vertical con scroll)
 
 ---
 

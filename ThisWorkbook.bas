@@ -70,19 +70,20 @@ Private Sub Workbook_Open()
     
     ' Call SheetService2.HideAndProtectAllSheetsExcept(Configuration2.MAIN_MENU_SHEET)
     ' ThisWorkbook.Sheets(Configuration2.MAIN_MENU_SHEET).Activate
-    ' Call UserManager2.DisplayUserName
+    Call UserManager2.DisplayUserName
     ' g_PreviousSheetName = Configuration2.MAIN_MENU_SHEET
     
-    ' Dim userName As String
-    ' userName = Environ("USERNAME")
-    ' Call AuditLogger2.LogAction( _
-    '     action:="Apertura del libro", _
-    '     sheetName:="Sistema", _
-    '     dataModified:="Sesión iniciada", _
-    '     beforeChange:="N/A", _
-    '     afterChange:="Usuario: " & userName & " | Rol inicial: " & m_userRole, _
-    '     moduleAndSubroutine:="ThisWorkbook.Workbook_Open" _
-    ' )
+    ' Registrar apertura del sistema en Audit Trail
+    Dim userName As String
+    userName = Environ("USERNAME")
+    Call AuditLogger2.LogAction( _
+        action:="Apertura del libro", _
+        sheetName:="Sistema", _
+        dataModified:="Sesión iniciada", _
+        beforeChange:="N/A", _
+        afterChange:="Usuario: " & userName & " | Rol inicial: " & m_userRole, _
+        moduleAndSubroutine:="ThisWorkbook.Workbook_Open" _
+    )
     
     Exit Sub
 ErrorHandler:
@@ -234,6 +235,18 @@ End Sub
 '' ----------------------------------------------------------------------
 Private Sub Workbook_BeforeClose(Cancel As Boolean)
     On Error GoTo ErrorHandler
+    
+    ' Registrar cierre del sistema en Audit Trail
+    Dim userName As String
+    userName = Environ("USERNAME")
+    Call AuditLogger2.LogAction( _
+        action:="Cierre del libro", _
+        sheetName:="Sistema", _
+        dataModified:="Sesión finalizada", _
+        beforeChange:="N/A", _
+        afterChange:="Usuario: " & userName & " cerró el sistema", _
+        moduleAndSubroutine:="ThisWorkbook.Workbook_BeforeClose" _
+    )
     
     ' ========== ANÁLISIS AUTOMÁTICO TEMPORALMENTE DESACTIVADO ==========
     ' Para reactivar, descomentar el bloque de código a continuación

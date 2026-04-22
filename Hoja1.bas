@@ -33,7 +33,7 @@ Private Sub Worksheet_Activate()
     Next ws
     Application.DisplayAlerts = True
     Call WorkbookProtector2.ProtectWorkbook
-    Me.EnableSelection = xlNoSelection
+    Me.EnableSelection = xlUnlockedCells ' Permite editar celdas desbloqueadas (como J15)
     
     ' Refrescar cronograma resumen
     Call CronogramaResumen.RefrescarResumenCronograma
@@ -65,4 +65,31 @@ End Sub
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Deactivate()
     Call SheetProtector2.ProtectSheet(Me, Configuration2.APP_PASSWORD)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Evento: Worksheet_Change
+' Propósito: Detecta cambios en la celda del filtro de planta (I16) y
+'            actualiza automáticamente el cronograma resumen.
+' Lógica:
+'   1. Verifica si el cambio fue en la celda I16 (filtro de planta)
+'   2. Si es así, refresca el cronograma resumen automáticamente
+'   3. Esto permite cambio dinámico entre plantas sin necesidad de botón
+' ----------------------------------------------------------------------
+Private Sub Worksheet_Change(ByVal Target As Range)
+    On Error GoTo ErrorHandler
+    
+    ' Verificar si el cambio fue en la celda del filtro de planta (I16)
+    If Not Intersect(Target, Me.Range(Configuration2.RESUMEN_FILTRO_PLANTA_CELDA)) Is Nothing Then
+        ' Refrescar cronograma resumen automáticamente
+        Application.EnableEvents = False ' Evitar recursión
+        Call CronogramaResumen.RefrescarResumenCronograma
+        Application.EnableEvents = True
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Application.EnableEvents = True
+    Call ErrorLogger2.Log("Menú principal.Worksheet_Change", VBA.Err.Description, VBA.Err.Number)
 End Sub

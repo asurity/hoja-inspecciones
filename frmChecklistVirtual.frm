@@ -9,35 +9,49 @@
 '               ErrorLogger2
 '
 ' LAYOUT:
-'   ┌──────────────────┬───────────────────────────────────┐
-'   │ fraCabecera      │                                   │
-'   │ (1/3, min 260pt) │     mpPreguntas (2/3)             │
-'   │ 13 campos en     │     2 pestañas con preguntas      │
-'   │ 1 columna        │     dinámicas                     │
-'   ├──────────────────┴───────────────────────────────────┤
-'   │ Obs. Generales              [Guardar] [Cancelar]     │
-'   └─────────────────────────────────────────────────────-┘
+'   ┌─────────────────────┬──────────────────────────────┐
+'   │ fraCabecera (35%)   │  mpPreguntas (65%)           │
+'   │ ┌─────────────────┐ │  2 pestañas con              │
+'   │ │ 14 campos       │ │  preguntas dinámicas         │
+'   │ │ verticales      │ │                              │
+'   │ ├─────────────────┤ │                              │
+'   │ │ Inspección      │ │                              │
+'   │ │ Recurrente      │ │                              │
+'   │ │ (con scroll)    │ │                              │
+'   │ └─────────────────┘ │                              │
+'   ├─────────────────────┴──────────────────────────────┤
+'   │ Obs. Generales              [Guardar] [Cancelar]   │
+'   └────────────────────────────────────────────────────┘
 '
 ' CONTROLES REQUERIDOS EN EL DISEÑADOR VBA:
-'   Formulario: frmChecklistVirtual (Adaptativo a pantalla, Min=720x650, StartUpPosition=CenterScreen)
+'   Formulario: frmChecklistVirtual (Adaptativo a pantalla completa, 95%x85%, StartUpPosition=CenterScreen)
 '
-'   Frame "fraCabecera" (columna izquierda, 1/3 del ancho, min 260pt):
-'     - lblEvaluado, txtEvaluado (TextBox, Locked)
-'     - lblPuesto, txtPuesto (TextBox, Locked)
-'     - lblPlanta, txtPlanta (TextBox, Locked)
-'     - lblArea, cboArea (ComboBox)
-'     - lblLineaAuditada, cboLineaAuditada (ComboBox)
-'     - lblFecha, txtFecha (TextBox)
-'     - lblFechaAuditada, txtFechaAuditada (TextBox)
-'     - lblHoraInicio, txtHoraInicio (TextBox)
-'     - lblHoraTermino, txtHoraTermino (TextBox)
-'     - lblEvaluador, cboEvaluador (ComboBox)
-'     - lblAY1, cboAY1 (ComboBox)
-'     - lblAY2, cboAY2 (ComboBox)
-'     - lblOP, cboOP (ComboBox)
-'     - lblLugar, cboLugar (ComboBox)
+'   Frame "fraCabecera" (columna izquierda, 35% del ancho, mín 280pt, diseño vertical con scroll):
+'     14 campos verticales:
+'       - lblEvaluado, txtEvaluado (TextBox, Locked)
+'       - lblPuesto, txtPuesto (TextBox, Locked)
+'       - lblPlanta, txtPlanta (TextBox, Locked)
+'       - lblArea, cboArea (ComboBox)
+'       - lblLineaAuditada, cboLineaAuditada (ComboBox)
+'       - lblFecha, txtFecha (TextBox)
+'       - lblFechaAuditada, txtFechaAuditada (TextBox)
+'       - lblHoraInicio, txtHoraInicio (TextBox)
+'       - lblHoraTermino, txtHoraTermino (TextBox)
+'       - lblEvaluador, cboEvaluador (ComboBox)
+'       - lblAY1, cboAY1 (ComboBox)
+'       - lblAY2, cboAY2 (ComboBox)
+'       - lblOP, cboOP (ComboBox)
+'       - lblLugar, cboLugar (ComboBox)
+'     Inspecciones recurrentes (DEBAJO de los 14 campos):
+'       - fraRecurrentInspection (Frame contenedor)
+'         - chkEsRecurrente (CheckBox)
+'         - btnBuscarHistorico (CommandButton)
+'         - lblInfoHistorico (Label)
+'         - lblNumeroInspeccion, txtNumeroInspeccion (Label, TextBox)
+'         - lblRPNAnterior, txtRPNAnteriorAuto, txtRPNAnteriorManual (Label, 2 TextBox)
+'         - lblModoRPN (Label)
 '
-'   MultiPage "mpPreguntas" (columna derecha, 2/3 del ancho, 2 páginas):
+'   MultiPage "mpPreguntas" (columna derecha, 65% del ancho, 2 páginas):
 '     Page 0: "Auditoría de procesos" → fraPreguntas0 (Frame, ScrollBars=Vertical)
 '     Page 1: "Técnica aséptica"      → fraPreguntas1 (Frame, ScrollBars=Vertical)
 '
@@ -71,7 +85,7 @@ Private Const LOGPIXELSY As Long = 90
 Private Const MARGIN As Single = 12
 Private Const ROW_HEIGHT As Single = 22
 Private Const LABEL_WIDTH As Single = 100
-Private Const LEFT_COL_MIN As Single = 260
+Private Const LEFT_COL_MIN As Single = 280  ' Mínimo para columna izquierda con scroll
 Private Const COL_GAP As Single = 8
 Private Const OBS_LABEL_H As Single = 18
 Private Const OBS_TEXT_H As Single = 50
@@ -85,12 +99,12 @@ Private Const PREG_BLOCK_HEIGHT As Single = 80  ' total por pregunta
 Private Const PREG_MARGIN As Single = 6
 
 ' --- Colores (paleta consistente con frmGestorTablas) ---
-Private Const COLOR_FONDO As Long = &HFAF8F5           ' Beige claro (fondo formulario)
+Private Const COLOR_FONDO As Long = &HFFFFFF           ' Blanco (fondo formulario)
 Private Const COLOR_TITULO As Long = &H724E27           ' Marrón oscuro (títulos)
 Private Const COLOR_FRAME As Long = &HFFFFFF            ' Blanco (fondo frames/cabecera)
-Private Const COLOR_FRAME_PREGUNTAS As Long = &HFAF8F5   ' Beige claro (fondo preguntas)
+Private Const COLOR_FRAME_PREGUNTAS As Long = &HFFFFFF   ' Blanco (fondo preguntas)
 Private Const COLOR_LABEL As Long = &H5B3A1A            ' Marrón medio (labels de campo)
-Private Const COLOR_READONLY As Long = &HF0F0F0         ' Gris claro (no editable)
+Private Const COLOR_READONLY As Long = &HFFFFFF         ' Blanco (no editable)
 Private Const COLOR_GUARDAR As Long = &HC0DCC0           ' Verde claro
 Private Const COLOR_CANCELAR As Long = &HC0C0C0          ' Gris
 Private Const COLOR_ESTADO_OK As Long = &H8000&          ' Verde (mensajes ok)
@@ -113,6 +127,7 @@ Private mPuesto As String
 Private mIDPlantilla As String
 Private mIDCronograma As String
 Private mPlanta As String
+Private mAreaPendiente As String  ' Área asignada antes de cargar combos
 Private mFrecuenciaMeses As Long
 Private mIDSeccionTA As String
 Private mIDSeccionProcesos As String
@@ -188,6 +203,11 @@ End Property
 
 Public Property Get HoraTermino() As String
     HoraTermino = Trim(txtHoraTermino.Value)
+End Property
+
+Public Property Let Area(ByVal v As String)
+    ' Guardar el valor del área para procesarlo después de cargar combos
+    mAreaPendiente = v
 End Property
 
 Public Property Get Area() As String
@@ -278,6 +298,7 @@ Private Sub UserForm_Initialize()
     mRPNAnteriorAuto = 0
     mIDInspeccionAnterior = ""
     mModoRPN = "NINGUNO"
+    mAreaPendiente = ""
     
     ' --- Configurar todos los controles ---
     Call ConfigurarFormulario
@@ -327,29 +348,30 @@ Private Sub ConfigurarFormulario()
         scrW_pt = CSng(scrW_px) * 72# / CSng(dpiX)
         scrH_pt = CSng(scrH_px) * 72# / CSng(dpiY)
         
-        FORM_WIDTH = scrW_pt * 0.92
-        FORM_HEIGHT = scrH_pt * 0.78
+        ' Aprovechar más espacio de pantalla (95% ancho, 85% alto)
+        FORM_WIDTH = scrW_pt * 0.95
+        FORM_HEIGHT = scrH_pt * 0.85
     Else
         ' Fallback si la API no responde
-        FORM_WIDTH = 720
-        FORM_HEIGHT = 650
+        FORM_WIDTH = 900
+        FORM_HEIGHT = 700
         scrW_pt = 0
         scrH_pt = 0
     End If
     
-    ' Límites razonables
-    If FORM_WIDTH < 720 Then FORM_WIDTH = 720
-    If FORM_WIDTH > 1200 Then FORM_WIDTH = 1200
-    If FORM_HEIGHT < 550 Then FORM_HEIGHT = 550
-    If FORM_HEIGHT > 820 Then FORM_HEIGHT = 820
+    ' Límites razonables ampliados
+    If FORM_WIDTH < 900 Then FORM_WIDTH = 900
+    If FORM_WIDTH > 1400 Then FORM_WIDTH = 1400
+    If FORM_HEIGHT < 650 Then FORM_HEIGHT = 650
+    If FORM_HEIGHT > 900 Then FORM_HEIGHT = 900
     
     ' Calcular ancho total de contenido
     CONTENT_WIDTH = FORM_WIDTH - (MARGIN * 2) - 4
     
-    ' Calcular anchos de columnas (cabecera 1/3, preguntas 2/3)
-    mLeftColWidth = CONTENT_WIDTH * 0.33
-    If mLeftColWidth < LEFT_COL_MIN Then mLeftColWidth = LEFT_COL_MIN
-    If mLeftColWidth > 350 Then mLeftColWidth = 350
+    ' Calcular anchos de columnas (cabecera 35%, preguntas 65% para mejor distribución)
+    mLeftColWidth = CONTENT_WIDTH * 0.35
+    If mLeftColWidth < 280 Then mLeftColWidth = 280
+    If mLeftColWidth > 380 Then mLeftColWidth = 380
     mRightColLeft = MARGIN + mLeftColWidth + COL_GAP
     mRightColWidth = CONTENT_WIDTH - mLeftColWidth - COL_GAP
     
@@ -379,7 +401,7 @@ Private Sub ConfigurarFormulario()
 End Sub
 
 Private Sub ConfigurarCabecera()
-    ' --- Frame principal de cabecera (columna izquierda, 1 columna vertical) ---
+    ' --- Frame principal de cabecera (columna izquierda, 1 columna vertical con scroll) ---
     With Me.fraCabecera
         .Left = MARGIN
         .Top = MARGIN
@@ -394,15 +416,15 @@ Private Sub ConfigurarCabecera()
         .BorderStyle = fmBorderStyleSingle
         .BorderColor = &HD0C8C0
         .SpecialEffect = fmSpecialEffectFlat
-        .ScrollBars = fmScrollBarsVertical  ' FASE 2: Scroll para contenido extenso
-        .ScrollHeight = 580  ' Altura total del contenido interno (ajustado para 14 filas + frame recurrente)
+        .ScrollBars = fmScrollBarsVertical
+        .ScrollHeight = 750  ' Altura total: 14 campos (308pt) + frame recurrente (240pt) + márgenes
         .KeepScrollBarsVisible = fmScrollBarsVertical
     End With
     
-    ' --- Layout interno: 1 columna ---
+    ' --- Layout interno: 1 columna vertical ---
     Dim lblLeft As Single: lblLeft = 4
     Dim ctrlLeft As Single: ctrlLeft = 100
-    Dim ctrlW As Single: ctrlW = mLeftColWidth - ctrlLeft - 14
+    Dim ctrlW As Single: ctrlW = mLeftColWidth - ctrlLeft - 20  ' Espacio para scrollbar
     Dim rowTop As Single: rowTop = 20
     Dim rowIdx As Long: rowIdx = 0
     
@@ -412,7 +434,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblEvaluado
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Evaluado:"
         .Font.Name = "Segoe UI"
@@ -438,7 +460,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblPuesto
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Puesto:"
         .Font.Name = "Segoe UI"
@@ -464,7 +486,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblPlanta
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Planta:"
         .Font.Name = "Segoe UI"
@@ -490,7 +512,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblArea
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Área:"
         .Font.Name = "Segoe UI"
@@ -516,7 +538,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblLineaAuditada
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Línea/Equipo:"
         .Font.Name = "Segoe UI"
@@ -532,7 +554,7 @@ Private Sub ConfigurarCabecera()
         .Width = ctrlW
         .Height = 20
         .Font.Name = "Segoe UI"
-        .Font.Size = 9
+        .Font.Size = 8.5
         .Style = fmStyleDropDownList
         .TabIndex = 1
     End With
@@ -542,7 +564,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblFecha
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Fecha:"
         .Font.Name = "Segoe UI"
@@ -567,7 +589,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblFechaAuditada
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Fecha Auditada:"
         .Font.Name = "Segoe UI"
@@ -592,7 +614,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblHoraInicio
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Hora inicio:"
         .Font.Name = "Segoe UI"
@@ -617,7 +639,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblHoraTermino
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Hora término:"
         .Font.Name = "Segoe UI"
@@ -642,7 +664,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblEvaluador
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Evaluador:"
         .Font.Name = "Segoe UI"
@@ -668,7 +690,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblAY1
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Ayudante 1:"
         .Font.Name = "Segoe UI"
@@ -694,7 +716,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblAY2
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Ayudante 2:"
         .Font.Name = "Segoe UI"
@@ -720,7 +742,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblOP
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Operador:"
         .Font.Name = "Segoe UI"
@@ -746,7 +768,7 @@ Private Sub ConfigurarCabecera()
     With Me.lblLugar
         .Left = lblLeft
         .Top = rowTop + (rowIdx * ROW_HEIGHT)
-        .Width = LABEL_WIDTH
+        .Width = 95
         .Height = 18
         .Caption = "Lugar:"
         .Font.Name = "Segoe UI"
@@ -770,34 +792,39 @@ Private Sub ConfigurarCabecera()
     
     ' ═══════════════════════════════════════════════════════════════════
     ' SECCIÓN: INSPECCIONES RECURRENTES (FASE 2 - 21/04/2026)
+    ' POSICIONADO DEBAJO DE LOS 14 CAMPOS
     ' ═══════════════════════════════════════════════════════════════════
     
-    ' Calcular posición del frame contenedor
+    ' Calcular posición vertical para el frame (debajo de los 14 campos)
     Dim recTop As Single
-    recTop = rowTop + (rowIdx * ROW_HEIGHT) + 12  ' Gap de 12pt (aumentado)
+    recTop = rowTop + (rowIdx * ROW_HEIGHT) + 8
     
-    ' Frame contenedor (altura aumentada para scroll visible)
+    ' Frame contenedor (ancho completo de la columna)
     With Me.fraRecurrentInspection
         .Left = lblLeft
         .Top = recTop
-        .Width = mLeftColWidth - 8
-        .Height = 180  ' Altura optimizada
+        .Width = mLeftColWidth - 12
+        .Height = 240
         .Caption = " Inspección Recurrente "
         .Font.Name = "Segoe UI"
-        .Font.Size = 8  ' Fuente más pequeña para ahorrar espacio
+        .Font.Size = 8
         .Font.Bold = True
         .ForeColor = &H5B3A1A  ' Marrón medio
-        .BackColor = &HF5F5F5  ' Gris muy claro
+        .BackColor = &HFFFFFF  ' Blanco
         .BorderStyle = fmBorderStyleSingle
         .BorderColor = &HD0C8C0
         .SpecialEffect = fmSpecialEffectFlat
     End With
     
-    ' Checkbox principal (mejor posicionado)
+    ' Ancho interno para controles
+    Dim frameInnerW As Single
+    frameInnerW = mLeftColWidth - 28
+    
+    ' Checkbox principal
     With Me.chkEsRecurrente
         .Left = 8
         .Top = 18
-        .Width = 220
+        .Width = frameInnerW
         .Height = 18
         .Caption = "Esta NO es la primera inspección"
         .Font.Name = "Segoe UI"
@@ -807,25 +834,25 @@ Private Sub ConfigurarCabecera()
         .TabIndex = 11
     End With
     
-    ' Botón búsqueda histórico (mejor posicionado)
+    ' Botón búsqueda histórico
     With Me.btnBuscarHistorico
         .Left = 8
-        .Top = 40
-        .Width = 140
-        .Height = 24
+        .Top = 42
+        .Width = frameInnerW
+        .Height = 28
         .Caption = "🔍 Buscar historial"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
         .TabIndex = 12
-        .BackColor = &HE0E0E0
+        .BackColor = &HFFFFFF
     End With
     
-    ' Label info histórico (mejor posicionado con WordWrap)
+    ' Label info histórico
     With Me.lblInfoHistorico
         .Left = 8
-        .Top = 68
-        .Width = 220
-        .Height = 20
+        .Top = 74
+        .Width = frameInnerW
+        .Height = 32
         .Caption = "(Info de inspecciones previas aparecerá aquí)"
         .Font.Name = "Segoe UI"
         .Font.Size = 7
@@ -834,12 +861,12 @@ Private Sub ConfigurarCabecera()
         .WordWrap = True
     End With
     
-    ' Label número inspección (mejor alineado)
+    ' Label número inspección
     With Me.lblNumeroInspeccion
         .Left = 8
-        .Top = 92
+        .Top = 110
         .Width = 100
-        .Height = 18
+        .Height = 16
         .Caption = "Inspección N°:"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
@@ -850,11 +877,11 @@ Private Sub ConfigurarCabecera()
         .Visible = False
     End With
     
-    ' TextBox número inspección (mejor posicionado)
+    ' TextBox número inspección
     With Me.txtNumeroInspeccion
         .Left = 112
-        .Top = 92
-        .Width = 50
+        .Top = 110
+        .Width = frameInnerW - 104
         .Height = 20
         .Font.Name = "Segoe UI"
         .Font.Size = 9
@@ -864,12 +891,12 @@ Private Sub ConfigurarCabecera()
         .Visible = False
     End With
     
-    ' Label RPN Anterior (mejor alineado)
+    ' Label RPN Anterior
     With Me.lblRPNAnterior
         .Left = 8
-        .Top = 118
+        .Top = 136
         .Width = 100
-        .Height = 18
+        .Height = 16
         .Caption = "RPN anterior:"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
@@ -880,39 +907,39 @@ Private Sub ConfigurarCabecera()
         .Visible = False
     End With
     
-    ' TextBox RPN Anterior Automático (mejor posicionado)
+    ' TextBox RPN Anterior Automático
     With Me.txtRPNAnteriorAuto
         .Left = 112
-        .Top = 118
-        .Width = 70
+        .Top = 136
+        .Width = frameInnerW - 104
         .Height = 20
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Locked = True
-        .BackColor = &HE0FFE0  ' Verde claro
+        .BackColor = &HFFFFFF  ' Blanco
         .TabStop = False
         .Visible = False
     End With
     
-    ' TextBox RPN Anterior Manual (mejor posicionado)
+    ' TextBox RPN Anterior Manual
     With Me.txtRPNAnteriorManual
         .Left = 112
-        .Top = 118
-        .Width = 70
+        .Top = 136
+        .Width = frameInnerW - 104
         .Height = 20
         .Font.Name = "Segoe UI"
         .Font.Size = 9
         .Locked = False
-        .BackColor = &HFFFFE0  ' Amarillo claro
+        .BackColor = &HFFFFFF  ' Blanco
         .Visible = False
     End With
     
-    ' Label estado modo (mejor posicionado con WordWrap)
+    ' Label estado modo
     With Me.lblModoRPN
         .Left = 8
-        .Top = 144
-        .Width = 220
-        .Height = 26
+        .Top = 162
+        .Width = frameInnerW
+        .Height = 36
         .Caption = "[Modo RPN: no determinado]"
         .Font.Name = "Segoe UI"
         .Font.Size = 7
@@ -1090,10 +1117,23 @@ Private Sub UserForm_Activate()
     ' Rellenar campos de solo lectura
     On Error Resume Next
     txtEvaluado.Value = mEvaluado
+    txtEvaluado.Locked = True
+    txtEvaluado.BackColor = &H8000000F  ' Color gris (bloqueado)
+    
     txtPuesto.Value = mPuesto
+    txtPuesto.Locked = True
+    txtPuesto.BackColor = &H8000000F
+    
     txtPlanta.Value = mPlanta
+    txtPlanta.Locked = True
+    txtPlanta.BackColor = &H8000000F
+    
     txtFecha.Value = Format(Date, "dd/mm/yyyy")
     txtFechaAuditada.Value = Format(Date, "dd/mm/yyyy")
+    
+    ' Inicializar horas con la hora actual
+    txtHoraInicio.Value = Format(Now, "HH:mm")
+    txtHoraTermino.Value = Format(Now, "HH:mm")
     On Error GoTo ErrorHandler
     
     Debug.Print "Campos básicos cargados OK"
@@ -1108,6 +1148,8 @@ Private Sub UserForm_Activate()
     On Error Resume Next
     Call CargarComboAreas
     Debug.Print "  Areas: OK"
+    Call AplicarFiltroArea  ' Aplicar filtrado/bloqueo según planta y área
+    Debug.Print "  Filtro de área aplicado: OK"
     Call CargarCombosPersonal
     Debug.Print "  Personal: OK"
     Call CargarComboEvaluadores
@@ -1282,6 +1324,96 @@ ErrorHandler:
     Call ErrorLogger2.Log("frmChecklistVirtual.cboArea_Change", Err.Description, Err.Number)
 End Sub
 
+'' ----------------------------------------------------------------------
+' Evento: txtHoraTermino_Exit
+' Propósito: Valida que la hora de término sea mayor o igual a la hora de inicio
+' ----------------------------------------------------------------------
+Private Sub txtHoraTermino_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    On Error GoTo ErrorHandler
+    
+    Dim horaInicio As String
+    Dim horaTermino As String
+    Dim dtInicio As Date
+    Dim dtTermino As Date
+    
+    horaInicio = Trim(txtHoraInicio.Value)
+    horaTermino = Trim(txtHoraTermino.Value)
+    
+    ' Validar solo si ambos campos tienen valor
+    If Len(horaInicio) = 0 Or Len(horaTermino) = 0 Then Exit Sub
+    
+    ' Validar formato HH:mm
+    If Not IsDate(horaInicio) Or Not IsDate(horaTermino) Then
+        MsgBox "El formato de hora debe ser HH:mm (por ejemplo: 14:30).", vbExclamation, "Formato inválido"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    ' Convertir a Date para comparar
+    dtInicio = CDate(horaInicio)
+    dtTermino = CDate(horaTermino)
+    
+    ' Validar que término >= inicio
+    If dtTermino < dtInicio Then
+        MsgBox "La hora de término debe ser mayor o igual a la hora de inicio." & vbCrLf & vbCrLf & _
+               "Hora inicio: " & horaInicio & vbCrLf & _
+               "Hora término: " & horaTermino, _
+               vbExclamation, "Validación de horarios"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.txtHoraTermino_Exit", Err.Description, Err.Number)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Evento: txtHoraInicio_Exit
+' Propósito: Valida formato de hora y coherencia con hora de término
+' ----------------------------------------------------------------------
+Private Sub txtHoraInicio_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    On Error GoTo ErrorHandler
+    
+    Dim horaInicio As String
+    Dim horaTermino As String
+    Dim dtInicio As Date
+    Dim dtTermino As Date
+    
+    horaInicio = Trim(txtHoraInicio.Value)
+    horaTermino = Trim(txtHoraTermino.Value)
+    
+    ' Validar solo si ambos campos tienen valor
+    If Len(horaInicio) = 0 Or Len(horaTermino) = 0 Then Exit Sub
+    
+    ' Validar formato HH:mm
+    If Not IsDate(horaInicio) Or Not IsDate(horaTermino) Then
+        MsgBox "El formato de hora debe ser HH:mm (por ejemplo: 14:30).", vbExclamation, "Formato inválido"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    ' Convertir a Date para comparar
+    dtInicio = CDate(horaInicio)
+    dtTermino = CDate(horaTermino)
+    
+    ' Validar que término >= inicio
+    If dtTermino < dtInicio Then
+        MsgBox "La hora de inicio debe ser menor o igual a la hora de término." & vbCrLf & vbCrLf & _
+               "Hora inicio: " & horaInicio & vbCrLf & _
+               "Hora término: " & horaTermino, _
+               vbExclamation, "Validación de horarios"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.txtHoraInicio_Exit", Err.Description, Err.Number)
+End Sub
+
 Private Sub btnGuardar_Click()
     On Error GoTo ErrorHandler
     
@@ -1341,6 +1473,103 @@ ErrorHandler:
     Call ErrorLogger2.Log("frmChecklistVirtual.CargarComboAreas", Err.Description, Err.Number)
 End Sub
 
+'' ----------------------------------------------------------------------
+' Subrutina: AplicarFiltroArea
+' Propósito: Aplica la lógica de filtrado/bloqueo del combo de Área
+'            según la planta y el área de la plantilla.
+' Lógica:
+'   - Therapia iv Santiago + NPT → Filtrar solo opciones NPT (dejar elegir)
+'   - Todos los demás casos → Bloquear con valor específico
+' ----------------------------------------------------------------------
+Private Sub AplicarFiltroArea()
+    On Error GoTo ErrorHandler
+    
+    Dim esPlantaSantiago As Boolean
+    Dim areaEsNPT As Boolean
+    Dim areaEsGenerica As Boolean
+    Dim areaTrimmed As String
+    
+    areaTrimmed = Trim(mAreaPendiente)
+    esPlantaSantiago = (Trim(mPlanta) = "Therapia iv Santiago")
+    areaEsNPT = (UCase(areaTrimmed) = "NPT")
+    
+    ' Detectar si es plantilla genérica (sin área específica o "TODAS")
+    areaEsGenerica = (Len(areaTrimmed) = 0 Or UCase(areaTrimmed) = "TODAS" Or UCase(areaTrimmed) = "GENERAL")
+    
+    Debug.Print "=== AplicarFiltroArea ==="
+    Debug.Print "Planta: [" & mPlanta & "]"
+    Debug.Print "Área pendiente: [" & mAreaPendiente & "]"
+    Debug.Print "Es Santiago: " & esPlantaSantiago
+    Debug.Print "Es NPT: " & areaEsNPT
+    Debug.Print "Es Genérica: " & areaEsGenerica
+    Debug.Print "Items en combo ANTES: " & cboArea.ListCount
+    
+    If areaEsGenerica Then
+        ' PLANTILLA GENÉRICA: Mostrar todas las opciones disponibles
+        Debug.Print "PLANTILLA GENÉRICA: Mostrando todas las áreas..."
+        cboArea.Enabled = True
+        cboArea.Locked = False
+        ' El usuario deberá elegir entre todas las opciones cargadas
+        
+    ElseIf esPlantaSantiago And areaEsNPT Then
+        ' CASO ESPECIAL: Santiago + NPT → Filtrar solo opciones NPT
+        ' Guardar todas las opciones actuales
+        Dim opcionesOriginales As New Collection
+        Dim i As Long
+        For i = 0 To cboArea.ListCount - 1
+            opcionesOriginales.Add cboArea.List(i)
+            Debug.Print "  Opción original " & i & ": [" & cboArea.List(i) & "]"
+        Next i
+        
+        Debug.Print "Filtrando opciones con 'NPT'..."
+        
+        ' Limpiar y recargar solo las que contienen "NPT"
+        cboArea.Clear
+        Dim opcion As Variant
+        Dim contador As Long
+        contador = 0
+        For Each opcion In opcionesOriginales
+            If InStr(1, CStr(opcion), "NPT", vbTextCompare) > 0 Then
+                cboArea.AddItem CStr(opcion)
+                contador = contador + 1
+                Debug.Print "  ✓ Agregada: [" & CStr(opcion) & "]"
+            Else
+                Debug.Print "  ✗ Omitida: [" & CStr(opcion) & "]"
+            End If
+        Next opcion
+        
+        Debug.Print "Items agregados: " & contador
+        Debug.Print "Items en combo DESPUÉS: " & cboArea.ListCount
+        
+        cboArea.Enabled = True
+        cboArea.Locked = False
+        ' No asignamos valor, el usuario deberá elegir
+    Else
+        ' CASO NORMAL: Asignar valor y bloquear
+        Debug.Print "CASO NORMAL: Bloqueando..."
+        
+        Dim valorCombo As String
+        If UCase(areaTrimmed) = "ONCO" Then
+            valorCombo = "Oncología"
+        ElseIf UCase(areaTrimmed) = "NPT" Then
+            valorCombo = "NPT"
+        Else
+            valorCombo = areaTrimmed
+        End If
+        
+        cboArea.Value = valorCombo
+        cboArea.Enabled = False
+        cboArea.Locked = True
+        
+        Debug.Print "Valor bloqueado: [" & valorCombo & "]"
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.AplicarFiltroArea", Err.Description, Err.Number)
+End Sub
+
 Private Sub CargarCombosPersonal()
     On Error GoTo ErrorHandler
     
@@ -1380,6 +1609,8 @@ End Sub
 Private Sub CargarComboEvaluadores()
     On Error GoTo ErrorHandler
     
+    Debug.Print "=== CargarComboEvaluadores ==="
+    
     cboEvaluador.Clear
     
     Dim evaluadores As Collection
@@ -1390,9 +1621,53 @@ Private Sub CargarComboEvaluadores()
         cboEvaluador.AddItem CStr(e)
     Next e
     
+    Debug.Print "Total evaluadores cargados en combo: " & cboEvaluador.ListCount
+    
+    ' Pre-seleccionar evaluador basado en usuario de Windows
+    Dim nombreUsuarioWindows As String
+    Dim inicialesUsuario As String
+    
+    ' IMPORTANTE: Usar Application.UserName (nombre completo) NO Environ("USERNAME") (cuenta Windows)
+    nombreUsuarioWindows = Application.UserName  ' Ejemplo: "NIEVES CARRERO"
+    Debug.Print "Usuario Windows (Application.UserName): [" & nombreUsuarioWindows & "]"
+    
+    If Len(nombreUsuarioWindows) > 0 Then
+        ' Buscar iniciales del evaluador por nombre
+        inicialesUsuario = ChecklistRepository.ObtenerInicialesEvaluadorPorNombre(nombreUsuarioWindows)
+        
+        Debug.Print "Iniciales obtenidas de búsqueda: [" & inicialesUsuario & "]"
+        
+        If Len(inicialesUsuario) > 0 Then
+            ' Intentar seleccionar en el combo
+            Dim i As Long
+            Dim encontrado As Boolean
+            encontrado = False
+            
+            Debug.Print "Buscando en combo las iniciales: [" & inicialesUsuario & "]"
+            For i = 0 To cboEvaluador.ListCount - 1
+                Debug.Print "  Opción " & i & ": [" & cboEvaluador.List(i) & "] | Match: " & (Trim(cboEvaluador.List(i)) = inicialesUsuario)
+                If Trim(cboEvaluador.List(i)) = inicialesUsuario Then
+                    cboEvaluador.ListIndex = i
+                    encontrado = True
+                    Debug.Print ">>> Evaluador pre-seleccionado: [" & inicialesUsuario & "] en índice " & i
+                    Exit For
+                End If
+            Next i
+            
+            If Not encontrado Then
+                Debug.Print ">>> Las iniciales [" & inicialesUsuario & "] NO se encontraron en el combo"
+            End If
+        Else
+            Debug.Print ">>> No se encontró evaluador para usuario Windows: [" & nombreUsuarioWindows & "]"
+        End If
+    Else
+        Debug.Print ">>> Environ(USERNAME) está vacío"
+    End If
+    
     Exit Sub
     
 ErrorHandler:
+    Debug.Print "ERROR en CargarComboEvaluadores: " & Err.Description
     Call ErrorLogger2.Log("frmChecklistVirtual.CargarComboEvaluadores", Err.Description, Err.Number)
 End Sub
 
@@ -1772,7 +2047,7 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
         dictResp("IDCriticidad") = idCriticidad
         mRespuestas(idPregunta) = dictResp
         
-        Debug.Print "[frmChecklistVirtual.CrearControlesPreguntas] Pregunta " & idPregunta & " inicializada con IDCriticidad: " & idCriticidad
+        ' Debug.Print "[frmChecklistVirtual.CrearControlesPreguntas] Pregunta " & idPregunta & " inicializada con IDCriticidad: " & idCriticidad
         
         On Error GoTo ErrorHandler
 
@@ -2003,46 +2278,114 @@ End Sub
 ' btnBuscarHistorico_Click
 ' Propósito: Busca inspecciones previas del personal evaluado
 '            y autocompleta los campos de inspección recurrente
+' ACTUALIZADO: Fase 3 - Usa InspectionHistoryService
 ' ----------------------------------------------------------------------
 Private Sub btnBuscarHistorico_Click()
     On Error GoTo ErrorHandler
     
     ' Validar que hay personal seleccionado
-    If Len(mEvaluado) = 0 Or Len(mIDPlantilla) = 0 Then
-        MsgBox "Debe seleccionar un personal y plantilla antes de buscar historial.", _
+    If Len(mEvaluado) = 0 Or Len(Me.txtPuesto.Value) = 0 Then
+        MsgBox "Debe seleccionar un personal antes de buscar historial.", _
                vbExclamation, "Datos incompletos"
         Exit Sub
     End If
     
-    ' TODO FASE 3: Llamar a InspectionHistoryService.BuscarInspeccionesPrevias()
-    ' Por ahora, simulación básica
+    ' Buscar inspecciones previas usando InspectionHistoryService
+    ' Parámetros: iniciales, filtroPorPuesto=True, puesto, idPlantilla=""
+    Dim inspecciones As Object
+    Dim iniciales As String
+    Dim puestoEval As String
+    Dim plantillaID As String
     
-    MsgBox "NOTA TEMPORAL (FASE 2):" & vbCrLf & vbCrLf & _
-           "La búsqueda de historial se implementará en FASE 3." & vbCrLf & _
-           "Por ahora, puede marcar el checkbox e ingresar los datos manualmente:" & vbCrLf & vbCrLf & _
-           "1. Marque 'Esta NO es la primera inspección'" & vbCrLf & _
-           "2. Ingrese el RPN anterior en el campo manual", _
-           vbInformation, "Función en desarrollo - FASE 3"
+    iniciales = mEvaluado
+    puestoEval = Me.txtPuesto.Value
+    plantillaID = mIDPlantilla
     
-    ' Activar checkbox automáticamente para facilitar el flujo
+    Set inspecciones = InspectionHistoryService.BuscarInspeccionesPrevias( _
+        iniciales, True, puestoEval, plantillaID)
+    
+    If inspecciones.Count = 0 Then
+        ' No hay inspecciones anteriores
+        MsgBox "No se encontraron inspecciones anteriores para:" & vbCrLf & _
+               "Personal: " & mEvaluado & vbCrLf & _
+               "Puesto: " & Me.txtPuesto.Value & vbCrLf & vbCrLf & _
+               "Esta será la PRIMERA inspección de este puesto." & vbCrLf & vbCrLf & _
+               "Recomendación: Desmarque el checkbox 'Esta NO es la primera inspección'.", _
+               vbInformation, "Sin historial"
+        
+        ' Limpiar campos
+        chkEsRecurrente.Value = False
+        txtNumeroInspeccion.Value = ""
+        txtRPNAnteriorAuto.Value = ""
+        txtRPNAnteriorManual.Value = ""
+        lblInfoHistorico.Caption = "Sin inspecciones previas"
+        lblInfoHistorico.ForeColor = &H808080  ' Gris
+        Exit Sub
+    End If
+    
+    ' Obtener la última inspección (función correcta: ObtenerUltimaInspeccion)
+    Dim ultInsp As Object
+    Set ultInsp = InspectionHistoryService.ObtenerUltimaInspeccion( _
+        mEvaluado, True, Me.txtPuesto.Value, mIDPlantilla)
+    
+    If ultInsp Is Nothing Then
+        MsgBox "Error: No se pudo obtener la última inspección.", vbCritical, "Error"
+        Exit Sub
+    End If
+    
+    ' Autocompletar campos con datos encontrados
     chkEsRecurrente.Value = True
     
-    ' Habilitar modo manual (ya que no hay búsqueda automática aún)
-    txtRPNAnteriorManual.Visible = True
-    txtRPNAnteriorAuto.Visible = False
-    mModoRPN = "MANUAL"
-    lblModoRPN.Caption = "[Modo MANUAL - Ingrese RPN]"
-    lblModoRPN.ForeColor = &H0080FF  ' Naranja
+    ' Determinar número de inspección (última + 1)
+    Dim numInspeccion As Long
+    If ultInsp.Exists("NumeroInspeccion") Then
+        numInspeccion = CLng(ultInsp("NumeroInspeccion")) + 1
+    Else
+        numInspeccion = 2  ' Asumir que la encontrada es la primera
+    End If
+    txtNumeroInspeccion.Value = numInspeccion
     
-    ' Simular datos temporales para prueba (esto se reemplazará en FASE 3)
-    lblInfoHistorico.Caption = "Búsqueda histórica pendiente (FASE 3)"
-    lblInfoHistorico.ForeColor = &H808080
+    ' Guardar ID de inspección anterior
+    mIDInspeccionAnterior = CStr(ultInsp("IDInspeccion"))
+    
+    ' Extraer RPN de la inspección anterior
+    Dim rpnAnterior As Double
+    If ultInsp.Exists("RPN") Then
+        rpnAnterior = CDbl(ultInsp("RPN"))
+    Else
+        rpnAnterior = 0
+    End If
+    
+    ' Cambiar a modo AUTOMÁTICO
+    mModoRPN = "AUTO"
+    txtRPNAnteriorAuto.Value = Format(rpnAnterior, "0.00")
+    txtRPNAnteriorAuto.Visible = True
+    txtRPNAnteriorManual.Visible = False
+    txtRPNAnteriorManual.Value = ""
+    
+    lblModoRPN.Caption = "[Modo AUTO - Detectado]"
+    lblModoRPN.ForeColor = &H8000&  ' Verde
+    
+    ' Mostrar información
+    Dim fechaInsp As String
+    fechaInsp = Format(ultInsp("FechaInspeccion"), "DD/MM/YYYY")
+    lblInfoHistorico.Caption = "Última: " & ultInsp("IDInspeccion") & " (" & fechaInsp & ") - RPN: " & Format(rpnAnterior, "0.00")
+    lblInfoHistorico.ForeColor = &H8000&  ' Verde
+    
+    MsgBox "Histórico encontrado:" & vbCrLf & vbCrLf & _
+           "Inspecciones previas: " & inspecciones.Count & vbCrLf & _
+           "Última inspección: " & ultInsp("IDInspeccion") & vbCrLf & _
+           "Fecha: " & fechaInsp & vbCrLf & _
+           "RPN anterior: " & Format(rpnAnterior, "0.00") & vbCrLf & vbCrLf & _
+           "Esta será la inspección #" & numInspeccion & " del puesto.", _
+           vbInformation, "Historial cargado"
     
     Exit Sub
     
 ErrorHandler:
     Call ErrorLogger2.Log("frmChecklistVirtual.btnBuscarHistorico_Click", Err.Description, Err.Number)
-    MsgBox "Error al buscar historial: " & Err.Description, vbCritical, "Error"
+    MsgBox "Error al buscar historial: " & Err.Description & vbCrLf & vbCrLf & _
+           "Número de error: " & Err.Number, vbCritical, "Error"
 End Sub
 
 ' ----------------------------------------------------------------------
