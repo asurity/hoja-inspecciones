@@ -70,10 +70,10 @@ Option Explicit
     Private Declare PtrSafe Function GetDeviceCaps Lib "gdi32" (ByVal hDC As LongPtr, ByVal nIndex As Long) As Long
     Private Declare PtrSafe Function ReleaseDC Lib "user32" (ByVal hWnd As LongPtr, ByVal hDC As LongPtr) As Long
 #Else
-    Private Declare Function GetSystemMetrics Lib "user32" (ByVal nIndex As Long) As Long
-    Private Declare Function GetDC Lib "user32" (ByVal hWnd As Long) As Long
-    Private Declare Function GetDeviceCaps Lib "gdi32" (ByVal hDC As Long, ByVal nIndex As Long) As Long
-    Private Declare Function ReleaseDC Lib "user32" (ByVal hWnd As Long, ByVal hDC As Long) As Long
+    'Private Declare Function GetSystemMetrics Lib "user32" (ByVal nIndex As Long) As Long
+    'Private Declare Function GetDC Lib "user32" (ByVal hWnd As Long) As Long
+    'Private Declare Function GetDeviceCaps Lib "gdi32" (ByVal hDC As Long, ByVal nIndex As Long) As Long
+    'Private Declare Function ReleaseDC Lib "user32" (ByVal hWnd As Long, ByVal hDC As Long) As Long
 #End If
 
 Private Const SM_CXSCREEN As Long = 0
@@ -149,6 +149,7 @@ Private mRPNAnteriorManual As Double
 Private mRPNAnteriorAuto As Double
 Private mIDInspeccionAnterior As String
 Private mModoRPN As String  ' "AUTO" o "MANUAL"
+Private mActualizandoCheckbox As Boolean  ' Flag para prevenir recursión en Click event
 
 ' ======================================================================
 ' PROPIEDADES PÚBLICAS (Let/Get)
@@ -298,6 +299,7 @@ Private Sub UserForm_Initialize()
     mRPNAnteriorAuto = 0
     mIDInspeccionAnterior = ""
     mModoRPN = "NINGUNO"
+    mActualizandoCheckbox = False  ' Flag de control
     mAreaPendiente = ""
     
     ' --- Configurar todos los controles ---
@@ -307,14 +309,14 @@ Private Sub UserForm_Initialize()
     Call ConfigurarObservacionGeneral
     Call ConfigurarBotones
     
-    Debug.Print "UserForm_Initialize completado OK"
+    ' Debug.Print "UserForm_Initialize completado OK"
     
     Exit Sub
     
 ErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
-    Debug.Print "ERROR UserForm_Initialize: [" & errNum & "] " & errDesc
+    ' Debug.Print "ERROR UserForm_Initialize: [" & errNum & "] " & errDesc
     Call ErrorLogger2.Log("frmChecklistVirtual.UserForm_Initialize", errDesc, errNum)
 End Sub
 
@@ -832,6 +834,8 @@ Private Sub ConfigurarCabecera()
         .Font.Bold = False
         .Value = False
         .TabIndex = 11
+        .BackColor = &HFFFFFF  ' Blanco (no gris)
+        .Enabled = True  ' Siempre habilitado
     End With
     
     ' Botón búsqueda histórico
@@ -840,7 +844,7 @@ Private Sub ConfigurarCabecera()
         .Top = 42
         .Width = frameInnerW
         .Height = 28
-        .Caption = "🔍 Buscar historial"
+        .Caption = "Actualizar historial"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
         .TabIndex = 12
@@ -948,6 +952,10 @@ Private Sub ConfigurarCabecera()
         .WordWrap = True
         .Visible = False
     End With
+    
+    ' Ocultar frame de inspección recurrente al inicio
+    ' (Se mostrará automáticamente si hay historial al activar el formulario)
+    fraRecurrentInspection.Visible = False
 End Sub
 
 Private Sub ConfigurarMultiPage()
@@ -1074,9 +1082,9 @@ Private Sub RedimensionarFramesPreguntas()
             fra.SpecialEffect = fmSpecialEffectFlat
             fra.Caption = ""
             
-            Debug.Print "  Frame " & fraName & " redimensionado: " & pgW & " x " & pgH
+            ' Debug.Print "  Frame " & fraName & " redimensionado: " & pgW & " x " & pgH
         Else
-            Debug.Print "  Frame " & fraName & " NO encontrado"
+            ' Debug.Print "  Frame " & fraName & " NO encontrado"
         End If
     Next i
     
@@ -1136,53 +1144,60 @@ Private Sub UserForm_Activate()
     txtHoraTermino.Value = Format(Now, "HH:mm")
     On Error GoTo ErrorHandler
     
-    Debug.Print "Campos básicos cargados OK"
+    ' Debug.Print "Campos básicos cargados OK"
     
     ' --- Redimensionar frames de preguntas (ahora que el form está renderizado) ---
-    Debug.Print "Redimensionando frames de preguntas..."
+    ' Debug.Print "Redimensionando frames de preguntas..."
     Call RedimensionarFramesPreguntas
     
     ' --- Cargar combos con manejo seguro ---
-    Debug.Print "Intentando cargar combos..."
+    ' Debug.Print "Intentando cargar combos..."
     
     On Error Resume Next
     Call CargarComboAreas
-    Debug.Print "  Areas: OK"
+    ' Debug.Print "  Areas: OK"
+    Call ConfigurarCampoLineaPorPuesto  ' Configurar línea/equipo según puesto
+    ' Debug.Print "  Campo Línea configurado según puesto: OK"
     Call AplicarFiltroArea  ' Aplicar filtrado/bloqueo según planta y área
-    Debug.Print "  Filtro de área aplicado: OK"
+    ' Debug.Print "  Filtro de área aplicado: OK"
     Call CargarCombosPersonal
-    Debug.Print "  Personal: OK"
+    ' Debug.Print "  Personal: OK"
     Call CargarComboEvaluadores
-    Debug.Print "  Evaluadores: OK"
+    ' Debug.Print "  Evaluadores: OK"
     Call CargarComboLugar
-    Debug.Print "  Lugar: OK"
+    ' Debug.Print "  Lugar: OK"
     Call CargarFrecuenciaPlantilla
-    Debug.Print "  Frecuencia: OK"
+    ' Debug.Print "  Frecuencia: OK"
     On Error GoTo ErrorHandler
     
-    Debug.Print "Combos cargados OK"
+    ' Debug.Print "Combos cargados OK"
     
     ' --- Cargar secciones y preguntas (lo más crítico) ---
-    Debug.Print "Intentando cargar secciones y preguntas..."
+    ' Debug.Print "Intentando cargar secciones y preguntas..."
     
     Call CargarSecciones
-    Debug.Print "Secciones cargadas: " & mSecciones.Count
+    ' Debug.Print "Secciones cargadas: " & mSecciones.Count
     
     If mSecciones.Count > 0 Then
         Call CargarPreguntasDinamicas
-        Debug.Print "CargarPreguntasDinamicas completado"
+        ' Debug.Print "CargarPreguntasDinamicas completado"
     Else
-        Debug.Print "ERROR: No hay secciones. Mostrando form sin preguntas."
+        ' Debug.Print "ERROR: No hay secciones. Mostrando form sin preguntas."
         MsgBox "No se encontraron secciones configuradas. El formulario mostrará solo la cabecera.", _
                vbExclamation, "Advertencia"
     End If
+    
+    ' --- Búsqueda automática de historial (silenciosa) ---
+    Debug.Print "Buscando historial automáticamente..."
+    Call BuscarHistorialSilencioso
+    Debug.Print "Búsqueda automática completada"
     
     Exit Sub
     
 ErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
-    Debug.Print "ERROR UserForm_Activate: [" & errNum & "] " & errDesc
+    ' Debug.Print "ERROR UserForm_Activate: [" & errNum & "] " & errDesc
     
     On Error Resume Next
     Call ErrorLogger2.Log("frmChecklistVirtual.UserForm_Activate", errDesc, errNum)
@@ -1285,7 +1300,54 @@ End Function
 ' Propósito: Retorna la cantidad total de preguntas cargadas.
 ' ----------------------------------------------------------------------
 Public Function ObtenerCantidadPreguntas() As Long
-    ObtenerCantidadPreguntas = mRespuestas.Count
+    ' Contar el total de preguntas cargadas en el formulario
+    ' contando los ComboBox de respuesta (cboR_) en todas las páginas
+    On Error GoTo ErrorHandler
+    
+    Dim totalPreguntas As Long
+    totalPreguntas = 0
+    
+    Debug.Print "[ObtenerCantidadPreguntas] ===== INICIO ====="
+    Debug.Print "[ObtenerCantidadPreguntas] mSecciones.Count = " & mSecciones.Count
+    
+    Dim secIdx As Long
+    For secIdx = 0 To mSecciones.Count - 1
+        Dim fraName As String
+        fraName = "fraPreguntas" & secIdx
+        
+        Dim fraContainer As MSForms.Frame
+        On Error Resume Next
+        Set fraContainer = mpPreguntas.Pages(secIdx).Controls(fraName)
+        On Error GoTo ErrorHandler
+        
+        If Not fraContainer Is Nothing Then
+            Dim preguntasSeccion As Long
+            preguntasSeccion = 0
+            
+            Dim ctrl As MSForms.Control
+            For Each ctrl In fraContainer.Controls
+                ' Contar ComboBoxes de respuesta (cboR_)
+                If Left(ctrl.Name, 5) = "cboR_" Then
+                    totalPreguntas = totalPreguntas + 1
+                    preguntasSeccion = preguntasSeccion + 1
+                    Debug.Print "  [" & secIdx & "] cboR_ encontrado: " & ctrl.Name
+                End If
+            Next ctrl
+            
+            Debug.Print "[ObtenerCantidadPreguntas] Sección " & secIdx & " (" & fraName & "): " & preguntasSeccion & " preguntas"
+        Else
+            Debug.Print "[ObtenerCantidadPreguntas] Frame " & fraName & " NO ENCONTRADO"
+        End If
+    Next secIdx
+    
+    ObtenerCantidadPreguntas = totalPreguntas
+    Debug.Print "[ObtenerCantidadPreguntas] ===== TOTAL: " & totalPreguntas & " preguntas ====="
+    Exit Function
+    
+ErrorHandler:
+    ' En caso de error, devolver 0 para que la validación falle
+    ObtenerCantidadPreguntas = 0
+    Debug.Print "[ObtenerCantidadPreguntas] ERROR: " & Err.Description
 End Function
 
 '' ----------------------------------------------------------------------
@@ -1304,6 +1366,9 @@ End Sub
 
 Private Sub cboArea_Change()
     On Error GoTo ErrorHandler
+    
+    ' Si el campo está bloqueado (puestos sin línea), no hacer nada
+    If Not cboLineaAuditada.Enabled Then Exit Sub
     
     ' Cascada: al cambiar área, recargar equipos
     cboLineaAuditada.Clear
@@ -1417,12 +1482,42 @@ End Sub
 Private Sub btnGuardar_Click()
     On Error GoTo ErrorHandler
     
-    ' FASE 2: Validar datos de inspección recurrente si aplica
+    ' PASO 1: Validar cabecera CON AUTO-CORRECCIÓN en primer lugar
+    Dim resultValidacion As Object
+    Set resultValidacion = ChecklistValidator.ValidarCabeceraConAutoCorrecion(Me)
+    
+    ' Si hay errores → Mostrar y detener
+    If Not resultValidacion("valido") Then
+        Dim mensajeError As String
+        Dim i As Long
+        mensajeError = "ERRORES EN LOS DATOS:" & vbCrLf & vbCrLf
+        Dim errores As Variant
+        errores = resultValidacion("errores")
+        For i = LBound(errores) To UBound(errores)
+            mensajeError = mensajeError & "- " & errores(i) & vbCrLf
+        Next i
+        MsgBox mensajeError, vbExclamation, "Validacion fallida"
+        Exit Sub
+    End If
+    
+    ' Si hay correcciones → Mostrar información
+    Dim mensajeInfo As String
+    Dim correcciones As Variant
+    correcciones = resultValidacion("correcciones")
+    If UBound(correcciones) >= 0 Then
+        mensajeInfo = "AJUSTES REALIZADOS:" & vbCrLf & vbCrLf
+        For i = LBound(correcciones) To UBound(correcciones)
+            mensajeInfo = mensajeInfo & "- " & correcciones(i) & vbCrLf
+        Next i
+        MsgBox mensajeInfo, vbInformation, "Datos corregidos"
+    End If
+    
+    ' PASO 2: Validar datos de inspección recurrente si aplica
     If Not ValidarDatosRecurrentes() Then
         Exit Sub
     End If
     
-    ' Delegar al orquestador (él se encarga de recopilar y validar)
+    ' PASO 3: Delegar al orquestador (él se encarga de recopilar, validar respuestas y guardar)
     Call ChecklistOrchestrator.GuardarInspeccionCompleta(Me)
     
     Exit Sub
@@ -1496,17 +1591,17 @@ Private Sub AplicarFiltroArea()
     ' Detectar si es plantilla genérica (sin área específica o "TODAS")
     areaEsGenerica = (Len(areaTrimmed) = 0 Or UCase(areaTrimmed) = "TODAS" Or UCase(areaTrimmed) = "GENERAL")
     
-    Debug.Print "=== AplicarFiltroArea ==="
-    Debug.Print "Planta: [" & mPlanta & "]"
-    Debug.Print "Área pendiente: [" & mAreaPendiente & "]"
-    Debug.Print "Es Santiago: " & esPlantaSantiago
-    Debug.Print "Es NPT: " & areaEsNPT
-    Debug.Print "Es Genérica: " & areaEsGenerica
-    Debug.Print "Items en combo ANTES: " & cboArea.ListCount
+    ' Debug.Print "=== AplicarFiltroArea ==="
+    ' Debug.Print "Planta: [" & mPlanta & "]"
+    ' Debug.Print "Área pendiente: [" & mAreaPendiente & "]"
+    ' Debug.Print "Es Santiago: " & esPlantaSantiago
+    ' Debug.Print "Es NPT: " & areaEsNPT
+    ' Debug.Print "Es Genérica: " & areaEsGenerica
+    ' Debug.Print "Items en combo ANTES: " & cboArea.ListCount
     
     If areaEsGenerica Then
         ' PLANTILLA GENÉRICA: Mostrar todas las opciones disponibles
-        Debug.Print "PLANTILLA GENÉRICA: Mostrando todas las áreas..."
+        ' Debug.Print "PLANTILLA GENÉRICA: Mostrando todas las áreas..."
         cboArea.Enabled = True
         cboArea.Locked = False
         ' El usuario deberá elegir entre todas las opciones cargadas
@@ -1518,10 +1613,10 @@ Private Sub AplicarFiltroArea()
         Dim i As Long
         For i = 0 To cboArea.ListCount - 1
             opcionesOriginales.Add cboArea.List(i)
-            Debug.Print "  Opción original " & i & ": [" & cboArea.List(i) & "]"
+            ' Debug.Print "  Opción original " & i & ": [" & cboArea.List(i) & "]"
         Next i
         
-        Debug.Print "Filtrando opciones con 'NPT'..."
+        ' Debug.Print "Filtrando opciones con 'NPT'..."
         
         ' Limpiar y recargar solo las que contienen "NPT"
         cboArea.Clear
@@ -1532,21 +1627,21 @@ Private Sub AplicarFiltroArea()
             If InStr(1, CStr(opcion), "NPT", vbTextCompare) > 0 Then
                 cboArea.AddItem CStr(opcion)
                 contador = contador + 1
-                Debug.Print "  ✓ Agregada: [" & CStr(opcion) & "]"
+                ' Debug.Print "  ✓ Agregada: [" & CStr(opcion) & "]"
             Else
-                Debug.Print "  ✗ Omitida: [" & CStr(opcion) & "]"
+                ' Debug.Print "  ✗ Omitida: [" & CStr(opcion) & "]"
             End If
         Next opcion
         
-        Debug.Print "Items agregados: " & contador
-        Debug.Print "Items en combo DESPUÉS: " & cboArea.ListCount
+        ' Debug.Print "Items agregados: " & contador
+        ' Debug.Print "Items en combo DESPUÉS: " & cboArea.ListCount
         
         cboArea.Enabled = True
         cboArea.Locked = False
         ' No asignamos valor, el usuario deberá elegir
     Else
         ' CASO NORMAL: Asignar valor y bloquear
-        Debug.Print "CASO NORMAL: Bloqueando..."
+        ' Debug.Print "CASO NORMAL: Bloqueando..."
         
         Dim valorCombo As String
         If UCase(areaTrimmed) = "ONCO" Then
@@ -1561,7 +1656,7 @@ Private Sub AplicarFiltroArea()
         cboArea.Enabled = False
         cboArea.Locked = True
         
-        Debug.Print "Valor bloqueado: [" & valorCombo & "]"
+        ' Debug.Print "Valor bloqueado: [" & valorCombo & "]"
     End If
     
     Exit Sub
@@ -1609,7 +1704,7 @@ End Sub
 Private Sub CargarComboEvaluadores()
     On Error GoTo ErrorHandler
     
-    Debug.Print "=== CargarComboEvaluadores ==="
+    ' Debug.Print "=== CargarComboEvaluadores ==="
     
     cboEvaluador.Clear
     
@@ -1621,7 +1716,7 @@ Private Sub CargarComboEvaluadores()
         cboEvaluador.AddItem CStr(e)
     Next e
     
-    Debug.Print "Total evaluadores cargados en combo: " & cboEvaluador.ListCount
+    ' Debug.Print "Total evaluadores cargados en combo: " & cboEvaluador.ListCount
     
     ' Pre-seleccionar evaluador basado en usuario de Windows
     Dim nombreUsuarioWindows As String
@@ -1629,13 +1724,13 @@ Private Sub CargarComboEvaluadores()
     
     ' IMPORTANTE: Usar Application.UserName (nombre completo) NO Environ("USERNAME") (cuenta Windows)
     nombreUsuarioWindows = Application.UserName  ' Ejemplo: "NIEVES CARRERO"
-    Debug.Print "Usuario Windows (Application.UserName): [" & nombreUsuarioWindows & "]"
+    ' Debug.Print "Usuario Windows (Application.UserName): [" & nombreUsuarioWindows & "]"
     
     If Len(nombreUsuarioWindows) > 0 Then
         ' Buscar iniciales del evaluador por nombre
         inicialesUsuario = ChecklistRepository.ObtenerInicialesEvaluadorPorNombre(nombreUsuarioWindows)
         
-        Debug.Print "Iniciales obtenidas de búsqueda: [" & inicialesUsuario & "]"
+        ' Debug.Print "Iniciales obtenidas de búsqueda: [" & inicialesUsuario & "]"
         
         If Len(inicialesUsuario) > 0 Then
             ' Intentar seleccionar en el combo
@@ -1643,31 +1738,31 @@ Private Sub CargarComboEvaluadores()
             Dim encontrado As Boolean
             encontrado = False
             
-            Debug.Print "Buscando en combo las iniciales: [" & inicialesUsuario & "]"
+            ' Debug.Print "Buscando en combo las iniciales: [" & inicialesUsuario & "]"
             For i = 0 To cboEvaluador.ListCount - 1
-                Debug.Print "  Opción " & i & ": [" & cboEvaluador.List(i) & "] | Match: " & (Trim(cboEvaluador.List(i)) = inicialesUsuario)
+                ' Debug.Print "  Opción " & i & ": [" & cboEvaluador.List(i) & "] | Match: " & (Trim(cboEvaluador.List(i)) = inicialesUsuario)
                 If Trim(cboEvaluador.List(i)) = inicialesUsuario Then
                     cboEvaluador.ListIndex = i
                     encontrado = True
-                    Debug.Print ">>> Evaluador pre-seleccionado: [" & inicialesUsuario & "] en índice " & i
+                    ' Debug.Print ">>> Evaluador pre-seleccionado: [" & inicialesUsuario & "] en índice " & i
                     Exit For
                 End If
             Next i
             
             If Not encontrado Then
-                Debug.Print ">>> Las iniciales [" & inicialesUsuario & "] NO se encontraron en el combo"
+                ' Debug.Print ">>> Las iniciales [" & inicialesUsuario & "] NO se encontraron en el combo"
             End If
         Else
-            Debug.Print ">>> No se encontró evaluador para usuario Windows: [" & nombreUsuarioWindows & "]"
+            ' Debug.Print ">>> No se encontró evaluador para usuario Windows: [" & nombreUsuarioWindows & "]"
         End If
     Else
-        Debug.Print ">>> Environ(USERNAME) está vacío"
+        ' Debug.Print ">>> Environ(USERNAME) está vacío"
     End If
     
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "ERROR en CargarComboEvaluadores: " & Err.Description
+    ' Debug.Print "ERROR en CargarComboEvaluadores: " & Err.Description
     Call ErrorLogger2.Log("frmChecklistVirtual.CargarComboEvaluadores", Err.Description, Err.Number)
 End Sub
 
@@ -1684,14 +1779,67 @@ Private Sub CargarComboLugar()
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "  >> ERROR CargarComboLugar: " & Err.Description
+    ' Debug.Print "  >> ERROR CargarComboLugar: " & Err.Description
     Call ErrorLogger2.Log("frmChecklistVirtual.CargarComboLugar", Err.Description, Err.Number)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: ConfigurarCampoLineaPorPuesto
+' Propósito: Configura el campo de Línea/Equipo según el puesto evaluado.
+'            Para ciertos puestos técnicos que no tienen línea/equipo asignado,
+'            bloquea el campo y establece "N/A".
+' ----------------------------------------------------------------------
+Private Sub ConfigurarCampoLineaPorPuesto()
+    On Error GoTo ErrorHandler
+    
+    ' Puestos que NO tienen línea/equipo asignada
+    Dim puestosSinLinea As Variant
+    puestosSinLinea = Array( _
+        "Técnico de producción - grado C", _
+        "Técnico de producción - grado D" _
+    )
+    
+    Dim puesto As String
+    puesto = Trim(mPuesto)
+    
+    Dim esPuestoSinLinea As Boolean
+    esPuestoSinLinea = False
+    
+    ' Verificar si el puesto actual está en la lista
+    Dim i As Long
+    For i = LBound(puestosSinLinea) To UBound(puestosSinLinea)
+        If StrComp(puesto, puestosSinLinea(i), vbTextCompare) = 0 Then
+            esPuestoSinLinea = True
+            Exit For
+        End If
+    Next i
+    
+    ' Configurar el campo según el resultado
+    If esPuestoSinLinea Then
+        ' Bloquear y establecer "N/A"
+        cboLineaAuditada.Clear
+        cboLineaAuditada.AddItem "N/A"
+        cboLineaAuditada.Value = "N/A"
+        cboLineaAuditada.Enabled = False
+        cboLineaAuditada.BackColor = &H8000000F  ' Gris (bloqueado)
+        Debug.Print "[ConfigurarCampoLinea] Puesto sin línea detectado: " & puesto & " - Campo bloqueado con N/A"
+    Else
+        ' Habilitar campo normal
+        cboLineaAuditada.Enabled = True
+        cboLineaAuditada.BackColor = &H80000005  ' Blanco (habilitado)
+        Debug.Print "[ConfigurarCampoLinea] Puesto con línea: " & puesto & " - Campo habilitado"
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.ConfigurarCampoLineaPorPuesto", Err.Description, Err.Number)
 End Sub
 
 Private Sub CargarFrecuenciaPlantilla()
     On Error GoTo ErrorHandler
     
-    Debug.Print "  >> CargarFrecuenciaPlantilla iniciado"
+    ' Debug.Print "  >> CargarFrecuenciaPlantilla iniciado"
     
     Dim plantillaData As Variant
     On Error Resume Next
@@ -1702,16 +1850,16 @@ Private Sub CargarFrecuenciaPlantilla()
         On Error Resume Next
         mFrecuenciaMeses = CLng(plantillaData(2))
         On Error GoTo ErrorHandler
-        Debug.Print "    - Frecuencia cargada: " & mFrecuenciaMeses & " meses"
+        ' Debug.Print "    - Frecuencia cargada: " & mFrecuenciaMeses & " meses"
     Else
-        Debug.Print "    - ADVERTENCIA: Plantilla no encontrada, usando default (3 meses)"
+        ' Debug.Print "    - ADVERTENCIA: Plantilla no encontrada, usando default (3 meses)"
         mFrecuenciaMeses = 3
     End If
     
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "  >> ERROR CargarFrecuenciaPlantilla: " & Err.Description
+    ' Debug.Print "  >> ERROR CargarFrecuenciaPlantilla: " & Err.Description
     mFrecuenciaMeses = 3
     Call ErrorLogger2.Log("frmChecklistVirtual.CargarFrecuenciaPlantilla", Err.Description, Err.Number)
 End Sub
@@ -1723,13 +1871,13 @@ End Sub
 Private Sub CargarSecciones()
     On Error GoTo ErrorHandler
     
-    Debug.Print "  >> CargarSecciones iniciado"
+    ' Debug.Print "  >> CargarSecciones iniciado"
     
     Set mSecciones = ChecklistRepository.ObtenerSecciones()
-    Debug.Print "  >> Secciones obtenidas: " & mSecciones.Count
+    ' Debug.Print "  >> Secciones obtenidas: " & mSecciones.Count
     
     If mSecciones.Count = 0 Then
-        Debug.Print "  >> ADVERTENCIA: No hay secciones configuradas"
+        ' Debug.Print "  >> ADVERTENCIA: No hay secciones configuradas"
         Exit Sub
     End If
     
@@ -1741,25 +1889,25 @@ Private Sub CargarSecciones()
         
         Dim nombreSeccion As String
         nombreSeccion = CStr(arrSec(1))
-        Debug.Print "  >> Sección: " & arrSec(0) & " - " & nombreSeccion
+        ' Debug.Print "  >> Sección: " & arrSec(0) & " - " & nombreSeccion
         
         If InStr(1, LCase(nombreSeccion), "aséptica") > 0 Or _
            InStr(1, LCase(nombreSeccion), "aseptica") > 0 Or _
            InStr(1, LCase(nombreSeccion), "técnica") > 0 Then
             mIDSeccionTA = CStr(arrSec(0))
-            Debug.Print "  >> Identificada sección TA: " & mIDSeccionTA
+            ' Debug.Print "  >> Identificada sección TA: " & mIDSeccionTA
         ElseIf InStr(1, LCase(nombreSeccion), "procesos") > 0 Or _
                InStr(1, LCase(nombreSeccion), "auditoría de procesos") > 0 Or _
                InStr(1, LCase(nombreSeccion), "auditoria de procesos") > 0 Then
             mIDSeccionProcesos = CStr(arrSec(0))
-            Debug.Print "  >> Identificada sección Auditoría de Procesos: " & mIDSeccionProcesos
+            ' Debug.Print "  >> Identificada sección Auditoría de Procesos: " & mIDSeccionProcesos
         End If
     Next sec
     
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "  >> ERROR CargarSecciones: " & Err.Description
+    ' Debug.Print "  >> ERROR CargarSecciones: " & Err.Description
     Set mSecciones = New Collection
     Call ErrorLogger2.Log("frmChecklistVirtual.CargarSecciones", Err.Description, Err.Number)
 End Sub
@@ -1956,7 +2104,7 @@ Private Sub CrearControlesPreguntas(ByRef fra As MSForms.Frame, _
                 .Height = PREG_LABEL_HEIGHT
                 .Caption = numPregunta & ". " & textoPregunta
                 .WordWrap = True
-                .Font.Size = 9
+                .Font.Size = 7
                 .Tag = idPregunta  ' Guardar ID original en Tag
             End With
             topPos = topPos + PREG_LABEL_HEIGHT + 2
@@ -2085,6 +2233,9 @@ End Sub
 Private Sub RecopilarRespuestas()
     On Error GoTo ErrorHandler
     
+    Debug.Print "[RecopilarRespuestas] ===== INICIO ====="
+    Debug.Print "[RecopilarRespuestas] mSecciones.Count = " & mSecciones.Count
+    
     Dim pageIdx As Long
     Dim secIdx As Long
     secIdx = 0
@@ -2101,10 +2252,17 @@ Private Sub RecopilarRespuestas()
         On Error GoTo ErrorHandler
         
         If Not fraContainer Is Nothing Then
+            Dim respuestasSeccion As Long
+            respuestasSeccion = 0
+            Dim cbosEncontrados As Long
+            cbosEncontrados = 0
+            
             Dim ctrl As MSForms.Control
             For Each ctrl In fraContainer.Controls
                 ' Buscar ComboBoxes de respuesta (prefijo "cboR_")
                 If Left(ctrl.Name, 5) = "cboR_" Then
+                    cbosEncontrados = cbosEncontrados + 1
+                    
                     Dim cboResp As MSForms.ComboBox
                     Set cboResp = ctrl
                     
@@ -2120,6 +2278,9 @@ Private Sub RecopilarRespuestas()
                     If UBound(tagParts) >= 2 Then idCriticidad = tagParts(2)
                     
                     If cboResp.ListIndex >= 0 Then
+                        respuestasSeccion = respuestasSeccion + 1
+                        Debug.Print "  [" & secIdx & "] " & ctrl.Name & " - Respondida (ListIndex=" & cboResp.ListIndex & ")"
+                        
                         ' Obtener opciones filtradas por sección Y criticidad
                         Dim opciones As Collection
                         On Error Resume Next
@@ -2151,13 +2312,21 @@ Private Sub RecopilarRespuestas()
                                 End If
                             Next op
                         End If
+                    Else
+                        Debug.Print "  [" & secIdx & "] " & ctrl.Name & " - NO RESPONDIDA (ListIndex=-1)"
                     End If
                 End If
             Next ctrl
+            
+            Debug.Print "[RecopilarRespuestas] Sección " & secIdx & ": " & cbosEncontrados & " combos encontrados, " & respuestasSeccion & " respondidas"
+        Else
+            Debug.Print "[RecopilarRespuestas] Frame " & fraName & " NO ENCONTRADO"
         End If
         
         secIdx = secIdx + 1
     Next sec
+    
+    Debug.Print "[RecopilarRespuestas] ===== TOTAL RECOPILADO: " & mRespuestas.Count & " respuestas ====="
     
     Exit Sub
     
@@ -2224,30 +2393,46 @@ End Sub
 ' ======================================================================
 
 ' ----------------------------------------------------------------------
+' ----------------------------------------------------------------------
 ' chkEsRecurrente_Click
-' Propósito: Muestra/oculta controles de inspección recurrente al marcar el checkbox
+' Propósito: Evento disparado cuando el USUARIO hace clic en el checkbox
+'            Actualiza variables y controles según el estado del checkbox
+'            Usa flag mActualizandoCheckbox para prevenir recursión
 ' ----------------------------------------------------------------------
 Private Sub chkEsRecurrente_Click()
     On Error GoTo ErrorHandler
     
+    ' PREVENIR RECURSIÓN: Si estamos actualizando programáticamente, salir
+    If mActualizandoCheckbox Then Exit Sub
+    
+    ' Debug.Print "[RECURRENT] Click del USUARIO - Valor: " & chkEsRecurrente.Value
+    
     If chkEsRecurrente.Value = True Then
-        ' Mostrar controles de inspección recurrente
+        ' ===== ACTIVAR MODO RECURRENTE =====
+        ' Debug.Print "[RECURRENT] Activando modo recurrente..."
+        
+        mEsInspeccionRecurrente = True
+        
+        ' Mostrar controles
         lblNumeroInspeccion.Visible = True
         txtNumeroInspeccion.Visible = True
         lblRPNAnterior.Visible = True
         lblModoRPN.Visible = True
         
-        mEsInspeccionRecurrente = True
-        
-        ' El usuario debe hacer clic en "Buscar historial" o ingresar datos manualmente
+        ' Asignar valores por defecto
         If mNumeroInspeccion <= 1 Then
-            txtNumeroInspeccion.Value = "2"  ' Default: segunda inspección
             mNumeroInspeccion = 2
+            txtNumeroInspeccion.Value = "2"
         Else
             txtNumeroInspeccion.Value = CStr(mNumeroInspeccion)
         End If
+        
+        ' Debug.Print "[RECURRENT] Modo recurrente ACTIVADO - Número: " & mNumeroInspeccion
     Else
-        ' Ocultar y resetear controles
+        ' ===== DESACTIVAR MODO RECURRENTE =====
+        ' Debug.Print "[RECURRENT] Desactivando modo recurrente..."
+        
+        ' Ocultar todos los controles
         lblNumeroInspeccion.Visible = False
         txtNumeroInspeccion.Visible = False
         lblRPNAnterior.Visible = False
@@ -2255,6 +2440,7 @@ Private Sub chkEsRecurrente_Click()
         txtRPNAnteriorManual.Visible = False
         lblModoRPN.Visible = False
         
+        ' Resetear TODAS las variables
         mEsInspeccionRecurrente = False
         mNumeroInspeccion = 1
         mRPNAnteriorManual = 0
@@ -2262,10 +2448,15 @@ Private Sub chkEsRecurrente_Click()
         mIDInspeccionAnterior = ""
         mModoRPN = "NINGUNO"
         
+        ' Limpiar valores de controles
         txtNumeroInspeccion.Value = ""
         txtRPNAnteriorAuto.Value = ""
         txtRPNAnteriorManual.Value = ""
         lblModoRPN.Caption = "[Modo RPN: no determinado]"
+        lblInfoHistorico.Caption = "(Info de inspecciones previas aparecerá aquí)"
+        lblInfoHistorico.ForeColor = &H808080
+        
+        ' Debug.Print "[RECURRENT] Modo recurrente DESACTIVADO - Todo reseteado"
     End If
     
     Exit Sub
@@ -2275,19 +2466,197 @@ ErrorHandler:
 End Sub
 
 ' ----------------------------------------------------------------------
+' BuscarHistorialSilencioso
+' Propósito: Búsqueda automática de inspecciones previas al inicializar
+'            el formulario. Sin mensajes al usuario, solo logs.
+'            Si encuentra historial: activa modo recurrente automáticamente
+'            Si NO encuentra: oculta el frame de inspección recurrente
+' LLAMADO POR: UserForm_Activate
+' ----------------------------------------------------------------------
+Private Sub BuscarHistorialSilencioso()
+    On Error GoTo ErrorHandler
+    
+    Debug.Print "[AUTO-BUSCAR] ===== Búsqueda automática de historial al iniciar ====="
+    Debug.Print "[AUTO-BUSCAR] Evaluado: [" & mEvaluado & "]"
+    Debug.Print "[AUTO-BUSCAR] Puesto: [" & Me.txtPuesto.Value & "]"
+    Debug.Print "[AUTO-BUSCAR] IDPlantilla: [" & mIDPlantilla & "]"
+    
+    ' Validar datos mínimos (silencioso, sin mensajes)
+    If Len(Trim(mEvaluado)) = 0 Or Len(Trim(Me.txtPuesto.Value)) = 0 Then
+        Debug.Print "[AUTO-BUSCAR] Datos incompletos, ocultando frame recurrente"
+        fraRecurrentInspection.Visible = False
+        Exit Sub
+    End If
+    
+    ' Buscar inspecciones previas
+    Dim inspecciones As Object
+    Dim iniciales As String
+    Dim puestoEval As String
+    Dim plantillaID As String
+    
+    iniciales = Trim(mEvaluado)
+    puestoEval = Trim(Me.txtPuesto.Value)
+    plantillaID = Trim(mIDPlantilla)
+    
+    On Error Resume Next
+    Set inspecciones = InspectionHistoryService.BuscarInspeccionesPrevias( _
+        iniciales, True, puestoEval, plantillaID)
+    
+    ' Verificar si hubo error
+    If Err.Number <> 0 Then
+        Debug.Print "[AUTO-BUSCAR] ERROR en BuscarInspeccionesPrevias: " & Err.Number & " - " & Err.Description
+        fraRecurrentInspection.Visible = False
+        Exit Sub
+    End If
+    On Error GoTo ErrorHandler
+    
+    ' Verificar resultado
+    If inspecciones Is Nothing Then
+        Debug.Print "[AUTO-BUSCAR] BuscarInspeccionesPrevias devolvió Nothing"
+        fraRecurrentInspection.Visible = False
+        Exit Sub
+    End If
+    
+    Debug.Print "[AUTO-BUSCAR] Inspecciones encontradas: " & inspecciones.Count
+    
+    ' ===== SI NO HAY HISTORIAL =====
+    If inspecciones.Count = 0 Then
+        Debug.Print "[AUTO-BUSCAR] Sin historial previo - Ocultando frame recurrente"
+        fraRecurrentInspection.Visible = False
+        Exit Sub
+    End If
+    
+    ' ===== SI HAY HISTORIAL: ACTIVAR MODO RECURRENTE AUTOMÁTICAMENTE =====
+    Debug.Print "[AUTO-BUSCAR] Historial encontrado - Activando modo recurrente automáticamente"
+    
+    ' Obtener última inspección
+    Dim ultInsp As Object
+    
+    On Error Resume Next
+    Set ultInsp = InspectionHistoryService.ObtenerUltimaInspeccion( _
+        iniciales, True, puestoEval, plantillaID)
+    
+    If Err.Number <> 0 Then
+        Debug.Print "[AUTO-BUSCAR] ERROR en ObtenerUltimaInspeccion: " & Err.Number & " - " & Err.Description
+        fraRecurrentInspection.Visible = False
+        Exit Sub
+    End If
+    On Error GoTo ErrorHandler
+    
+    If ultInsp Is Nothing Then
+        Debug.Print "[AUTO-BUSCAR] ObtenerUltimaInspeccion devolvió Nothing (inconsistencia)"
+        fraRecurrentInspection.Visible = False
+        Exit Sub
+    End If
+    
+    Debug.Print "[AUTO-BUSCAR] Última inspección obtenida: " & ultInsp("IDInspeccion")
+    Debug.Print "[AUTO-BUSCAR] Verificando campo RPN..."
+    
+    ' Validar que el campo RPN existe
+    On Error Resume Next
+    Dim tempRPN As Variant
+    tempRPN = ultInsp("RPN")
+    If Err.Number <> 0 Then
+        Debug.Print "[AUTO-BUSCAR] ERROR: Campo 'RPN' no existe en ultInsp. Error: " & Err.Description
+        Debug.Print "[AUTO-BUSCAR] Campos disponibles: " & Join(ultInsp.Keys, ", ")
+        fraRecurrentInspection.Visible = False
+        Exit Sub
+    End If
+    On Error GoTo ErrorHandler
+    
+    Debug.Print "[AUTO-BUSCAR] Campo RPN existe. Valor: " & tempRPN
+    
+    ' Activar checkbox (usando flag para evitar disparar evento)
+    mActualizandoCheckbox = True
+    chkEsRecurrente.Value = True
+    mActualizandoCheckbox = False
+    
+    ' Actualizar variable interna
+    mEsInspeccionRecurrente = True
+    
+    ' Mostrar frame y controles
+    fraRecurrentInspection.Visible = True
+    lblNumeroInspeccion.Visible = True
+    txtNumeroInspeccion.Visible = True
+    lblRPNAnterior.Visible = True
+    txtRPNAnteriorAuto.Visible = True
+    lblModoRPN.Visible = True
+    
+    ' Calcular número de inspección
+    Dim numInspeccion As Long
+    numInspeccion = ultInsp("NumeroInspeccion") + 1
+    mNumeroInspeccion = numInspeccion
+    txtNumeroInspeccion.Value = CStr(numInspeccion)
+    
+    ' Cargar RPN anterior (automático)
+    Dim rpnAnterior As Double
+    rpnAnterior = ultInsp("RPN")
+    mRPNAnteriorAuto = rpnAnterior
+    mModoRPN = "AUTOMATICO"
+    txtRPNAnteriorAuto.Value = Format(rpnAnterior, "0.00")
+    lblModoRPN.Caption = "[Modo RPN: AUTOMÁTICO]"
+    
+    ' Guardar ID de inspección anterior
+    mIDInspeccionAnterior = ultInsp("IDInspeccion")
+    
+    Debug.Print "[AUTO-BUSCAR] Datos cargados:"
+    Debug.Print "  Número inspección siguiente: " & numInspeccion
+    Debug.Print "  RPN Anterior: " & rpnAnterior
+    Debug.Print "  mRPNAnteriorAuto asignado: " & mRPNAnteriorAuto
+    Debug.Print "  ID Inspección Anterior: " & mIDInspeccionAnterior
+    
+    ' Actualizar etiqueta informativa
+    Dim fechaInsp As String
+    fechaInsp = Format(ultInsp("FechaInspeccion"), "dd/mm/yyyy")
+    lblInfoHistorico.Caption = "Última: " & fechaInsp & " | RPN: " & Format(rpnAnterior, "0.00")
+    lblInfoHistorico.ForeColor = &H8000&  ' Verde
+    
+    Debug.Print "[AUTO-BUSCAR] Modo recurrente activado automáticamente - Inspección #" & numInspeccion
+    Debug.Print "[AUTO-BUSCAR] ===== FIN Búsqueda automática - ÉXITO ====="
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "[AUTO-BUSCAR] ERROR inesperado: " & Err.Number & " - " & Err.Description
+    ' En caso de error, ocultar frame para no confundir al usuario
+    On Error Resume Next
+    fraRecurrentInspection.Visible = False
+    On Error GoTo 0
+End Sub
+
+' ----------------------------------------------------------------------
 ' btnBuscarHistorico_Click
-' Propósito: Busca inspecciones previas del personal evaluado
-'            y autocompleta los campos de inspección recurrente
+' Propósito: Actualiza manualmente el historial de inspecciones
+'            (ahora usado como "refrescar" ya que la búsqueda inicial es automática)
 ' ACTUALIZADO: Fase 3 - Usa InspectionHistoryService
 ' ----------------------------------------------------------------------
 Private Sub btnBuscarHistorico_Click()
     On Error GoTo ErrorHandler
     
+    Debug.Print "[BUSCAR] ===== INICIO Búsqueda de historial ====="
+    Debug.Print "[BUSCAR] Evaluado: [" & mEvaluado & "]"
+    Debug.Print "[BUSCAR] Puesto: [" & Me.txtPuesto.Value & "]"
+    Debug.Print "[BUSCAR] IDPlantilla: [" & mIDPlantilla & "]"
+    
     ' Validar que hay personal seleccionado
-    If Len(mEvaluado) = 0 Or Len(Me.txtPuesto.Value) = 0 Then
-        MsgBox "Debe seleccionar un personal antes de buscar historial.", _
+    If Len(Trim(mEvaluado)) = 0 Then
+        Debug.Print "[BUSCAR] ERROR: mEvaluado está vacío"
+        MsgBox "Error: No se ha definido el personal evaluado (Iniciales)." & vbCrLf & vbCrLf & _
+               "Por favor, regrese al selector y elija el personal a inspeccionar.", _
                vbExclamation, "Datos incompletos"
         Exit Sub
+    End If
+    
+    If Len(Trim(Me.txtPuesto.Value)) = 0 Then
+        Debug.Print "[BUSCAR] ERROR: Puesto está vacío"
+        MsgBox "Error: No se ha definido el puesto del personal." & vbCrLf & vbCrLf & _
+               "Por favor, regrese al selector y elija el puesto a inspeccionar.", _
+               vbExclamation, "Datos incompletos"
+        Exit Sub
+    End If
+    
+    If Len(Trim(mIDPlantilla)) = 0 Then
+        Debug.Print "[BUSCAR] ADVERTENCIA: IDPlantilla está vacío"
     End If
     
     ' Buscar inspecciones previas usando InspectionHistoryService
@@ -2297,44 +2666,122 @@ Private Sub btnBuscarHistorico_Click()
     Dim puestoEval As String
     Dim plantillaID As String
     
-    iniciales = mEvaluado
-    puestoEval = Me.txtPuesto.Value
-    plantillaID = mIDPlantilla
+    iniciales = Trim(mEvaluado)
+    puestoEval = Trim(Me.txtPuesto.Value)
+    plantillaID = Trim(mIDPlantilla)
     
+    Debug.Print "[BUSCAR] Llamando a InspectionHistoryService.BuscarInspeccionesPrevias..."
+    Debug.Print "[BUSCAR]   - iniciales: [" & iniciales & "]"
+    Debug.Print "[BUSCAR]   - filtroPorPuesto: True"
+    Debug.Print "[BUSCAR]   - puesto: [" & puestoEval & "]"
+    Debug.Print "[BUSCAR]   - plantillaID: [" & plantillaID & "]"
+    
+    On Error Resume Next
     Set inspecciones = InspectionHistoryService.BuscarInspeccionesPrevias( _
         iniciales, True, puestoEval, plantillaID)
+    
+    ' Verificar si hubo error en la llamada
+    If Err.Number <> 0 Then
+        Dim errNum As Long: errNum = Err.Number
+        Dim errDesc As String: errDesc = Err.Description
+        On Error GoTo ErrorHandler
+        
+        Debug.Print "[BUSCAR] ERROR en BuscarInspeccionesPrevias: " & errNum & " - " & errDesc
+        MsgBox "Error al buscar inspecciones previas:" & vbCrLf & vbCrLf & _
+               "Número: " & errNum & vbCrLf & _
+               "Descripción: " & errDesc & vbCrLf & vbCrLf & _
+               "Verifique que los datos del personal sean correctos.", _
+               vbCritical, "Error de búsqueda"
+        Exit Sub
+    End If
+    On Error GoTo ErrorHandler
+    
+    ' Verificar que el resultado no sea Nothing
+    If inspecciones Is Nothing Then
+        Debug.Print "[BUSCAR] ERROR: BuscarInspeccionesPrevias devolvió Nothing"
+        MsgBox "Error: No se pudo realizar la búsqueda de inspecciones previas." & vbCrLf & vbCrLf & _
+               "El servicio de historial no respondió correctamente.", _
+               vbCritical, "Error de sistema"
+        Exit Sub
+    End If
+    
+    Debug.Print "[BUSCAR] Inspecciones encontradas: " & inspecciones.Count
     
     If inspecciones.Count = 0 Then
         ' No hay inspecciones anteriores
         MsgBox "No se encontraron inspecciones anteriores para:" & vbCrLf & _
                "Personal: " & mEvaluado & vbCrLf & _
                "Puesto: " & Me.txtPuesto.Value & vbCrLf & vbCrLf & _
-               "Esta será la PRIMERA inspección de este puesto." & vbCrLf & vbCrLf & _
-               "Recomendación: Desmarque el checkbox 'Esta NO es la primera inspección'.", _
-               vbInformation, "Sin historial"
+               "Esta es la PRIMERA inspección de este puesto.", _
+               vbInformation, "Sin historial previo"
         
-        ' Limpiar campos
+        ' DESACTIVAR modo recurrente (usando flag para evitar disparar evento Click)
+        mActualizandoCheckbox = True
         chkEsRecurrente.Value = False
-        txtNumeroInspeccion.Value = ""
-        txtRPNAnteriorAuto.Value = ""
-        txtRPNAnteriorManual.Value = ""
-        lblInfoHistorico.Caption = "Sin inspecciones previas"
-        lblInfoHistorico.ForeColor = &H808080  ' Gris
+        mActualizandoCheckbox = False
+        
+        ' Resetear variables y controles
+        mEsInspeccionRecurrente = False
+        mNumeroInspeccion = 1
+        mRPNAnteriorManual = 0
+        mRPNAnteriorAuto = 0
+        mIDInspeccionAnterior = ""
+        mModoRPN = "NINGUNO"
+        
+        ' Ocultar frame completo
+        fraRecurrentInspection.Visible = False
+        
         Exit Sub
     End If
     
     ' Obtener la última inspección (función correcta: ObtenerUltimaInspeccion)
+    Debug.Print "[BUSCAR] Obteniendo última inspección..."
+    
     Dim ultInsp As Object
+    
+    On Error Resume Next
     Set ultInsp = InspectionHistoryService.ObtenerUltimaInspeccion( _
-        mEvaluado, True, Me.txtPuesto.Value, mIDPlantilla)
+        iniciales, True, puestoEval, plantillaID)
+    
+    ' Verificar si hubo error en la llamada
+    If Err.Number <> 0 Then
+        Dim errNum2 As Long: errNum2 = Err.Number
+        Dim errDesc2 As String: errDesc2 = Err.Description
+        On Error GoTo ErrorHandler
+        
+        Debug.Print "[BUSCAR] ERROR en ObtenerUltimaInspeccion: " & errNum2 & " - " & errDesc2
+        MsgBox "Error al obtener la última inspección:" & vbCrLf & vbCrLf & _
+               "Número: " & errNum2 & vbCrLf & _
+               "Descripción: " & errDesc2, _
+               vbCritical, "Error de búsqueda"
+        Exit Sub
+    End If
+    On Error GoTo ErrorHandler
     
     If ultInsp Is Nothing Then
-        MsgBox "Error: No se pudo obtener la última inspección.", vbCritical, "Error"
+        Debug.Print "[BUSCAR] ERROR: ObtenerUltimaInspeccion devolvió Nothing (esto no debería pasar si Count > 0)"
+        MsgBox "Error interno: Se encontraron inspecciones pero no se pudo obtener la última." & vbCrLf & vbCrLf & _
+               "Por favor, contacte al administrador del sistema.", _
+               vbCritical, "Error de sistema"
         Exit Sub
     End If
     
-    ' Autocompletar campos con datos encontrados
+    Debug.Print "[BUSCAR] Última inspección obtenida: " & ultInsp("IDInspeccion")
+    
+    ' ACTIVAR modo recurrente (usando flag para evitar disparar evento Click)
+    mActualizandoCheckbox = True
     chkEsRecurrente.Value = True
+    mActualizandoCheckbox = False
+    
+    ' Actualizar variable interna
+    mEsInspeccionRecurrente = True
+    
+    ' Mostrar frame y controles
+    fraRecurrentInspection.Visible = True
+    lblNumeroInspeccion.Visible = True
+    txtNumeroInspeccion.Visible = True
+    lblRPNAnterior.Visible = True
+    lblModoRPN.Visible = True
     
     ' Determinar número de inspección (última + 1)
     Dim numInspeccion As Long
@@ -2343,6 +2790,7 @@ Private Sub btnBuscarHistorico_Click()
     Else
         numInspeccion = 2  ' Asumir que la encontrada es la primera
     End If
+    mNumeroInspeccion = numInspeccion
     txtNumeroInspeccion.Value = numInspeccion
     
     ' Guardar ID de inspección anterior
@@ -2372,20 +2820,43 @@ Private Sub btnBuscarHistorico_Click()
     lblInfoHistorico.Caption = "Última: " & ultInsp("IDInspeccion") & " (" & fechaInsp & ") - RPN: " & Format(rpnAnterior, "0.00")
     lblInfoHistorico.ForeColor = &H8000&  ' Verde
     
-    MsgBox "Histórico encontrado:" & vbCrLf & vbCrLf & _
+    MsgBox "Historial actualizado correctamente:" & vbCrLf & vbCrLf & _
            "Inspecciones previas: " & inspecciones.Count & vbCrLf & _
            "Última inspección: " & ultInsp("IDInspeccion") & vbCrLf & _
            "Fecha: " & fechaInsp & vbCrLf & _
            "RPN anterior: " & Format(rpnAnterior, "0.00") & vbCrLf & vbCrLf & _
            "Esta será la inspección #" & numInspeccion & " del puesto.", _
-           vbInformation, "Historial cargado"
+           vbInformation, "Historial actualizado"
     
+    Debug.Print "[BUSCAR] ===== FIN Búsqueda de historial - ÉXITO ====="
     Exit Sub
     
 ErrorHandler:
+    Debug.Print "[BUSCAR] ===== ERROR en btnBuscarHistorico_Click ====="
+    Debug.Print "[BUSCAR] Error Number: " & Err.Number
+    Debug.Print "[BUSCAR] Error Description: " & Err.Description
+    Debug.Print "[BUSCAR] Error Source: " & Err.Source
+    
     Call ErrorLogger2.Log("frmChecklistVirtual.btnBuscarHistorico_Click", Err.Description, Err.Number)
-    MsgBox "Error al buscar historial: " & Err.Description & vbCrLf & vbCrLf & _
-           "Número de error: " & Err.Number, vbCritical, "Error"
+    
+    ' Mensaje de error mejorado
+    Dim mensajeError As String
+    mensajeError = "Error al buscar historial de inspecciones:" & vbCrLf & vbCrLf
+    
+    If Err.Number = 0 Then
+        mensajeError = mensajeError & "Error inesperado sin código de error." & vbCrLf & vbCrLf & _
+                      "Esto puede indicar un problema en el servicio de historial." & vbCrLf & _
+                      "Revise la ventana Inmediato (Ctrl+G) para ver los logs detallados."
+    Else
+        mensajeError = mensajeError & "Número de error: " & Err.Number & vbCrLf & _
+                      "Descripción: " & Err.Description & vbCrLf & vbCrLf & _
+                      "Datos buscados:" & vbCrLf & _
+                      "  - Personal: " & mEvaluado & vbCrLf & _
+                      "  - Puesto: " & Me.txtPuesto.Value & vbCrLf & _
+                      "  - Plantilla: " & mIDPlantilla
+    End If
+    
+    MsgBox mensajeError, vbCritical, "Error de búsqueda de historial"
 End Sub
 
 ' ----------------------------------------------------------------------
@@ -2438,8 +2909,9 @@ Public Function ValidarDatosRecurrentes() As Boolean
         Dim rpnVal As Double
         rpnVal = CDbl(txtRPNAnteriorManual.Value)
         
-        If rpnVal <= 0 Or rpnVal > 100 Then
-            MsgBox "El RPN anterior debe estar entre 0 y 100.", _
+        If rpnVal < 0 Or rpnVal > 100 Then
+            MsgBox "El RPN anterior debe estar entre 0 y 100." & vbCrLf & _
+                   "(0 = desempeño perfecto, 100 = máximo riesgo)", _
                    vbExclamation, "Validación"
             ValidarDatosRecurrentes = False
             Exit Function
@@ -2451,14 +2923,14 @@ Public Function ValidarDatosRecurrentes() As Boolean
     End If
     
     ' Si llegamos aquí, todo es válido
-    Debug.Print "Validación inspección recurrente OK:"
-    Debug.Print "  Número inspección: " & mNumeroInspeccion
-    Debug.Print "  Modo RPN: " & mModoRPN
+    ' Debug.Print "Validación inspección recurrente OK:"
+    ' Debug.Print "  Número inspección: " & mNumeroInspeccion
+    ' Debug.Print "  Modo RPN: " & mModoRPN
     If mModoRPN = "MANUAL" Then
-        Debug.Print "  RPN anterior (manual): " & mRPNAnteriorManual
+        ' Debug.Print "  RPN anterior (manual): " & mRPNAnteriorManual
     Else
-        Debug.Print "  RPN anterior (auto): " & mRPNAnteriorAuto
-        Debug.Print "  ID inspección anterior: " & mIDInspeccionAnterior
+        ' Debug.Print "  RPN anterior (auto): " & mRPNAnteriorAuto
+        ' Debug.Print "  ID inspección anterior: " & mIDInspeccionAnterior
     End If
     
     Exit Function

@@ -268,3 +268,376 @@ Private Function ValidarFormatoHora(ByVal hora As String) As Boolean
 ErrorHandler:
     ValidarFormatoHora = False
 End Function
+
+'' ======================================================================
+' Función: IsNumeric
+' Propósito: Verifica si una cadena contiene solo números.
+' Parámetros:
+'   valor: Cadena a verificar
+' Retorna: True si es numérico, False si no.
+' ======================================================================
+Private Function IsNumeric(ByVal valor As String) As Boolean
+    On Error GoTo ErrorHandler
+    
+    Dim i As Long
+    Dim c As String
+    
+    If Len(valor) = 0 Then
+        IsNumeric = False
+        Exit Function
+    End If
+    
+    For i = 1 To Len(valor)
+        c = Mid(valor, i, 1)
+        If Not (c >= "0" And c <= "9") Then
+            IsNumeric = False
+            Exit Function
+        End If
+    Next i
+    
+    IsNumeric = True
+    Exit Function
+    
+ErrorHandler:
+    IsNumeric = False
+End Function
+
+'' ======================================================================
+' Función: CorregirYValidarFecha
+' Propósito: Intenta convertir entrada de fecha a formato dd-mm-yyyy.
+'            Acepta múltiples formatos: dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd, etc.
+' Parámetros:
+'   fechaStr: Cadena con fecha a corregir
+' Retorna: Dictionary con:
+'   "valido": True/False
+'   "valor": Fecha en formato dd-mm-yyyy (si válido) o vacío (si inválido)
+'   "mensaje": Mensaje para el usuario
+' ======================================================================
+Public Function CorregirYValidarFecha(ByVal fechaStr As String) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim resultado As Object
+    Set resultado = CreateObject("Scripting.Dictionary")
+    resultado("valido") = False
+    resultado("valor") = ""
+    resultado("mensaje") = ""
+    
+    ' Limpiar espacios
+    fechaStr = Trim(fechaStr)
+    
+    ' Validar que no esté vacío
+    If fechaStr = "" Then
+        resultado("mensaje") = "El campo de fecha está vacío."
+        Set CorregirYValidarFecha = resultado
+        Exit Function
+    End If
+    
+    ' Intentar interpretar como fecha
+    Dim fechaDate As Date
+    Dim esValida As Boolean
+    esValida = False
+    
+    On Error Resume Next
+    fechaDate = CDate(fechaStr)
+    If Err.Number = 0 Then esValida = True
+    On Error GoTo ErrorHandler
+    
+    If Not esValida Then
+        resultado("mensaje") = "Fecha no válida. Use formato dd-mm-yyyy o dd/mm/yyyy."
+        Set CorregirYValidarFecha = resultado
+        Exit Function
+    End If
+    
+    ' Verificar que no sea futura
+    If fechaDate > Date Then
+        resultado("mensaje") = "La fecha no puede ser posterior a hoy."
+        Set CorregirYValidarFecha = resultado
+        Exit Function
+    End If
+    
+    ' Convertir al formato dd-mm-yyyy
+    Dim fechaCorregida As String
+    fechaCorregida = Format(fechaDate, "dd-mm-yyyy")
+    
+    ' Comparar con original
+    Dim esCambio As Boolean
+    esCambio = (Format(fechaDate, "dd-mm-yyyy") <> fechaStr)
+    
+    resultado("valido") = True
+    resultado("valor") = fechaCorregida
+    
+    If esCambio Then
+        resultado("mensaje") = "Fecha convertida a formato dd-mm-yyyy: " & fechaCorregida
+    Else
+        resultado("mensaje") = ""
+    End If
+    
+    Set CorregirYValidarFecha = resultado
+    Exit Function
+    
+ErrorHandler:
+    resultado("mensaje") = "Error al validar fecha: " & Err.Description
+    Call ErrorLogger2.Log("ChecklistValidator.CorregirYValidarFecha", Err.Description, Err.Number)
+    Set CorregirYValidarFecha = resultado
+End Function
+
+'' ======================================================================
+' Función: CorregirYValidarHora
+' Propósito: Intenta convertir entrada de hora a formato HH:MM.
+'            Acepta: HH:MM, HHMM, H:MM, etc.
+' Parámetros:
+'   horaStr: Cadena con hora a corregir
+' Retorna: Dictionary con:
+'   "valido": True/False
+'   "valor": Hora en formato HH:MM (si válido) o vacío (si inválido)
+'   "mensaje": Mensaje para el usuario
+' ======================================================================
+Public Function CorregirYValidarHora(ByVal horaStr As String) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim resultado As Object
+    Set resultado = CreateObject("Scripting.Dictionary")
+    resultado("valido") = False
+    resultado("valor") = ""
+    resultado("mensaje") = ""
+    
+    ' Limpiar espacios
+    horaStr = Trim(horaStr)
+    
+    ' Validar que no esté vacío
+    If horaStr = "" Then
+        resultado("mensaje") = "El campo de hora está vacío."
+        Set CorregirYValidarHora = resultado
+        Exit Function
+    End If
+    
+    Dim hh As String
+    Dim mm As String
+    Dim horaCorregida As String
+    Dim esCambio As Boolean
+    esCambio = False
+    
+    ' Caso 1: Formato HH:MM (correcto)
+    If Len(horaStr) = 5 And Mid(horaStr, 3, 1) = ":" Then
+        hh = Left(horaStr, 2)
+        mm = Right(horaStr, 2)
+    ' Caso 2: Formato HHMM (sin separador)
+    ElseIf Len(horaStr) = 4 And IsNumeric(horaStr) Then
+        hh = Left(horaStr, 2)
+        mm = Right(horaStr, 2)
+        esCambio = True
+    ' Caso 3: Formato H:MM o HH:M (sin ceros a la izquierda)
+    ElseIf InStr(horaStr, ":") > 0 Then
+        Dim partes() As String
+        partes = Split(horaStr, ":")
+        If UBound(partes) = 1 Then
+            On Error Resume Next
+            hh = CInt(partes(0))
+            mm = CInt(partes(1))
+            On Error GoTo ErrorHandler
+            esCambio = True
+        Else
+            resultado("mensaje") = "Hora no válida. Use formato HH:MM (ej: 14:30)."
+            Set CorregirYValidarHora = resultado
+            Exit Function
+        End If
+    Else
+        resultado("mensaje") = "Hora no válida. Use formato HH:MM (ej: 14:30)."
+        Set CorregirYValidarHora = resultado
+        Exit Function
+    End If
+    
+    ' Validar que hh y mm sean numéricos y válidos
+    If Not IsNumeric(hh) Or Not IsNumeric(mm) Then
+        resultado("mensaje") = "Hora contiene caracteres inválidos. Use solo números."
+        Set CorregirYValidarHora = resultado
+        Exit Function
+    End If
+    
+    Dim hhInt As Integer
+    Dim mmInt As Integer
+    
+    On Error Resume Next
+    hhInt = CInt(hh)
+    mmInt = CInt(mm)
+    On Error GoTo ErrorHandler
+    
+    ' Validar rangos
+    If hhInt < 0 Or hhInt > 23 Then
+        resultado("mensaje") = "Hora debe estar entre 00 y 23 (formato 24 horas)."
+        Set CorregirYValidarHora = resultado
+        Exit Function
+    End If
+    
+    If mmInt < 0 Or mmInt > 59 Then
+        resultado("mensaje") = "Minutos deben estar entre 00 y 59."
+        Set CorregirYValidarHora = resultado
+        Exit Function
+    End If
+    
+    ' Construir hora con ceros a la izquierda
+    horaCorregida = Format(hhInt, "00") & ":" & Format(mmInt, "00")
+    
+    resultado("valido") = True
+    resultado("valor") = horaCorregida
+    
+    If esCambio Then
+        resultado("mensaje") = "Hora convertida a formato HH:MM: " & horaCorregida
+    Else
+        resultado("mensaje") = ""
+    End If
+    
+    Set CorregirYValidarHora = resultado
+    Exit Function
+    
+ErrorHandler:
+    resultado("mensaje") = "Error al validar hora: " & Err.Description
+    Call ErrorLogger2.Log("ChecklistValidator.CorregirYValidarHora", Err.Description, Err.Number)
+    Set CorregirYValidarHora = resultado
+End Function
+
+'' ======================================================================
+' Función: ValidarCabeceraConAutoCorrecion
+' Propósito: Valida cabecera con intento de auto-corrección de fechas y horas.
+'            Si hay errores en formato, intenta corregir automáticamente.
+' Parámetros:
+'   frm: El formulario (frmChecklistVirtual) con los datos
+' Retorna: Dictionary con:
+'   "valido": True/False
+'   "errores": Array de mensajes de error (si hay)
+'   "correcciones": Array de mensajes de correcciones aplicadas
+' ======================================================================
+Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim resultado As Object
+    Set resultado = CreateObject("Scripting.Dictionary")
+    resultado("valido") = False
+    resultado("errores") = Array()
+    resultado("correcciones") = Array()
+    
+    Dim errores As Collection
+    Dim correcciones As Collection
+    Set errores = New Collection
+    Set correcciones = New Collection
+    
+    ' --- Verificar campos obligatorios básicos ---
+    If Trim(frm.txtEvaluado.Value) = "" Then
+        errores.Add "El campo 'Evaluado' está vacío. Datos del cronograma incorrectos."
+    End If
+    
+    If Trim(frm.txtPuesto.Value) = "" Then
+        errores.Add "El campo 'Puesto' está vacío. Datos del cronograma incorrectos."
+    End If
+    
+    If Trim(frm.txtPlanta.Value) = "" Then
+        errores.Add "El campo 'Planta' está vacío. Datos del cronograma incorrectos."
+    End If
+    
+    If Trim(frm.cboArea.Value) = "" Then
+        errores.Add "Debe seleccionar un Área."
+    End If
+    
+    If Trim(frm.cboLineaAuditada.Value) = "" Then
+        errores.Add "Debe seleccionar un Equipo / Línea auditada."
+    End If
+    
+    If Trim(frm.cboEvaluador.Value) = "" Then
+        errores.Add "Debe seleccionar un Evaluador."
+    End If
+    
+    If Trim(frm.cboLugar.Value) = "" Then
+        errores.Add "Debe seleccionar el Lugar de auditoría (Dentro/Fuera del área)."
+    End If
+    
+    ' --- Validar y corregir FECHA ---
+    Dim resutlFecha As Object
+    Set resutlFecha = CorregirYValidarFecha(Trim(frm.txtFecha.Value))
+    
+    If resutlFecha("valido") Then
+        frm.txtFecha.Value = resutlFecha("valor")
+        If resutlFecha("mensaje") <> "" Then
+            correcciones.Add resutlFecha("mensaje")
+        End If
+    Else
+        errores.Add resutlFecha("mensaje")
+    End If
+    
+    ' --- Validar y corregir FECHA AUDITADA ---
+    Dim resultFechaAuditada As Object
+    Set resultFechaAuditada = CorregirYValidarFecha(Trim(frm.txtFechaAuditada.Value))
+    
+    If resultFechaAuditada("valido") Then
+        frm.txtFechaAuditada.Value = resultFechaAuditada("valor")
+        If resultFechaAuditada("mensaje") <> "" Then
+            correcciones.Add resultFechaAuditada("mensaje")
+        End If
+    Else
+        errores.Add resultFechaAuditada("mensaje")
+    End If
+    
+    ' --- Validar y corregir HORA INICIO ---
+    Dim resultHoraInicio As Object
+    Set resultHoraInicio = CorregirYValidarHora(Trim(frm.txtHoraInicio.Value))
+    
+    If resultHoraInicio("valido") Then
+        frm.txtHoraInicio.Value = resultHoraInicio("valor")
+        If resultHoraInicio("mensaje") <> "" Then
+            correcciones.Add resultHoraInicio("mensaje")
+        End If
+    Else
+        errores.Add resultHoraInicio("mensaje")
+    End If
+    
+    ' --- Validar y corregir HORA TERMINO ---
+    Dim resultHoraTermino As Object
+    Set resultHoraTermino = CorregirYValidarHora(Trim(frm.txtHoraTermino.Value))
+    
+    If resultHoraTermino("valido") Then
+        frm.txtHoraTermino.Value = resultHoraTermino("valor")
+        If resultHoraTermino("mensaje") <> "" Then
+            correcciones.Add resultHoraTermino("mensaje")
+        End If
+    Else
+        errores.Add resultHoraTermino("mensaje")
+    End If
+    
+    ' --- Validar coherencia de horas (solo si ambas son válidas) ---
+    If resultHoraInicio("valido") And resultHoraTermino("valido") Then
+        If resultHoraTermino("valor") <= resultHoraInicio("valor") Then
+            errores.Add "La Hora de término (" & resultHoraTermino("valor") & ") debe ser posterior a la Hora de inicio (" & resultHoraInicio("valor") & ")."
+        End If
+    End If
+    
+    ' --- Construir resultado final ---
+    Dim errorArray() As String
+    Dim corrArray() As String
+    Dim i As Long
+    
+    If errores.Count > 0 Then
+        ReDim errorArray(errores.Count - 1)
+        For i = 1 To errores.Count
+            errorArray(i - 1) = errores(i)
+        Next i
+        resultado("errores") = errorArray
+    End If
+    
+    If correcciones.Count > 0 Then
+        ReDim corrArray(correcciones.Count - 1)
+        For i = 1 To correcciones.Count
+            corrArray(i - 1) = correcciones(i)
+        Next i
+        resultado("correcciones") = corrArray
+    End If
+    
+    resultado("valido") = (UBound(resultado("errores")) = -1 Or UBound(resultado("errores")) < 0)
+    
+    Set ValidarCabeceraConAutoCorrecion = resultado
+    Exit Function
+    
+ErrorHandler:
+    errores.Add "Error en validación: " & Err.Description
+    resultado("errores") = errorArray
+    Call ErrorLogger2.Log("ChecklistValidator.ValidarCabeceraConAutoCorrecion", Err.Description, Err.Number)
+    Set ValidarCabeceraConAutoCorrecion = resultado
+End Function

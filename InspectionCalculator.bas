@@ -500,7 +500,7 @@ Public Function ContarRespuestasPorCriticidad(ByVal respuestas As Collection, _
         Set dictResp = resp
         
         ' Debug: Mostrar IDSeccion de cada respuesta
-        Debug.Print "    Respuesta - IDSeccion: " & dictResp("IDSeccion") & " | IDPregunta: " & dictResp("IDPregunta")
+        ' Debug.Print "    Respuesta - IDSeccion: " & dictResp("IDSeccion") & " | IDPregunta: " & dictResp("IDPregunta")
         
         ' Solo procesar respuestas de la sección de Auditoría de Procesos
         If dictResp("IDSeccion") = idSeccionProcesos Then
@@ -519,11 +519,11 @@ Public Function ContarRespuestasPorCriticidad(ByVal respuestas As Collection, _
             textoOpcion = ObtenerTextoOpcionPorID(idOpcion)
             
             ' Debug detallado
-            Debug.Print "      >>> PROCESANDO RESPUESTA #" & contadorProcesadas
-            Debug.Print "          IDCriticidad: " & idCriticidad
-            Debug.Print "          NombreCriticidad: " & nombreCriticidad
-            Debug.Print "          IDOpcion: " & idOpcion
-            Debug.Print "          TextoOpcion: " & textoOpcion
+            ' Debug.Print "      >>> PROCESANDO RESPUESTA #" & contadorProcesadas
+            ' Debug.Print "          IDCriticidad: " & idCriticidad
+            ' Debug.Print "          NombreCriticidad: " & nombreCriticidad
+            ' Debug.Print "          IDOpcion: " & idOpcion
+            ' Debug.Print "          TextoOpcion: " & textoOpcion
             
             ' Incrementar contador correspondiente
             Dim clave As String
@@ -532,7 +532,7 @@ Public Function ContarRespuestasPorCriticidad(ByVal respuestas As Collection, _
                     clave = nombreCriticidad & "_Cumple"
                     If resultado.Exists(clave) Then
                         resultado(clave) = resultado(clave) + 1
-                        Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
+                        ' Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
                     Else
                         Debug.Print "          ERROR: Clave no existe: " & clave
                     End If
@@ -541,7 +541,7 @@ Public Function ContarRespuestasPorCriticidad(ByVal respuestas As Collection, _
                     clave = nombreCriticidad & "_NoCumple"
                     If resultado.Exists(clave) Then
                         resultado(clave) = resultado(clave) + 1
-                        Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
+                        ' Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
                     Else
                         Debug.Print "          ERROR: Clave no existe: " & clave
                     End If
@@ -550,7 +550,7 @@ Public Function ContarRespuestasPorCriticidad(ByVal respuestas As Collection, _
                     clave = nombreCriticidad & "_NoAplica"
                     If resultado.Exists(clave) Then
                         resultado(clave) = resultado(clave) + 1
-                        Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
+                        ' Debug.Print "          Incrementado: " & clave & " = " & resultado(clave)
                     Else
                         Debug.Print "          ERROR: Clave no existe: " & clave
                     End If
@@ -561,7 +561,7 @@ Public Function ContarRespuestasPorCriticidad(ByVal respuestas As Collection, _
         End If
     Next resp
     
-    Debug.Print "  [ContarRespuestasPorCriticidad] Total respuestas procesadas: " & contadorProcesadas
+    ' Debug.Print "  [ContarRespuestasPorCriticidad] Total respuestas procesadas: " & contadorProcesadas
     
     Set ContarRespuestasPorCriticidad = resultado
     Exit Function
@@ -645,7 +645,7 @@ End Function
 Private Function ObtenerNombreCriticidad(ByVal idCriticidad As String) As String
     On Error GoTo ErrorHandler
     
-    Debug.Print "        [ObtenerNombreCriticidad] Buscando ID: '" & idCriticidad & "'"
+    ' Debug.Print "        [ObtenerNombreCriticidad] Buscando ID: '" & idCriticidad & "'"
     
     Dim wsConfig As Worksheet
     Dim tblCriticidad As ListObject
@@ -660,7 +660,7 @@ Private Function ObtenerNombreCriticidad(ByVal idCriticidad As String) As String
         Exit Function
     End If
     
-    Debug.Print "        [ObtenerNombreCriticidad] Filas en tblCriticidad: " & tblCriticidad.ListRows.Count
+    ' Debug.Print "        [ObtenerNombreCriticidad] Filas en tblCriticidad: " & tblCriticidad.ListRows.Count
     
     ' Buscar índices de columnas de forma robusta SIN usar .Index
     Dim colIDIndex As Long
@@ -681,7 +681,7 @@ Private Function ObtenerNombreCriticidad(ByVal idCriticidad As String) As String
     On Error GoTo ErrorHandler
     
     If colIDIndex = 0 Then colIDIndex = 1  ' Fallback a columna 1
-    Debug.Print "        [ObtenerNombreCriticidad] Usando columna ID: " & colIDIndex
+    ' Debug.Print "        [ObtenerNombreCriticidad] Usando columna ID: " & colIDIndex
     
     ' Buscar columna "Nombre de criticidad"
     colNombreIndex = 0
@@ -696,7 +696,7 @@ Private Function ObtenerNombreCriticidad(ByVal idCriticidad As String) As String
     On Error GoTo ErrorHandler
     
     If colNombreIndex = 0 Then colNombreIndex = 2  ' Fallback a columna 2
-    Debug.Print "        [ObtenerNombreCriticidad] Usando columna Nombre: " & colNombreIndex
+    ' Debug.Print "        [ObtenerNombreCriticidad] Usando columna Nombre: " & colNombreIndex
     
     Dim contador As Long
     contador = 0
@@ -707,16 +707,16 @@ Private Function ObtenerNombreCriticidad(ByVal idCriticidad As String) As String
         idActual = Trim(CStr(critRow.Range.Cells(1, colIDIndex).Value))
         On Error GoTo ErrorHandler
         
-        If contador <= 3 Then  ' Solo mostrar primeras 3 para no saturar
-            Debug.Print "        [ObtenerNombreCriticidad] Fila " & contador & " - ID: '" & idActual & "'"
-        End If
+        ' If contador <= 3 Then  ' Solo mostrar primeras 3 para no saturar
+        '     Debug.Print "        [ObtenerNombreCriticidad] Fila " & contador & " - ID: '" & idActual & "'"
+        ' End If
         
         If idActual = Trim(idCriticidad) Then
             Dim nombreEncontrado As String
             On Error Resume Next
             nombreEncontrado = Trim(CStr(critRow.Range.Cells(1, colNombreIndex).Value))
             On Error GoTo ErrorHandler
-            Debug.Print "        [ObtenerNombreCriticidad] ¡MATCH! Retornando: '" & nombreEncontrado & "'"
+            ' Debug.Print "        [ObtenerNombreCriticidad] ¡MATCH! Retornando: '" & nombreEncontrado & "'"
             ObtenerNombreCriticidad = nombreEncontrado
             Exit Function
         End If
@@ -743,7 +743,7 @@ End Function
 Private Function ObtenerTextoOpcionPorID(ByVal idOpcion As String) As String
     On Error GoTo ErrorHandler
     
-    Debug.Print "        [ObtenerTextoOpcionPorID] Buscando ID: '" & idOpcion & "'"
+    ' Debug.Print "        [ObtenerTextoOpcionPorID] Buscando ID: '" & idOpcion & "'"
     
     Dim wsConfig As Worksheet
     Dim tblOpciones As ListObject
@@ -758,7 +758,7 @@ Private Function ObtenerTextoOpcionPorID(ByVal idOpcion As String) As String
         Exit Function
     End If
     
-    Debug.Print "        [ObtenerTextoOpcionPorID] Filas en tblOpciones: " & tblOpciones.ListRows.Count
+    ' Debug.Print "        [ObtenerTextoOpcionPorID] Filas en tblOpciones: " & tblOpciones.ListRows.Count
     
     ' Buscar índices de columnas de forma robusta SIN usar .Index
     Dim colIDIndex As Long
@@ -782,7 +782,7 @@ Private Function ObtenerTextoOpcionPorID(ByVal idOpcion As String) As String
     On Error GoTo ErrorHandler
     
     If colIDIndex = 0 Then colIDIndex = 1  ' Fallback a columna 1
-    Debug.Print "        [ObtenerTextoOpcionPorID] Usando columna ID: " & colIDIndex
+    ' Debug.Print "        [ObtenerTextoOpcionPorID] Usando columna ID: " & colIDIndex
     
     ' Buscar columna "Opción texto" o "Opcion texto"
     colTextoIndex = 0
@@ -800,7 +800,7 @@ Private Function ObtenerTextoOpcionPorID(ByVal idOpcion As String) As String
     On Error GoTo ErrorHandler
     
     If colTextoIndex = 0 Then colTextoIndex = 2  ' Fallback a columna 2
-    Debug.Print "        [ObtenerTextoOpcionPorID] Usando columna Texto: " & colTextoIndex
+    ' Debug.Print "        [ObtenerTextoOpcionPorID] Usando columna Texto: " & colTextoIndex
     
     Dim contador As Long
     contador = 0
@@ -811,16 +811,16 @@ Private Function ObtenerTextoOpcionPorID(ByVal idOpcion As String) As String
         idActual = Trim(CStr(opcionRow.Range.Cells(1, colIDIndex).Value))
         On Error GoTo ErrorHandler
         
-        If contador <= 3 Then ' Solo mostrar primeros 3 para no saturar
-            Debug.Print "        [ObtenerTextoOpcionPorID] Fila " & contador & " - ID: '" & idActual & "'"
-        End If
+        ' If contador <= 3 Then ' Solo mostrar primeros 3 para no saturar
+        '     Debug.Print "        [ObtenerTextoOpcionPorID] Fila " & contador & " - ID: '" & idActual & "'"
+        ' End If
         
         If idActual = Trim(idOpcion) Then
             Dim textoEncontrado As String
             On Error Resume Next
             textoEncontrado = Trim(CStr(opcionRow.Range.Cells(1, colTextoIndex).Value))
             On Error GoTo ErrorHandler
-            Debug.Print "        [ObtenerTextoOpcionPorID] ¡MATCH! Retornando: '" & textoEncontrado & "'"
+            ' Debug.Print "        [ObtenerTextoOpcionPorID] ¡MATCH! Retornando: '" & textoEncontrado & "'"
             ObtenerTextoOpcionPorID = textoEncontrado
             Exit Function
         End If

@@ -1,4 +1,3 @@
-Attribute VB_Name = "RecurrentInspectionCalculator"
 ' ══════════════════════════════════════════════════════════════════════
 ' Módulo: RecurrentInspectionCalculator
 ' Descripción: Cálculos de RPN para inspecciones recurrentes (2da inspección en adelante)
@@ -34,7 +33,7 @@ Option Explicit
 ' ══════════════════════════════════════════════════════════════════════
 ' CONSTANTES DE VALIDACIÓN
 ' ══════════════════════════════════════════════════════════════════════
-Private Const RPN_MIN As Double = 0.01    ' RPN mínimo válido
+Private Const RPN_MIN As Double = 0#      ' RPN mínimo válido (0 = desempeño perfecto)
 Private Const RPN_MAX As Double = 100#    ' RPN máximo válido
 Private Const MODULO_NOMBRE As String = "RecurrentInspectionCalculator"
 
@@ -73,9 +72,9 @@ Public Function CalcularRPNPromedio( _
     ' ─────────────────────────────────────────────────────────────────
     ' VALIDACIÓN #1: RPN Anterior
     ' ─────────────────────────────────────────────────────────────────
-    If rpnAnterior <= 0 Then
+    If rpnAnterior < 0 Then
         Err.Raise vbObjectError + 1001, MODULO_NOMBRE & ".CalcularRPNPromedio", _
-            "RPN Anterior debe ser > 0. Valor recibido: " & rpnAnterior
+            "RPN Anterior no puede ser negativo. Valor recibido: " & rpnAnterior
     End If
     
     If rpnAnterior < RPN_MIN Or rpnAnterior > RPN_MAX Then
@@ -87,9 +86,9 @@ Public Function CalcularRPNPromedio( _
     ' ─────────────────────────────────────────────────────────────────
     ' VALIDACIÓN #2: RPN Actual
     ' ─────────────────────────────────────────────────────────────────
-    If rpnActual <= 0 Then
+    If rpnActual < 0 Then
         Err.Raise vbObjectError + 1002, MODULO_NOMBRE & ".CalcularRPNPromedio", _
-            "RPN Actual debe ser > 0. Valor recibido: " & rpnActual
+            "RPN Actual no puede ser negativo. Valor recibido: " & rpnActual
     End If
     
     If rpnActual < RPN_MIN Or rpnActual > RPN_MAX Then
@@ -165,9 +164,9 @@ Public Function CalcularRPNTotal( _
     ' ─────────────────────────────────────────────────────────────────
     ' VALIDACIÓN #1: RPN Promedio
     ' ─────────────────────────────────────────────────────────────────
-    If rpnPromedio <= 0 Then
+    If rpnPromedio < 0 Then
         Err.Raise vbObjectError + 1003, MODULO_NOMBRE & ".CalcularRPNTotal", _
-            "RPN Promedio debe ser > 0. Valor recibido: " & rpnPromedio
+            "RPN Promedio no puede ser negativo. Valor recibido: " & rpnPromedio
     End If
     
     If rpnPromedio < RPN_MIN Or rpnPromedio > RPN_MAX Then
@@ -235,7 +234,7 @@ End Function
 '   (Long) - Número de categoría (1-5)
 '
 ' Lógica:
-'   1. Lee tblCategoriasRPN (columnas: Rango Inferior, Rango Superior, Categoria)
+'   1. Lee tblCategoriasRPN (columnas: RPN minimo, RPN maximo, Numero categoria)
 '   2. Busca en qué rango cae el rpnTotal
 '   3. Retorna el número de categoría correspondiente
 '
@@ -282,15 +281,52 @@ Public Function DeterminarCategoriaRPNTotal( _
     ' ─────────────────────────────────────────────────────────────────
     ' ACCESO A TABLA: tblCategoriasRPN
     ' ─────────────────────────────────────────────────────────────────
+    Debug.Print "[DeterminarCategoriaRPNTotal] Accediendo a tblCategoriasRPN..."
+    Debug.Print "  RPN Total a clasificar: " & Format(rpnTotal, "0.00")
+    
     On Error Resume Next
-    Set ws = ThisWorkbook.Sheets("Configuracion")
-    Set tblCategorias = ws.ListObjects("tblCategoriasRPN")
+    Set ws = ThisWorkbook.Sheets(Configuration2.SHEET_CONFIGURACION)
+    Set tblCategorias = ws.ListObjects(Configuration2.TABLE_CATEGORIAS_RPN)
     On Error GoTo ErrorHandler
     
     If tblCategorias Is Nothing Then
+        Debug.Print "[ERROR] tblCategoriasRPN no encontrada"
         Err.Raise vbObjectError + 1007, MODULO_NOMBRE & ".DeterminarCategoriaRPNTotal", _
             "No se pudo acceder a la tabla tblCategoriasRPN en la hoja Configuracion"
     End If
+    
+    Debug.Print "  Tabla encontrada. Filas: " & tblCategorias.ListRows.Count
+    
+    ' Verificar que las columnas existen
+    Dim colRPNMin As ListColumn
+    Dim colRPNMax As ListColumn
+    Dim colNumCat As ListColumn
+    
+    On Error Resume Next
+    Set colRPNMin = tblCategorias.ListColumns("RPN minimo")
+    Set colRPNMax = tblCategorias.ListColumns("RPN maximo")
+    Set colNumCat = tblCategorias.ListColumns("Numero categoria")
+    On Error GoTo ErrorHandler
+    
+    If colRPNMin Is Nothing Then
+        Debug.Print "[ERROR] Columna 'RPN minimo' no encontrada"
+        Err.Raise vbObjectError + 1009, MODULO_NOMBRE & ".DeterminarCategoriaRPNTotal", _
+            "Columna 'RPN minimo' no existe en tblCategoriasRPN"
+    End If
+    
+    If colRPNMax Is Nothing Then
+        Debug.Print "[ERROR] Columna 'RPN maximo' no encontrada"
+        Err.Raise vbObjectError + 1010, MODULO_NOMBRE & ".DeterminarCategoriaRPNTotal", _
+            "Columna 'RPN maximo' no existe en tblCategoriasRPN"
+    End If
+    
+    If colNumCat Is Nothing Then
+        Debug.Print "[ERROR] Columna 'Numero categoria' no encontrada"
+        Err.Raise vbObjectError + 1011, MODULO_NOMBRE & ".DeterminarCategoriaRPNTotal", _
+            "Columna 'Numero categoria' no existe en tblCategoriasRPN"
+    End If
+    
+    Debug.Print "  Columnas verificadas OK"
     
     ' ─────────────────────────────────────────────────────────────────
     ' BÚSQUEDA: Iterar por cada fila de tabla
@@ -299,13 +335,15 @@ Public Function DeterminarCategoriaRPNTotal( _
     
     For Each fila In tblCategorias.ListRows
         On Error Resume Next
-        rangoInferior = CDbl(fila.Range.Cells(1, tblCategorias.ListColumns("Rango Inferior RPN").Index).Value)
-        rangoSuperior = CDbl(fila.Range.Cells(1, tblCategorias.ListColumns("Rango Superior RPN").Index).Value)
+        rangoInferior = CDbl(fila.Range.Cells(1, colRPNMin.Index).Value)
+        rangoSuperior = CDbl(fila.Range.Cells(1, colRPNMax.Index).Value)
         On Error GoTo ErrorHandler
+        
+        Debug.Print "  Verificando rango [" & rangoInferior & " - " & rangoSuperior & "]"
         
         ' Verificar si rpnTotal está dentro del rango [inferior, superior]
         If rpnTotal >= rangoInferior And rpnTotal <= rangoSuperior Then
-            DeterminarCategoriaRPNTotal = CLng(fila.Range.Cells(1, tblCategorias.ListColumns("Categoria").Index).Value)
+            DeterminarCategoriaRPNTotal = CLng(fila.Range.Cells(1, colNumCat.Index).Value)
             categoriaEncontrada = True
             
             ' Logging detallado
@@ -367,6 +405,17 @@ Public Function ValidarConsistenciaRPN( _
     
     Dim diferencia As Double
     Dim porcCambio As Double
+    
+    ' Caso especial: Si RPN Anterior = 0 (desempeño perfecto previo)
+    ' No se puede calcular porcentaje de cambio
+    If rpnAnterior = 0 Then
+        If rpnActual > 0 Then
+            Debug.Print "[INFO] RPN cambió de 0 (perfecto) a " & Format(rpnActual, "0.00")
+            Debug.Print "  Esto es normal - indica deterioro desde desempeño perfecto"
+        End If
+        ValidarConsistenciaRPN = True  ' No es error, es caso válido
+        Exit Function
+    End If
     
     ' Calcular diferencia absoluta y porcentual
     diferencia = Abs(rpnActual - rpnAnterior)

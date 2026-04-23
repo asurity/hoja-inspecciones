@@ -195,6 +195,7 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     datos("IDPlantilla") = frm.IDPlantilla
     datos("Planta") = frm.Planta
     datos("FechaInspeccion") = CDate(frm.FechaInspeccion)
+    datos("FechaAuditada") = CDate(frm.FechaAuditada)
     datos("Evaluador") = frm.Evaluador
     datos("Area") = frm.Area
     datos("LineaAuditada") = frm.LineaAuditada
@@ -271,25 +272,39 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     Dim resultadoProcesos As String
     resultadoProcesos = "No evaluado" ' Por defecto
     
+    ' Declarar variables para conteos (se guardarán en tblInspecciones)
+    Dim apCriticaNoCumple As Long
+    Dim apMayorNoCumple As Long
+    Dim apMenorNoCumple As Long
+    apCriticaNoCumple = 0
+    apMayorNoCumple = 0
+    apMenorNoCumple = 0
+    
     If Len(idSeccionProcesos) > 0 Then
         ' Contar respuestas por criticidad
         Dim conteoProcesos As Object
         Set conteoProcesos = InspectionCalculator.ContarRespuestasPorCriticidad(respuestasConSeccion, idSeccionProcesos)
         
-        Debug.Print "  Auditoría de Procesos - Conteo por criticidad:"
-        Debug.Print "    Crítica - Cumple: " & conteoProcesos("Crítica_Cumple")
-        Debug.Print "    Crítica - No Cumple: " & conteoProcesos("Crítica_NoCumple")
-        Debug.Print "    Crítica - No Aplica: " & conteoProcesos("Crítica_NoAplica")
-        Debug.Print "    Mayor - Cumple: " & conteoProcesos("Mayor_Cumple")
-        Debug.Print "    Mayor - No Cumple: " & conteoProcesos("Mayor_NoCumple")
-        Debug.Print "    Mayor - No Aplica: " & conteoProcesos("Mayor_NoAplica")
-        Debug.Print "    Menor - Cumple: " & conteoProcesos("Menor_Cumple")
-        Debug.Print "    Menor - No Cumple: " & conteoProcesos("Menor_NoCumple")
-        Debug.Print "    Menor - No Aplica: " & conteoProcesos("Menor_NoAplica")
+        ' Debug.Print "  Auditoría de Procesos - Conteo por criticidad:"
+        ' Debug.Print "    Crítica - Cumple: " & conteoProcesos("Crítica_Cumple")
+        ' Debug.Print "    Crítica - No Cumple: " & conteoProcesos("Crítica_NoCumple")
+        ' Debug.Print "    Crítica - No Aplica: " & conteoProcesos("Crítica_NoAplica")
+        ' Debug.Print "    Mayor - Cumple: " & conteoProcesos("Mayor_Cumple")
+        ' Debug.Print "    Mayor - No Cumple: " & conteoProcesos("Mayor_NoCumple")
+        ' Debug.Print "    Mayor - No Aplica: " & conteoProcesos("Mayor_NoAplica")
+        ' Debug.Print "    Menor - Cumple: " & conteoProcesos("Menor_Cumple")
+        ' Debug.Print "    Menor - No Cumple: " & conteoProcesos("Menor_NoCumple")
+        ' Debug.Print "    Menor - No Aplica: " & conteoProcesos("Menor_NoAplica")
         
         ' Evaluar resultado según reglas de negocio
         resultadoProcesos = InspectionCalculator.EvaluarAuditoriaProcesos(conteoProcesos)
         Debug.Print "  Resultado Auditoría de Procesos: " & resultadoProcesos
+        
+        ' Guardar conteos para persistir en tblInspecciones
+        apCriticaNoCumple = CLng(conteoProcesos("Crítica_NoCumple"))
+        apMayorNoCumple = CLng(conteoProcesos("Mayor_NoCumple"))
+        apMenorNoCumple = CLng(conteoProcesos("Menor_NoCumple"))
+        Debug.Print "  Conteos guardados - Crítica: " & apCriticaNoCumple & ", Mayor: " & apMayorNoCumple & ", Menor: " & apMenorNoCumple
     Else
         Debug.Print "  ADVERTENCIA: No se encontró ID de sección de Auditoría de Procesos"
     End If
@@ -309,13 +324,25 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     esRecurrente = frm.EsInspeccionRecurrente
     numeroInspeccion = frm.NumeroInspeccion
     
-    ' Determinar qué RPN anterior usar (auto tiene prioridad)
-    If frm.RPNAnteriorAuto > 0 Then
+    Debug.Print "[CalcularMetricas] Valores del formulario:"
+    Debug.Print "  esRecurrente: " & esRecurrente
+    Debug.Print "  numeroInspeccion: " & numeroInspeccion
+    Debug.Print "  RPNAnteriorAuto: " & frm.RPNAnteriorAuto
+    Debug.Print "  RPNAnteriorManual: " & frm.RPNAnteriorManual
+    Debug.Print "  IDInspeccionAnterior: '" & frm.IDInspeccionAnterior & "'"
+    
+    ' Determinar qué RPN anterior usar (auto tiene prioridad si existe ID)
+    ' NOTA: RPNAnteriorAuto puede ser 0 (desempeño perfecto), por eso verificamos el ID
+    If Len(Trim(frm.IDInspeccionAnterior)) > 0 Then
+        ' Hay historial automático (aunque RPN sea 0)
         rpnAnterior = frm.RPNAnteriorAuto
         idInspeccionAnterior = frm.IDInspeccionAnterior
+        Debug.Print "  Usando RPNAnteriorAuto: " & rpnAnterior & " (ID: " & idInspeccionAnterior & ")"
     Else
+        ' No hay historial automático, usar manual si existe
         rpnAnterior = frm.RPNAnteriorManual
         idInspeccionAnterior = "" ' No hay ID si fue manual
+        Debug.Print "  Usando RPNAnteriorManual: " & rpnAnterior
     End If
     
     ' Calcular métricas usando nuevo pipeline
@@ -370,6 +397,9 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     calculos("TA_noaplica") = taData("noaplica")
     calculos("TA_porcentaje") = taData("porcentaje")
     calculos("Auditoria_Procesos_Resultado") = resultadoProcesos
+    calculos("AP_Critica_NoCumple") = apCriticaNoCumple
+    calculos("AP_Mayor_NoCumple") = apMayorNoCumple
+    calculos("AP_Menor_NoCumple") = apMenorNoCumple
     calculos("RPN") = rpn
     calculos("Categoria") = "Categoría " & categoria
     calculos("RequiereAccion") = InspectionCalculator.DeterminarRequiereAccion(categoria)
@@ -589,6 +619,36 @@ Private Function CalcularMetricasInspeccion( _
         ' ═══════════════════════════════════════════════════════════
         Debug.Print "[CalcularMetricas] FLUJO: Inspección recurrente #" & numeroInspeccion
         
+        ' VALIDACIÓN CRÍTICA: Debe existir ID de inspección anterior
+        ' NOTA: rpnAnterior puede ser 0 (desempeño perfecto), por eso validamos el ID
+        Debug.Print "[CalcularMetricas] Validando historial cargado..."
+        Debug.Print "[CalcularMetricas]   IDInspeccionAnterior: '" & idInspeccionAnterior & "'"
+        Debug.Print "[CalcularMetricas]   rpnAnterior: " & rpnAnterior
+        
+        If Len(Trim(idInspeccionAnterior)) = 0 Then
+            Debug.Print "[CalcularMetricas] ERROR: IDInspeccionAnterior vacío en inspección recurrente"
+            Debug.Print "[CalcularMetricas] DIAGNÓSTICO: BuscarHistorialSilencioso() no cargó el historial"
+            
+            ' Mensaje claro al usuario
+            Call ErrorLogger2.Log("ChecklistOrchestrator.CalcularMetricasInspeccion", _
+                "ID Inspección Anterior no cargado para inspección recurrente #" & numeroInspeccion & _
+                ". IDInspeccionAnterior vacío, RPNAnterior=" & rpnAnterior, 1001)
+            
+            MsgBox "ERROR: No se pudo cargar el historial de la inspección anterior." & vbCrLf & vbCrLf & _
+                   "Esta es la inspección #" & numeroInspeccion & " del puesto '" & puestoEvaluado & "'." & vbCrLf & _
+                   "El sistema debe cargar automáticamente el historial al abrir el formulario." & vbCrLf & vbCrLf & _
+                   "Posibles causas:" & vbCrLf & _
+                   "1. La inspección anterior no existe en el historial" & vbCrLf & _
+                   "2. El historial no se buscó correctamente" & vbCrLf & _
+                   "3. El formulario no se activó correctamente" & vbCrLf & vbCrLf & _
+                   "Verifique los logs para más detalles.", vbCritical, "Historial Anterior Faltante"
+            
+            Err.Raise 1001, "ChecklistOrchestrator.CalcularMetricasInspeccion", _
+                "ID Inspección Anterior faltante en inspección recurrente"
+        End If
+        
+        Debug.Print "[CalcularMetricas] Validación OK - historial anterior cargado correctamente"
+        Debug.Print "[CalcularMetricas] RPN Anterior: " & Format(rpnAnterior, "0.00") & " (puede ser 0 si desempeño perfecto)"
         metricas("NumeroInspeccion") = numeroInspeccion
         metricas("EsInspeccionRecurrente") = True
         metricas("PuestoEvaluado") = puestoEvaluado
@@ -597,6 +657,7 @@ Private Function CalcularMetricasInspeccion( _
         
         ' Calcular RPN Promedio
         Dim rpnPromedio As Double
+        Debug.Print "[CalcularMetricas] Llamando a CalcularRPNPromedio(" & rpnAnterior & ", " & rpnTA & ")"
         rpnPromedio = RecurrentInspectionCalculator.CalcularRPNPromedio(rpnAnterior, rpnTA)
         metricas("RPN_Promedio") = rpnPromedio
         

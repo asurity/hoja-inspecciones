@@ -246,12 +246,16 @@ Public Function ObtenerUltimaInspeccion( _
     End If
     
     ' La primera de la colección es la más reciente (ordenadas DESC)
-    Set ObtenerUltimaInspeccion = inspecciones(1)
+    Dim ultimaInsp As Object
+    Set ultimaInsp = inspecciones(1)
     
-    Debug.Print "[HISTORY] Última inspección: " & ObtenerUltimaInspeccion("IDInspeccion") & _
-                " | Fecha: " & ObtenerUltimaInspeccion("FechaInspeccion") & _
-                " | RPN: " & ObtenerUltimaInspeccion("RPN")
+    ' Log de resultado (usando variable temporal para evitar error de referencia circular)
+    Debug.Print "[HISTORY] Última inspección: " & ultimaInsp("IDInspeccion") & _
+                " | Fecha: " & ultimaInsp("FechaInspeccion") & _
+                " | RPN: " & ultimaInsp("RPN")
     
+    ' Retornar el Dictionary
+    Set ObtenerUltimaInspeccion = ultimaInsp
     Exit Function
     
 ErrorHandler:
@@ -335,8 +339,8 @@ End Function
 '   - False si el RPN tiene problemas
 '
 ' Validaciones:
-'   1. RPN > 0
-'   2. RPN dentro de rangos lógicos (entre 0.1 y 100)
+'   1. RPN >= 0 (0 es válido - desempeño perfecto)
+'   2. RPN dentro de rangos lógicos (entre 0 y 100)
 '   3. Opcional: Advertir si difiere mucho del histórico automático
 '
 ' Excepciones:
@@ -352,15 +356,15 @@ Public Function ValidarRPNAnteriorManual( _
     
     ValidarRPNAnteriorManual = False  ' Asumir inválido por defecto
     
-    ' Validación 1: RPN > 0
-    If rpnManual <= 0 Then
-        Debug.Print "[HISTORY VALIDATION] RPN manual <= 0: " & rpnManual
+    ' Validación 1: RPN >= 0 (0 = desempeño perfecto)
+    If rpnManual < 0 Then
+        Debug.Print "[HISTORY VALIDATION] RPN manual negativo: " & rpnManual
         Exit Function
     End If
     
-    ' Validación 2: RPN dentro de rangos lógicos (0.1 a 100)
-    If rpnManual < 0.1 Or rpnManual > 100 Then
-        Debug.Print "[HISTORY VALIDATION] RPN fuera de rango (0.1-100): " & rpnManual
+    ' Validación 2: RPN dentro de rangos lógicos (0 a 100)
+    If rpnManual > 100 Then
+        Debug.Print "[HISTORY VALIDATION] RPN fuera de rango (0-100): " & rpnManual
         Exit Function
     End If
     

@@ -61,7 +61,7 @@ Public Const AUDIT_PASSWORD As String = "1234"
 '   Prefijo de las tablas ListObject en cada hoja.
 '   Hoja 1: "tblAudit"      Hoja 2: "tblAudit2"      ...  Hoja 5: "tblAudit5"
 ' ----------------------------------------------------------------------
-Public Const AUDIT_MAX_ROWS     As Long = 100        ' PRODUCCIÓN: 1000000 | DEBUG: 100 — TEMPORALMENTE EN 100 PARA TEST
+Public Const AUDIT_MAX_ROWS     As Long = 1000000        ' PRODUCCIÓN: 1000000 | DEBUG: 100 — TEMPORALMENTE EN 100 PARA TEST
 Public Const AUDIT_MAX_SHEETS   As Long = 5
 Public Const AUDIT_BASE_NAME    As String = "Audit trail"
 Public Const AUDIT_TABLE_PREFIX As String = "tblAudit"

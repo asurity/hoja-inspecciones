@@ -41,6 +41,17 @@ Public Function CrearInspeccion(ByVal datos As Object) As String
         .Cells(1, tblInspecciones.ListColumns("Auditor").Index).Value = datos("Evaluador")
         .Cells(1, tblInspecciones.ListColumns("Estado").Index).Value = Configuration2.INSPECCION_EN_PROGRESO
         
+        ' Fecha Auditada (fecha evaluada)
+        If datos.Exists("FechaAuditada") Then
+            On Error Resume Next
+            Dim colFechaAuditada As Long
+            colFechaAuditada = Application.Match("Fecha Auditada", tblInspecciones.HeaderRowRange, 0)
+            If Not IsError(colFechaAuditada) Then
+                .Cells(1, colFechaAuditada).Value = datos("FechaAuditada")
+            End If
+            On Error GoTo ErrorHandler
+        End If
+        
         ' Campos nuevos del checklist virtual
         .Cells(1, tblInspecciones.ListColumns("Area").Index).Value = datos("Area")
         .Cells(1, tblInspecciones.ListColumns("Linea Auditada").Index).Value = datos("LineaAuditada")
@@ -50,7 +61,15 @@ Public Function CrearInspeccion(ByVal datos As Object) As String
         .Cells(1, tblInspecciones.ListColumns("Iniciales AY2").Index).Value = datos("AY2")
         .Cells(1, tblInspecciones.ListColumns("Iniciales OP").Index).Value = datos("OP")
         .Cells(1, tblInspecciones.ListColumns("Lugar Auditoria").Index).Value = datos("LugarAuditoria")
-        .Cells(1, tblInspecciones.ListColumns("Observaciones generales").Index).Value = datos("ObservacionGeneral")
+        
+        ' Observaciones generales: guardar "N/A" si está vacía
+        Dim obsGeneral As String
+        obsGeneral = Trim(CStr(datos("ObservacionGeneral")))
+        If Len(obsGeneral) = 0 Then
+            .Cells(1, tblInspecciones.ListColumns("Observaciones generales").Index).Value = "N/A"
+        Else
+            .Cells(1, tblInspecciones.ListColumns("Observaciones generales").Index).Value = obsGeneral
+        End If
     End With
     
     CrearInspeccion = idInspeccion
@@ -163,7 +182,13 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
             .Cells(1, 5).Value = dictResp("ValorNumerico")
             
             Debug.Print "  Estableciendo Columna 6 (Observacion)..."
-            .Cells(1, 6).Value = dictResp("Observacion")
+            Dim obsValue As String
+            obsValue = Trim(CStr(dictResp("Observacion")))
+            If Len(obsValue) = 0 Then
+                .Cells(1, 6).Value = "N/A"
+            Else
+                .Cells(1, 6).Value = obsValue
+            End If
             
             Debug.Print "  Estableciendo Columna 7 (Fecha respuesta)..."
             .Cells(1, 7).Value = Now
@@ -258,6 +283,40 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                     On Error GoTo ErrorHandler
                 End If
                 
+                ' Conteos de Auditoría de Procesos (columnas 41, 42, 43)
+                If calculos.Exists("AP_Critica_NoCumple") Then
+                    On Error Resume Next
+                    Dim colAPCritica As Variant
+                    colAPCritica = Application.Match("AP Critica No Cumple", tblInspecciones.HeaderRowRange, 0)
+                    If Not IsError(colAPCritica) Then
+                        .Cells(1, CLng(colAPCritica)).Value = calculos("AP_Critica_NoCumple")
+                        Debug.Print "[ActualizarCalculos] AP Crítica No Cumple: " & calculos("AP_Critica_NoCumple")
+                    End If
+                    On Error GoTo ErrorHandler
+                End If
+                
+                If calculos.Exists("AP_Mayor_NoCumple") Then
+                    On Error Resume Next
+                    Dim colAPMayor As Variant
+                    colAPMayor = Application.Match("AP Mayor No Cumple", tblInspecciones.HeaderRowRange, 0)
+                    If Not IsError(colAPMayor) Then
+                        .Cells(1, CLng(colAPMayor)).Value = calculos("AP_Mayor_NoCumple")
+                        Debug.Print "[ActualizarCalculos] AP Mayor No Cumple: " & calculos("AP_Mayor_NoCumple")
+                    End If
+                    On Error GoTo ErrorHandler
+                End If
+                
+                If calculos.Exists("AP_Menor_NoCumple") Then
+                    On Error Resume Next
+                    Dim colAPMenor As Variant
+                    colAPMenor = Application.Match("AP Menor No Cumple", tblInspecciones.HeaderRowRange, 0)
+                    If Not IsError(colAPMenor) Then
+                        .Cells(1, CLng(colAPMenor)).Value = calculos("AP_Menor_NoCumple")
+                        Debug.Print "[ActualizarCalculos] AP Menor No Cumple: " & calculos("AP_Menor_NoCumple")
+                    End If
+                    On Error GoTo ErrorHandler
+                End If
+                
                 ' RPN y categoría
                 .Cells(1, tblInspecciones.ListColumns("RPN calculado").Index).Value = calculos("RPN")
                 .Cells(1, tblInspecciones.ListColumns("Categoria resultado").Index).Value = calculos("Categoria")
@@ -306,18 +365,17 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                     If calculos("EsInspeccionRecurrente") Then
                         Debug.Print "[ActualizarCalculos] Guardando datos recurrentes..."
                         
-                        ' RPN Anterior (columna 35 si manual, vacia si auto)
+                        ' RPN Anterior (columna 35) - SIEMPRE guardar, sea manual o automático
                         If calculos.Exists("RPNAnterior") Then
                             colIdx = 0
                             colIdx = Application.Match("RPN Anterior Manual", tblInspecciones.HeaderRowRange, 0)
-                            If colIdx > 0 And Len(calculos("IDInspeccionAnterior")) = 0 Then
-                                ' Solo guardar si fue manual (sin ID anterior)
+                            If colIdx > 0 Then
                                 .Cells(1, colIdx).Value = calculos("RPNAnterior")
-                                Debug.Print "[ActualizarCalculos] RPN Anterior Manual: " & Format(calculos("RPNAnterior"), "0.00")
+                                Debug.Print "[ActualizarCalculos] RPN Anterior: " & Format(calculos("RPNAnterior"), "0.00")
                             End If
                         End If
                         
-                        ' ID Inspeccion Anterior (columna 36)
+                        ' ID Inspeccion Anterior (columna 36) - Solo si es automático
                         If calculos.Exists("IDInspeccionAnterior") And Len(calculos("IDInspeccionAnterior")) > 0 Then
                             colIdx = 0
                             colIdx = Application.Match("ID Inspeccion Anterior", tblInspecciones.HeaderRowRange, 0)

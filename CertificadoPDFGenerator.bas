@@ -63,6 +63,15 @@ Public Sub GenerarCertificadoPDF(ByVal idInspeccion As String)
     
     Debug.Print "[DEBUG] Datos de inspección obtenidos correctamente"
     
+    ' DESPROTEGER WORKBOOK para permitir cambio de visibilidad (URS-22)
+    Dim estabaProtegido As Boolean
+    estabaProtegido = ThisWorkbook.ProtectStructure
+    
+    If estabaProtegido Then
+        Debug.Print "[DEBUG] Desprotegiendo workbook para cambiar visibilidad..."
+        Call WorkbookProtector2.UnprotectWorkbook
+    End If
+    
     ' Hacer visible la plantilla temporalmente
     Debug.Print "[DEBUG] Haciendo plantilla visible..."
     wsPlantilla.Visible = xlSheetVisible
@@ -146,6 +155,12 @@ Public Sub GenerarCertificadoPDF(ByVal idInspeccion As String)
     wsPlantilla.Visible = xlSheetVeryHidden
     Debug.Print "[DEBUG] Plantilla ocultada"
     
+    ' REPROTEGER WORKBOOK si estaba protegido (URS-22)
+    If estabaProtegido Then
+        Debug.Print "[DEBUG] Reprotegiendo workbook..."
+        Call WorkbookProtector2.ProtectWorkbook
+    End If
+    
     ' Limpiar plantilla
     Debug.Print "[DEBUG] Limpiando plantilla..."
     Call LimpiarPlantillaCertificado(wsPlantilla)
@@ -177,7 +192,15 @@ ErrorHandler:
     
     ' Asegurar que plantilla queda oculta
     On Error Resume Next
-    wsPlantilla.Visible = xlSheetVeryHidden
+    If Not wsPlantilla Is Nothing Then
+        wsPlantilla.Visible = xlSheetVeryHidden
+    End If
+    
+    ' Reproteger workbook si se desprotegió
+    If estabaProtegido Then
+        Call WorkbookProtector2.ProtectWorkbook
+    End If
+    On Error GoTo 0
     On Error GoTo 0
     
     MsgBox "Error al generar certificado:" & vbCrLf & vbCrLf & _
@@ -233,6 +256,31 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     datos("Planta") = fila.Cells(1, 12).Value
     datos("FechaInspeccion") = fila.Cells(1, 13).Value
     datos("Auditor") = fila.Cells(1, 14).Value
+    
+    ' Fecha Auditada (puede no existir en inspecciones antiguas)
+    On Error Resume Next
+    Dim colFechaAuditada As Variant
+    colFechaAuditada = Application.Match("Fecha Auditada", tbl.HeaderRowRange, 0)
+    If Not IsError(colFechaAuditada) Then
+        datos("FechaAuditada") = fila.Cells(1, CLng(colFechaAuditada)).Value
+    Else
+        datos("FechaAuditada") = datos("FechaInspeccion")  ' Fallback a fecha inspección
+    End If
+    On Error GoTo ErrorHandler
+    
+    ' Puesto Evaluado (columna 34 - inspecciones recurrentes)
+    On Error Resume Next
+    Dim colPuestoEval As Variant
+    colPuestoEval = Application.Match("Puesto Evaluado", tbl.HeaderRowRange, 0)
+    If Not IsError(colPuestoEval) Then
+        Dim puestoEval As String
+        puestoEval = Trim(CStr(fila.Cells(1, CLng(colPuestoEval)).Value))
+        If Len(puestoEval) > 0 Then
+            datos("PuestoEvaluado") = puestoEval
+        End If
+    End If
+    On Error GoTo ErrorHandler
+    
     datos("TAPuntaje") = fila.Cells(1, 16).Value
     datos("TAMaximos") = fila.Cells(1, 17).Value
     datos("TANoAplica") = fila.Cells(1, 18).Value
@@ -267,6 +315,58 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     On Error GoTo ErrorHandler
     
     datos("AuditoriaProcesosResultado") = resultadoProcesos
+    
+    ' Cargar conteos de Auditoría de Procesos (columnas agregadas 22/04/2026)
+    On Error Resume Next
+    Dim colAPCritica As Variant
+    Dim colAPMayor As Variant
+    Dim colAPMenor As Variant
+    
+    colAPCritica = Application.Match("AP Critica No Cumple", tbl.HeaderRowRange, 0)
+    If Not IsError(colAPCritica) Then
+        datos("APCriticaNoCumple") = CLng(fila.Cells(1, CLng(colAPCritica)).Value)
+    Else
+        datos("APCriticaNoCumple") = 0
+    End If
+    
+    colAPMayor = Application.Match("AP Mayor No Cumple", tbl.HeaderRowRange, 0)
+    If Not IsError(colAPMayor) Then
+        datos("APMayorNoCumple") = CLng(fila.Cells(1, CLng(colAPMayor)).Value)
+    Else
+        datos("APMayorNoCumple") = 0
+    End If
+    
+    colAPMenor = Application.Match("AP Menor No Cumple", tbl.HeaderRowRange, 0)
+    If Not IsError(colAPMenor) Then
+        datos("APMenorNoCumple") = CLng(fila.Cells(1, CLng(colAPMenor)).Value)
+    Else
+        datos("APMenorNoCumple") = 0
+    End If
+    On Error GoTo ErrorHandler
+    
+    Debug.Print "[CertificadoPDF] Conteos AP - Crítica: " & datos("APCriticaNoCumple") & ", Mayor: " & datos("APMayorNoCumple") & ", Menor: " & datos("APMenorNoCumple")
+    
+    ' Cargar RPN Total y RPN Anterior Manual (inspecciones recurrentes)
+    On Error Resume Next
+    Dim colRPNTotal As Variant
+    Dim colRPNAnterior As Variant
+    
+    colRPNTotal = Application.Match("RPN Total", tbl.HeaderRowRange, 0)
+    If Not IsError(colRPNTotal) Then
+        datos("RPNTotal") = CDbl(fila.Cells(1, CLng(colRPNTotal)).Value)
+    Else
+        datos("RPNTotal") = 0
+    End If
+    
+    colRPNAnterior = Application.Match("RPN Anterior Manual", tbl.HeaderRowRange, 0)
+    If Not IsError(colRPNAnterior) Then
+        datos("RPNAnterior") = CDbl(fila.Cells(1, CLng(colRPNAnterior)).Value)
+    Else
+        datos("RPNAnterior") = 0
+    End If
+    On Error GoTo ErrorHandler
+    
+    Debug.Print "[CertificadoPDF] RPN Total: " & datos("RPNTotal") & ", RPN Anterior: " & datos("RPNAnterior")
     
     ' FIX 21/04/2026: Usar ListColumns en lugar de índice hardcodeado
     datos("ObservacionesGenerales") = fila.Cells(1, tbl.ListColumns("Observaciones generales").Index).Value
@@ -350,12 +450,11 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     ' Obtener nombre categoría desde tblCategoriasRPN
     nombreCategoria = ObtenerNombreCategoria(numCategoria)
     
-    ' Construir texto del bloque
-    textoCategoria = "CATEGORÍA " & numCategoria & " - " & UCase(nombreCategoria) & vbCrLf & _
-                     "RPN: " & Format(datosInspeccion("RPN"), "0.00")
+    ' Construir texto del bloque (solo categoría, sin RPN)
+    textoCategoria = "CATEGORÍA " & numCategoria
     
-    ' Asignar a celda A6:G8 (rango combinado)
-    wsPlantilla.Range("A6:G8").Value = textoCategoria
+    ' Asignar a celda A6:D8 (rango combinado - 4 columnas)
+    wsPlantilla.Range("A6:D8").Value = textoCategoria
     
     ' Aplicar color según categoría
     Select Case numCategoria
@@ -369,7 +468,7 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
             colorFondo = RGB(255, 255, 255)  ' Blanco por defecto
     End Select
     
-    wsPlantilla.Range("A6:G8").Interior.Color = colorFondo
+    wsPlantilla.Range("A6:D8").Interior.Color = colorFondo
     
     Debug.Print "[POBLACIÓN] Bloque categoría completado: Cat " & numCategoria & " - " & nombreCategoria
     
@@ -379,36 +478,120 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     ' ═══════════════════════════════════════════════════════════
     Debug.Print "[POBLACIÓN] Poblando datos de inspección..."
     
-    wsPlantilla.Cells(10, 3).Value = datosInspeccion("FechaInspeccion")   ' C10
-    wsPlantilla.Cells(10, 5).Value = Format(datosInspeccion("HoraInicio"), "HH:MM")  ' E10
-    wsPlantilla.Cells(10, 7).Value = Format(datosInspeccion("HoraTermino"), "HH:MM") ' G10
-    wsPlantilla.Cells(11, 3).Value = nombreEvaluado                        ' C11
-    wsPlantilla.Cells(11, 7).Value = datosInspeccion("Iniciales")          ' G11
-    wsPlantilla.Cells(12, 3).Value = puesto                                ' C12
-    wsPlantilla.Cells(12, 6).Value = datosInspeccion("Planta")             ' F12
-    wsPlantilla.Cells(13, 3).Value = datosInspeccion("Area")              ' C13
-    wsPlantilla.Cells(13, 6).Value = datosInspeccion("LineaAuditada")     ' F13
-    wsPlantilla.Cells(14, 3).Value = datosInspeccion("LugarAuditoria")    ' C14
-    wsPlantilla.Cells(15, 3).Value = datosInspeccion("Auditor")           ' C15
-    wsPlantilla.Cells(16, 4).Value = datosInspeccion("AY1")               ' D16
-    wsPlantilla.Cells(16, 6).Value = datosInspeccion("AY2")               ' F16
-    wsPlantilla.Cells(16, 7).Value = "OP: " & datosInspeccion("OP")       ' G16
+    ' Determinar puesto a mostrar (usar PuestoEvaluado si existe, sino usar el puesto del personal)
+    Dim puestoAMostrar As String
+    If datosInspeccion.Exists("PuestoEvaluado") And Len(Trim(CStr(datosInspeccion("PuestoEvaluado")))) > 0 Then
+        puestoAMostrar = Trim(CStr(datosInspeccion("PuestoEvaluado")))
+    Else
+        puestoAMostrar = puesto
+    End If
+    
+    ' NUEVA ESTRUCTURA - 4 COLUMNAS
+    wsPlantilla.Cells(10, 2).Value = Format(datosInspeccion("FechaInspeccion"), "DD-MM-YYYY")   ' B10 - Fecha ejecución
+    wsPlantilla.Cells(11, 2).Value = Format(datosInspeccion("HoraInicio"), "HH:MM") & " - " & Format(datosInspeccion("HoraTermino"), "HH:MM")  ' B11 - Rango horas
+    wsPlantilla.Cells(12, 2).Value = datosInspeccion("Planta")                                  ' B12 - Planta
+    wsPlantilla.Cells(13, 2).Value = datosInspeccion("LineaAuditada")                            ' B13 - Línea auditada
+    wsPlantilla.Cells(14, 2).Value = Format(datosInspeccion("FechaAuditada"), "DD-MM-YYYY")     ' B14 - Fecha evaluada
+    wsPlantilla.Cells(15, 2).Value = datosInspeccion("Iniciales")                               ' B15 - Iniciales evaluado
+    wsPlantilla.Cells(16, 2).Value = puestoAMostrar                                              ' B16 - Puesto evaluado
+    wsPlantilla.Cells(17, 2).Value = datosInspeccion("Area")                                     ' B17 - Área
+    wsPlantilla.Cells(18, 2).Value = datosInspeccion("LugarAuditoria")                           ' B18 - Lugar auditoría
+    wsPlantilla.Cells(19, 2).Value = datosInspeccion("Auditor")                                  ' B19 - Evaluador
+    wsPlantilla.Cells(20, 3).Value = datosInspeccion("AY1")                                      ' C20 - AY1
+    wsPlantilla.Cells(21, 3).Value = datosInspeccion("AY2")                                      ' C21 - AY2
+    wsPlantilla.Cells(22, 3).Value = datosInspeccion("OP")                                       ' C22 - OP
     
     Debug.Print "[POBLACIÓN] Datos básicos completados"
     
     ' ═══════════════════════════════════════════════════════════
-    ' SECCIÓN 2: RESULTADOS GENERALES (Filas 19-25, desplazadas +3)
-    ' ═══════════════════════════════════════════════════════════════
-    Debug.Print "[POBLACIÓN] Poblando resultados generales..."
+    ' SECCIÓN 2: AUDITORÍA DE PROCESOS (B24-B26)
+    ' ═══════════════════════════════════════════════════════════
+    Debug.Print "[POBLACIÓN] Poblando conteos Auditoría de Procesos..."
     
-    wsPlantilla.Cells(20, 3).Value = datosInspeccion("TAPuntaje")          ' C20
-    wsPlantilla.Cells(20, 5).Value = datosInspeccion("TAMaximos")          ' E20
-    wsPlantilla.Cells(21, 3).Value = datosInspeccion("TANoAplica")         ' C21
-    wsPlantilla.Cells(22, 3).Value = Format(datosInspeccion("TAPorcentaje"), "0.00") & "%" ' C22
-    wsPlantilla.Cells(23, 3).Value = Format(datosInspeccion("RPN"), "0.00") ' C23
-    wsPlantilla.Cells(24, 3).Value = datosInspeccion("Categoria")          ' C24
+    wsPlantilla.Cells(24, 2).Value = datosInspeccion("APCriticaNoCumple")  ' B24 - No Cumple Críticos
+    wsPlantilla.Cells(25, 2).Value = datosInspeccion("APMayorNoCumple")    ' B25 - No Cumple Mayores
+    wsPlantilla.Cells(26, 2).Value = datosInspeccion("APMenorNoCumple")    ' B26 - No Cumple Menores
     
-    ' Estado de Competencia basado en categoría (C25)
+    Debug.Print "[POBLACIÓN] Conteos AP - Crítica: " & datosInspeccion("APCriticaNoCumple") & ", Mayor: " & datosInspeccion("APMayorNoCumple") & ", Menor: " & datosInspeccion("APMenorNoCumple")
+    
+    ' Evaluar resultado de Auditoría de Procesos (B27:D29)
+    Dim resultadoAP As String
+    resultadoAP = EvaluarResultadoAP(datosInspeccion("APCriticaNoCumple"), datosInspeccion("APMayorNoCumple"))
+    
+    wsPlantilla.Range("B27:D29").Merge
+    wsPlantilla.Cells(27, 2).Value = resultadoAP
+    
+    ' Formato del resultado AP
+    With wsPlantilla.Cells(27, 2)
+        .Font.Name = "Arial"
+        .Font.Size = 12
+        .Font.Bold = True
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        
+        ' Color según resultado
+        If resultadoAP = "Cumple" Then
+            .Interior.Color = RGB(212, 244, 230)  ' Verde claro
+            .Font.Color = RGB(39, 174, 96)        ' Verde
+        Else
+            .Interior.Color = RGB(253, 223, 223)  ' Rojo claro
+            .Font.Color = RGB(203, 67, 53)        ' Rojo
+        End If
+    End With
+    
+    Debug.Print "[POBLACIÓN] Resultado AP: " & resultadoAP
+    
+    ' ═══════════════════════════════════════════════════════════
+    ' SECCIÓN 3: RESULTADOS TÉCNICOS (B31-B36, D34-D35)
+    ' ═══════════════════════════════════════════════════════════
+    Debug.Print "[POBLACIÓN] Poblando resultados técnicos..."
+    
+    wsPlantilla.Cells(31, 2).Value = datosInspeccion("TAMaximos")          ' B31 - Puntos Máximos
+    wsPlantilla.Cells(32, 2).Value = datosInspeccion("TAPuntaje")          ' B32 - Puntos Obtenidos
+    wsPlantilla.Cells(33, 2).Value = datosInspeccion("TANoAplica")         ' B33 - Puntos No Aplica
+    wsPlantilla.Cells(34, 2).Value = Format(datosInspeccion("TAPorcentaje"), "0.00") & "%"  ' B34 - % TA
+    
+    ' B35 - % TA Anterior (RPN Total anterior si existe)
+    Dim rpnAnterior As Double
+    rpnAnterior = 0
+    If datosInspeccion.Exists("RPNAnterior") Then
+        On Error Resume Next
+        rpnAnterior = CDbl(datosInspeccion("RPNAnterior"))
+        If Err.Number <> 0 Then rpnAnterior = 0
+        Err.Clear
+        On Error GoTo 0
+    End If
+    wsPlantilla.Cells(35, 2).Value = Format(rpnAnterior, "0.00") & "%"    ' B35 - % TA Anterior
+    
+    ' B36 - RPN Total (usar RPN Total si existe, sino RPN calculado)
+    Dim rpnTotal As Double
+    If datosInspeccion.Exists("RPNTotal") Then
+        On Error Resume Next
+        rpnTotal = CDbl(datosInspeccion("RPNTotal"))
+        If Err.Number <> 0 Or rpnTotal = 0 Then
+            rpnTotal = CDbl(datosInspeccion("RPN"))  ' Fallback a RPN calculado
+        End If
+        Err.Clear
+        On Error GoTo 0
+    Else
+        rpnTotal = CDbl(datosInspeccion("RPN"))
+    End If
+    wsPlantilla.Cells(36, 2).Value = Format(rpnTotal, "0.00")              ' B36 - RPN Total
+    
+    ' D34 - % Recuperación microbiológica (futuro - por ahora 0)
+    wsPlantilla.Cells(34, 4).Value = "0.00%"                               ' D34 - % Recovery (no implementado)
+    
+    ' D35 - % OOL (futuro - por ahora 0)
+    wsPlantilla.Cells(35, 4).Value = "0.00%"                               ' D35 - % OOL (no implementado)
+    
+    Debug.Print "[POBLACIÓN] Resultados técnicos completados"
+    
+    ' ═══════════════════════════════════════════════════════════
+    ' SECCIÓN 4: ESTADO DE COMPETENCIA (basado en categoría)
+    ' ═══════════════════════════════════════════════════════════
+    Debug.Print "[POBLACIÓN] Determinando estado de competencia..."
+    
+    ' Determinar estado de competencia (podría mostrarse en otra celda si se necesita)
     Dim textoEstado As String
     Dim colorEstado As Long
     
@@ -427,12 +610,7 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
             colorEstado = RGB(0, 0, 0)  ' Negro por defecto
     End Select
     
-    wsPlantilla.Cells(25, 3).Value = textoEstado  ' C25
-    wsPlantilla.Cells(25, 3).Font.Color = colorEstado
-    wsPlantilla.Cells(25, 3).Font.Bold = True
-    
     Debug.Print "[POBLACIÓN] Estado asignado: " & textoEstado & " (Cat " & numCategoria & ")"
-    Debug.Print "[POBLACIÓN] Resultados completados"
     
     ' ═══════════════════════════════════════════════════════════
     ' SECCIÓN 3: TABLA DE PREGUNTAS Y RESPUESTAS
@@ -440,39 +618,254 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     Debug.Print "[POBLACIÓN] Poblando tabla de respuestas..."
     
     On Error GoTo 0
-    Call PoblarTablaRespuestas(wsPlantilla, datosInspeccion)
+    
+    ' Poblar tabla de respuestas y obtener última fila
+    Dim ultimaFilaRespuestas As Long
+    ultimaFilaRespuestas = PoblarTablaRespuestas(wsPlantilla, datosInspeccion)
     
     ' ═══════════════════════════════════════════════════════════
-    ' SECCIÓN 4: PIE DE VALIDEZ (Paso 4 MVP - Fila 50)
+    ' SECCIÓN DE FEEDBACK (3 filas después de las preguntas)
     ' ═══════════════════════════════════════════════════════════
-    Debug.Print "[POBLACIÓN] Calculando fecha de validez..."
+    Debug.Print "[POBLACIÓN] Agregando sección de Feedback..."
     
-    Dim fechaInspeccion As Date
-    Dim frecuenciaMeses As Long
-    Dim fechaValidez As Date
-    Dim textoPie As String
+    Dim filaFeedback As Long
+    filaFeedback = ultimaFilaRespuestas + 3
     
-    fechaInspeccion = CDate(datosInspeccion("FechaInspeccion"))
-    frecuenciaMeses = ObtenerFrecuenciaPlantilla(CStr(datosInspeccion("IDPlantilla")))
+    ' Título de la sección
+    wsPlantilla.Range(wsPlantilla.Cells(filaFeedback, 1), wsPlantilla.Cells(filaFeedback, 4)).Merge
+    wsPlantilla.Cells(filaFeedback, 1).Value = "SECCIÓN DE FEEDBACK"
     
-    If frecuenciaMeses > 0 Then
-        fechaValidez = DateAdd("m", frecuenciaMeses, fechaInspeccion)
-        textoPie = "Este certificado es válido hasta: " & Format(fechaValidez, "DD/MM/YYYY")
-        Debug.Print "[POBLACIÓN] Fecha validez calculada: " & Format(fechaValidez, "DD/MM/YYYY") & " (" & frecuenciaMeses & " meses)"
-    Else
-        textoPie = "Este certificado es válido hasta: [FRECUENCIA NO DEFINIDA]"
-        Debug.Print "[POBLACIÓN] ⚠ Advertencia: Frecuencia no encontrada para plantilla " & datosInspeccion("IDPlantilla")
+    With wsPlantilla.Cells(filaFeedback, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 11
+        .Font.Bold = True
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Interior.Color = RGB(189, 215, 238)  ' Azul claro (mismo que encabezados)
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlMedium
+    End With
+    
+    ' Pregunta de feedback (fila siguiente)
+    Dim filaPreguntaFeedback As Long
+    filaPreguntaFeedback = filaFeedback + 1
+    
+    wsPlantilla.Range(wsPlantilla.Cells(filaPreguntaFeedback, 1), wsPlantilla.Cells(filaPreguntaFeedback, 2)).Merge
+    wsPlantilla.Cells(filaPreguntaFeedback, 1).Value = "¿Desea proporcionar feedback sobre esta inspección?"
+    
+    With wsPlantilla.Cells(filaPreguntaFeedback, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlCenter
+        .WrapText = True
+    End With
+    
+    ' Opciones Sí / No (columnas C y D)
+    wsPlantilla.Cells(filaPreguntaFeedback, 3).Value = "☐ SÍ"
+    wsPlantilla.Cells(filaPreguntaFeedback, 4).Value = "☐ NO"
+    
+    With wsPlantilla.Range(wsPlantilla.Cells(filaPreguntaFeedback, 3), wsPlantilla.Cells(filaPreguntaFeedback, 4))
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .Font.Bold = True
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+    End With
+    
+    ' Espacio para firma (2 filas más abajo)
+    Dim filaFirma As Long
+    filaFirma = filaPreguntaFeedback + 2
+    
+    wsPlantilla.Cells(filaFirma, 1).Value = "Firma:"
+    wsPlantilla.Range(wsPlantilla.Cells(filaFirma, 2), wsPlantilla.Cells(filaFirma, 4)).Merge
+    wsPlantilla.Cells(filaFirma, 2).Value = "___________________________________"
+    
+    With wsPlantilla.Cells(filaFirma, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .Font.Bold = True
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlCenter
+    End With
+    
+    With wsPlantilla.Cells(filaFirma, 2)
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlBottom
+    End With
+    
+    ' Ajustar altura de filas de feedback
+    wsPlantilla.Rows(filaFeedback).RowHeight = 25
+    wsPlantilla.Rows(filaPreguntaFeedback).RowHeight = 30
+    wsPlantilla.Rows(filaFirma).RowHeight = 40
+    
+    Debug.Print "[POBLACIÓN] Sección de Feedback agregada en filas " & filaFeedback & "-" & filaFirma
+    
+    ' ═══════════════════════════════════════════════════════════
+    ' SECCIÓN DE OBSERVACIONES DEL ÁREA DE PRODUCCIÓN (3 filas después de firma)
+    ' ═══════════════════════════════════════════════════════════
+    Debug.Print "[POBLACIÓN] Agregando sección de Observaciones del Área de Producción..."
+    
+    Dim filaObservaciones As Long
+    filaObservaciones = filaFirma + 3
+    
+    ' Título de la sección
+    wsPlantilla.Range(wsPlantilla.Cells(filaObservaciones, 1), wsPlantilla.Cells(filaObservaciones, 4)).Merge
+    wsPlantilla.Cells(filaObservaciones, 1).Value = "OBSERVACIONES DEL ÁREA DE PRODUCCIÓN"
+    
+    With wsPlantilla.Cells(filaObservaciones, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 11
+        .Font.Bold = True
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Interior.Color = RGB(189, 215, 238)  ' Azul claro (mismo que encabezados)
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlMedium
+    End With
+    
+    ' Área de texto para observaciones (10 filas)
+    Dim filaInicioTexto As Long
+    Dim filaFinTexto As Long
+    filaInicioTexto = filaObservaciones + 1
+    filaFinTexto = filaInicioTexto + 9  ' 10 filas en total
+    
+    ' Combinar rango completo para el área de texto
+    wsPlantilla.Range(wsPlantilla.Cells(filaInicioTexto, 1), wsPlantilla.Cells(filaFinTexto, 4)).Merge
+    wsPlantilla.Cells(filaInicioTexto, 1).Value = ""  ' Dejar vacío para completar a mano
+    
+    ' Formato del área de texto
+    With wsPlantilla.Cells(filaInicioTexto, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlTop
+        .WrapText = True
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlThin
+    End With
+    
+    ' Ajustar altura de las filas del área de observaciones
+    Dim i As Long
+    For i = filaInicioTexto To filaFinTexto
+        wsPlantilla.Rows(i).RowHeight = 20
+    Next i
+    
+    Debug.Print "[POBLACIÓN] Sección de Observaciones agregada en filas " & filaObservaciones & "-" & filaFinTexto
+    
+    ' ═══════════════════════════════════════════════════════════
+    ' SECCIÓN DE FIRMAS DE AUTORIZACIÓN (3 filas después de observaciones)
+    ' ═══════════════════════════════════════════════════════════
+    Debug.Print "[POBLACIÓN] Agregando sección de Firmas de Autorización..."
+    
+    Dim filaFirmasAutorizacion As Long
+    filaFirmasAutorizacion = filaFinTexto + 3
+    
+    ' Fila 1: Líneas de firma (distribuidas en 3 secciones)
+    ' Firma 1 (Columna A)
+    wsPlantilla.Cells(filaFirmasAutorizacion, 1).Value = "______________________"
+    wsPlantilla.Cells(filaFirmasAutorizacion, 1).HorizontalAlignment = xlCenter
+    
+    ' Firma 2 (Columnas B-C combinadas)
+    wsPlantilla.Range(wsPlantilla.Cells(filaFirmasAutorizacion, 2), wsPlantilla.Cells(filaFirmasAutorizacion, 3)).Merge
+    wsPlantilla.Cells(filaFirmasAutorizacion, 2).Value = "______________________"
+    wsPlantilla.Cells(filaFirmasAutorizacion, 2).HorizontalAlignment = xlCenter
+    
+    ' Firma 3 (Columna D)
+    wsPlantilla.Cells(filaFirmasAutorizacion, 4).Value = "______________________"
+    wsPlantilla.Cells(filaFirmasAutorizacion, 4).HorizontalAlignment = xlCenter
+    
+    ' Formato de las líneas de firma
+    With wsPlantilla.Range(wsPlantilla.Cells(filaFirmasAutorizacion, 1), wsPlantilla.Cells(filaFirmasAutorizacion, 4))
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .VerticalAlignment = xlBottom
+    End With
+    
+    ' Fila 2: Nombres de puestos
+    Dim filaNombresPuestos As Long
+    filaNombresPuestos = filaFirmasAutorizacion + 1
+    
+    ' Nombre puesto 1 (Columna A)
+    wsPlantilla.Cells(filaNombresPuestos, 1).Value = "Jefe de Capacitación/Área"
+    wsPlantilla.Cells(filaNombresPuestos, 1).HorizontalAlignment = xlCenter
+    
+    ' Nombre puesto 2 (Columnas B-C combinadas)
+    wsPlantilla.Range(wsPlantilla.Cells(filaNombresPuestos, 2), wsPlantilla.Cells(filaNombresPuestos, 3)).Merge
+    wsPlantilla.Cells(filaNombresPuestos, 2).Value = "Subgerente de Producción"
+    wsPlantilla.Cells(filaNombresPuestos, 2).HorizontalAlignment = xlCenter
+    
+    ' Nombre puesto 3 (Columna D)
+    wsPlantilla.Cells(filaNombresPuestos, 4).Value = "Jefe de Aseguramiento de Calidad"
+    wsPlantilla.Cells(filaNombresPuestos, 4).HorizontalAlignment = xlCenter
+    wsPlantilla.Cells(filaNombresPuestos, 4).WrapText = True
+    
+    ' Formato de los nombres de puestos
+    With wsPlantilla.Range(wsPlantilla.Cells(filaNombresPuestos, 1), wsPlantilla.Cells(filaNombresPuestos, 4))
+        .Font.Name = "Arial"
+        .Font.Size = 9
+        .Font.Bold = True
+        .VerticalAlignment = xlTop
+    End With
+    
+    ' Ajustar altura de filas
+    wsPlantilla.Rows(filaFirmasAutorizacion).RowHeight = 30
+    wsPlantilla.Rows(filaNombresPuestos).RowHeight = 35
+    
+    Debug.Print "[POBLACIÓN] Sección de Firmas de Autorización agregada en filas " & filaFirmasAutorizacion & "-" & filaNombresPuestos
+    
+    ' ═══════════════════════════════════════════════════════════
+    ' SECCIÓN 4: FOOTER DINÁMICO (Después de las firmas de autorización)
+    ' ═══════════════════════════════════════════════════════════
+    Debug.Print "[POBLACIÓN] Agregando footer de emisión..."
+    
+    ' Calcular fila del footer (3 filas después de las firmas)
+    Dim filaFooter As Long
+    filaFooter = filaNombresPuestos + 3
+    
+    ' Obtener fecha y hora actual (zona horaria America/Santiago)
+    Dim fechaEmision As Date
+    Dim horaEmision As String
+    fechaEmision = Date
+    horaEmision = Format(Now, "HH:MM:SS")
+    
+    ' Usuario que emitió (usar el nombre del auditor de la inspección)
+    Dim usuarioEmision As String
+    usuarioEmision = datosInspeccion("Auditor")
+    If Len(Trim(usuarioEmision)) = 0 Then
+        usuarioEmision = "No especificado"
     End If
     
-    wsPlantilla.Range("A50:G50").Value = textoPie
+    ' Construir texto del footer
+    Dim textoFooter As String
+    textoFooter = "Certificado emitido por: " & usuarioEmision & " | " & _
+                  "Fecha: " & Format(fechaEmision, "DD-MM-YYYY") & " | " & _
+                  "Hora: " & horaEmision & " (America/Santiago)"
     
+    ' Escribir footer en la hoja (A-D para 4 columnas)
+    wsPlantilla.Range(wsPlantilla.Cells(filaFooter, 1), wsPlantilla.Cells(filaFooter, 4)).Merge
+    wsPlantilla.Cells(filaFooter, 1).Value = textoFooter
+    
+    ' Formato del footer
+    With wsPlantilla.Cells(filaFooter, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 8
+        .Font.Italic = True
+        .Font.Color = RGB(128, 128, 128)  ' Gris
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+    End With
+    
+    Debug.Print "[POBLACIÓN] Footer agregado en fila " & filaFooter
     Debug.Print "[POBLACIÓN] ¡Plantilla completamente poblada!"
 End Sub
 
 ' ══════════════════════════════════════════════════════════════
 ' Poblar tabla de preguntas y respuestas
 ' ══════════════════════════════════════════════════════════════
-Private Sub PoblarTablaRespuestas(wsPlantilla As Worksheet, datosInspeccion As Object)
+Private Function PoblarTablaRespuestas(wsPlantilla As Worksheet, datosInspeccion As Object) As Long
     On Error GoTo ErrorHandler
     
     Dim respuestas As Collection
@@ -482,7 +875,8 @@ Private Sub PoblarTablaRespuestas(wsPlantilla As Worksheet, datosInspeccion As O
     
     If respuestas.Count = 0 Then
         Debug.Print "[RESPUESTAS] Sin respuestas para mostrar"
-        Exit Sub
+        PoblarTablaRespuestas = 39  ' Retornar solo fila de encabezados si no hay respuestas
+        Exit Function
     End If
     
     ' Las tablas de preguntas y opciones están en SHEET_CHECKLIST, no en HISTORICO
@@ -497,9 +891,42 @@ Private Sub PoblarTablaRespuestas(wsPlantilla As Worksheet, datosInspeccion As O
     Debug.Print "[RESPUESTAS] tblPreguntas encontrada: " & (Not tblPreguntas Is Nothing)
     Debug.Print "[RESPUESTAS] tblOpciones encontrada: " & (Not tblOpciones Is Nothing)
     
-    ' Fila 27 = inicio tabla de preguntas (desplazado +3 por bloque categoría)
+    ' LIMPIAR FILAS 40+ ANTES DE POBLAR (evitar datos de inspecciones anteriores)
+    Debug.Print "[RESPUESTAS] Limpiando filas 40+ antes de poblar..."
+    Dim ultimaFilaExistente As Long
+    ultimaFilaExistente = wsPlantilla.UsedRange.Row + wsPlantilla.UsedRange.Rows.Count - 1
+    
+    If ultimaFilaExistente >= 40 Then
+        ' Limpiar desde fila 40 hasta el final (todas las columnas A-D)
+        wsPlantilla.Range( _
+            wsPlantilla.Cells(40, 1), _
+            wsPlantilla.Cells(ultimaFilaExistente, 4) _
+        ).Clear  ' Clear elimina contenido Y formato
+        Debug.Print "[RESPUESTAS] Limpiadas filas 40-" & ultimaFilaExistente
+    Else
+        Debug.Print "[RESPUESTAS] No hay filas previas para limpiar"
+    End If
+    
+    ' ENCABEZADOS DE TABLA DE PREGUNTAS (A39-D39)
+    wsPlantilla.Cells(39, 1).Value = "N° DE PREGUNTA"   ' A39
+    wsPlantilla.Cells(39, 2).Value = "PREGUNTA"          ' B39
+    wsPlantilla.Cells(39, 3).Value = "RESPUESTA"         ' C39
+    wsPlantilla.Cells(39, 4).Value = "OBSERVACIONES"     ' D39
+    
+    ' Formato encabezados
+    With wsPlantilla.Range("A39:D39")
+        .Font.Bold = True
+        .Font.Size = 10
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Interior.Color = RGB(189, 215, 238)  ' Azul claro
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlMedium
+    End With
+    
+    ' Fila 40 = inicio datos de preguntas
     Dim filaInicio As Long
-    filaInicio = 27
+    filaInicio = 40
     
     Dim i As Long
     Dim resp As Object
@@ -511,49 +938,55 @@ Private Sub PoblarTablaRespuestas(wsPlantilla As Worksheet, datosInspeccion As O
         
         Debug.Print "[RESPUESTAS] Fila " & fila & " - IDPregunta: " & resp("IDPregunta") & " - IDOpcion: " & resp("IDOpcion")
         
-        ' Col B: Número secuencial
-        wsPlantilla.Cells(fila, 2).Value = i
+        ' Col A: Número secuencial
+        wsPlantilla.Cells(fila, 1).Value = i
         
-        ' Col C: Texto de pregunta (buscar por ID string)
-        wsPlantilla.Cells(fila, 3).Value = ObtenerTextoPregunta(CStr(resp("IDPregunta")), tblPreguntas)
+        ' Col B: Texto de pregunta (buscar por ID string)
+        wsPlantilla.Cells(fila, 2).Value = ObtenerTextoPregunta(CStr(resp("IDPregunta")), tblPreguntas)
         
-        ' Col E: Texto de opción elegida (buscar por ID string)
+        ' Col C: Texto de opción elegida (buscar por ID string)
         Dim textoOpcion As String
         textoOpcion = ObtenerTextoOpcion(CStr(resp("IDOpcion")), tblOpciones)
-        wsPlantilla.Cells(fila, 5).Value = textoOpcion
+        wsPlantilla.Cells(fila, 3).Value = textoOpcion
         
-        ' Col F: Observación
-        wsPlantilla.Cells(fila, 6).Value = resp("Observacion")
+        ' Col D: Observación
+        wsPlantilla.Cells(fila, 4).Value = resp("Observacion")
         
         ' Formato de fila
-        With wsPlantilla.Rows(fila)
+        With wsPlantilla.Range(wsPlantilla.Cells(fila, 1), wsPlantilla.Cells(fila, 4))
             .Font.Name = "Arial"
             .Font.Size = 9
-            .VerticalAlignment = xlTop
-            .RowHeight = 30
-        End With
-        With wsPlantilla.Range(wsPlantilla.Cells(fila, 2), wsPlantilla.Cells(fila, 7))
+            .HorizontalAlignment = xlCenter
+            .VerticalAlignment = xlCenter
+            .WrapText = True
             .Borders.LineStyle = xlContinuous
             .Borders.Weight = xlThin
         End With
+        
+        ' Auto-ajustar altura de fila según contenido
+        wsPlantilla.Rows(fila).AutoFit
         
         ' ═══════════════════════════════════════════════════════════
         ' PASO 3 MVP: Resaltar incumplimientos con fondo rojo
         ' ═══════════════════════════════════════════════════════════
         If EsRespuestaIncumplimiento(textoOpcion) Then
-            wsPlantilla.Range(wsPlantilla.Cells(fila, 2), wsPlantilla.Cells(fila, 7)).Interior.Color = RGB(253, 223, 223)  ' Rojo claro
+            wsPlantilla.Range(wsPlantilla.Cells(fila, 1), wsPlantilla.Cells(fila, 4)).Interior.Color = RGB(253, 223, 223)  ' Rojo claro
             Debug.Print "[RESPUESTAS] ⚠ INCUMPLIMIENTO detectado: " & textoOpcion
         End If
         
-        Debug.Print "[RESPUESTAS] OK -> " & wsPlantilla.Cells(fila, 3).Value
+        Debug.Print "[RESPUESTAS] OK -> " & wsPlantilla.Cells(fila, 2).Value
     Next i
     
     Debug.Print "[RESPUESTAS] Todas las respuestas pobladas"
-    Exit Sub
+    
+    ' Retornar la última fila utilizada
+    PoblarTablaRespuestas = fila
+    Exit Function
     
 ErrorHandler:
     Debug.Print "[ERROR RESPUESTAS] Fila " & fila & ": " & Err.Description
-End Sub
+    PoblarTablaRespuestas = 39  ' Retornar fila de encabezados en caso de error
+End Function
 
 ' ══════════════════════════════════════════════════════════════
 ' Obtener texto de pregunta por UUID (tablas en SHEET_CHECKLIST)
@@ -662,6 +1095,43 @@ End Function
 ' tblPersonal: [1]Iniciales [2]Planta [3-13]Puestos Si/No [14]Activo
 ' No hay columna Nombre → se devuelven las iniciales como identificador
 ' ══════════════════════════════════════════════════════════════
+' ══════════════════════════════════════════════════════════════
+' Evaluar resultado de Auditoría de Procesos según regla de negocio
+' Reglas (en orden de prioridad):
+'   1. Si hay 2 o más "No Cumple" de criticidad "Crítica" → "No Cumple"
+'   2. Si hay 1 "No Cumple" de criticidad "Crítica" Y 2 o más "No Cumple"
+'      de criticidad "Mayor" → "No Cumple"
+'   3. Si hay 4 o más "No Cumple" de criticidad "Mayor" → "No Cumple"
+'   4. En cualquier otro caso → "Cumple"
+' ══════════════════════════════════════════════════════════════
+Private Function EvaluarResultadoAP(ByVal criticaNoCumple As Long, ByVal mayorNoCumple As Long) As String
+    On Error Resume Next
+    
+    ' Regla 1: 2 o más "No Cumple" de criticidad "Crítica"
+    If criticaNoCumple >= 2 Then
+        EvaluarResultadoAP = "No Cumple"
+        Exit Function
+    End If
+    
+    ' Regla 2: 1 "No Cumple" de criticidad "Crítica" Y 
+    '          2 o más "No Cumple" de criticidad "Mayor"
+    If criticaNoCumple >= 1 And mayorNoCumple >= 2 Then
+        EvaluarResultadoAP = "No Cumple"
+        Exit Function
+    End If
+    
+    ' Regla 3: 4 o más "No Cumple" de criticidad "Mayor"
+    If mayorNoCumple >= 4 Then
+        EvaluarResultadoAP = "No Cumple"
+        Exit Function
+    End If
+    
+    ' Regla 4: En cualquier otro caso → "Cumple"
+    EvaluarResultadoAP = "Cumple"
+    
+    On Error GoTo 0
+End Function
+
 Private Function ObtenerNombrePersonal(iniciales As String) As String
     ' tblPersonal no tiene columna Nombre Completo — devolver iniciales
     ObtenerNombrePersonal = Trim(iniciales)
@@ -891,6 +1361,8 @@ End Sub
 ' Formato: CERTIFICADO_[PUESTO]_[INICIALES]_[FECHA]_CAT[N]_[ESTADO].pdf
 ' ══════════════════════════════════════════════════════════════
 Private Function GenerarNombreArchivoPDF(datosInspeccion As Object) As String
+    On Error GoTo ErrorHandler
+    
     Dim nombreArchivo As String
     
     ' Obtener componentes del nombre
@@ -900,9 +1372,48 @@ Private Function GenerarNombreArchivoPDF(datosInspeccion As Object) As String
     Dim categoria As Long
     Dim estadoCorto As String
     
-    iniciales = Trim(datosInspeccion("Iniciales"))
-    fechaStr = Format(datosInspeccion("FechaInspeccion"), "YYYY-MM-DD")
-    categoria = CLng(datosInspeccion("Categoria"))
+    ' Iniciales (siempre string)
+    iniciales = Trim(CStr(datosInspeccion("Iniciales")))
+    
+    ' Fecha: Convertir a Date antes de formatear (manejo robusto de tipos)
+    Dim fechaValue As Variant
+    fechaValue = datosInspeccion("FechaInspeccion")
+    
+    Debug.Print "[ARCHIVO] FechaInspeccion - Tipo: " & TypeName(fechaValue) & " | VarType: " & VarType(fechaValue) & " | Valor: [" & fechaValue & "]"
+    
+    If IsEmpty(fechaValue) Or IsNull(fechaValue) Then
+        fechaStr = Format(Date, "YYYY-MM-DD")  ' Usar fecha actual si no hay valor
+        Debug.Print "[ARCHIVO] Fecha vacía, usando fecha actual"
+    ElseIf IsDate(fechaValue) Then
+        ' Puede ser String "dd-mm-yyyy", Date, o número serial de Excel
+        If VarType(fechaValue) = vbString Then
+            ' String → Convertir a Date
+            fechaStr = Format(CDate(fechaValue), "YYYY-MM-DD")
+        Else
+            ' Date o número serial → Formatear directamente
+            fechaStr = Format(fechaValue, "YYYY-MM-DD")
+        End If
+    Else
+        ' Si no es fecha válida, usar fecha actual
+        fechaStr = Format(Date, "YYYY-MM-DD")
+        Debug.Print "[ARCHIVO] Fecha no válida [" & fechaValue & "], usando fecha actual"
+    End If
+    
+    ' Categoría: Convertir a Long con manejo de errores
+    Dim categoriaValue As Variant
+    categoriaValue = datosInspeccion("Categoria")
+    
+    Debug.Print "[ARCHIVO] Categoria - Tipo: " & TypeName(categoriaValue) & " | VarType: " & VarType(categoriaValue) & " | Valor: [" & categoriaValue & "]"
+    
+    If IsEmpty(categoriaValue) Or IsNull(categoriaValue) Then
+        categoria = 0
+        Debug.Print "[ARCHIVO] Categoría vacía, usando 0"
+    ElseIf IsNumeric(categoriaValue) Then
+        categoria = CLng(categoriaValue)
+    Else
+        categoria = 0
+        Debug.Print "[ARCHIVO] Categoría no numérica [" & categoriaValue & "], usando 0"
+    End If
     
     ' Obtener puesto (limpiar caracteres especiales para nombre de archivo)
     puesto = ObtenerPuestoPersonal(iniciales)
@@ -942,9 +1453,22 @@ Private Function GenerarNombreArchivoPDF(datosInspeccion As Object) As String
                     "CAT" & categoria & "_" & _
                     estadoCorto & ".pdf"
     
+    Debug.Print "[ARCHIVO] Componentes del nombre:"
+    Debug.Print "[ARCHIVO]   - Prefijo: " & Configuration2.PDF_PREFIJO_NOMBRE
+    Debug.Print "[ARCHIVO]   - Puesto: " & puesto
+    Debug.Print "[ARCHIVO]   - Iniciales: " & iniciales
+    Debug.Print "[ARCHIVO]   - Fecha: " & fechaStr
+    Debug.Print "[ARCHIVO]   - Categoría: " & categoria
+    Debug.Print "[ARCHIVO]   - Estado: " & estadoCorto
     Debug.Print "[ARCHIVO] Nombre generado: " & nombreArchivo
     
     GenerarNombreArchivoPDF = nombreArchivo
+    Exit Function
+    
+ErrorHandler:
+    Debug.Print "[ERROR] GenerarNombreArchivoPDF: " & Err.Description
+    ' Generar nombre fallback
+    GenerarNombreArchivoPDF = "CERTIFICADO_" & Format(Now, "YYYY-MM-DD_HHMMSS") & ".pdf"
 End Function
 
 ' ══════════════════════════════════════════════════════════════
