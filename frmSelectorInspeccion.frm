@@ -42,6 +42,12 @@ Private mAreaSeleccionada As String
 Private mPlanta As String
 Private mCancelado As Boolean
 
+' --- Valores iniciales para prellenado (desde doble clic en tblResumenCronograma) ---
+Private mPlantaInicial As String
+Private mPuestoInicial As String
+Private mPersonalInicial As String
+Private mIDPlantillaInicial As String
+
 ' --- Referencia global al formulario de checklist (para mantenerlo vivo) ---
 Private oChecklistFormInstance As frmChecklistVirtual
 
@@ -66,6 +72,26 @@ End Property
 
 Public Property Get Planta() As String
     Planta = mPlanta
+End Property
+
+' ======================================================================
+' PROPIEDADES PÚBLICAS PARA PRELLENADO (desde doble clic)
+' ======================================================================
+
+Public Property Let PlantaInicial(ByVal valor As String)
+    mPlantaInicial = valor
+End Property
+
+Public Property Let PuestoInicial(ByVal valor As String)
+    mPuestoInicial = valor
+End Property
+
+Public Property Let PersonalInicial(ByVal valor As String)
+    mPersonalInicial = valor
+End Property
+
+Public Property Let IDPlantillaInicial(ByVal valor As String)
+    mIDPlantillaInicial = valor
 End Property
 
 ' ======================================================================
@@ -316,6 +342,7 @@ Private Sub UserForm_Initialize()
     Call CargarPlantas
     
     ' Deshabilitar controles hasta que se seleccione algo
+    ' (se habilitarán automáticamente si se aplica prellenado)
     cboPuesto.Enabled = False
     cboPersonal.Enabled = False
     cboPlantillas.Enabled = False
@@ -526,6 +553,118 @@ End Sub
 Private Sub btnCancelar_Click()
     mCancelado = True
     Me.Hide
+End Sub
+
+' ======================================================================
+' MÉTODOS PÚBLICOS (PRELLENADO)
+' ======================================================================
+
+'' ----------------------------------------------------------------------
+' Subrutina: AplicarPrellenado
+' Propósito: Aplica valores prellenados desde doble clic en tblResumenCronograma.
+'            DEBE LLAMARSE DESPUÉS de asignar las propiedades PlantaInicial,
+'            PuestoInicial, PersonalInicial e IDPlantillaInicial.
+'            Selecciona automáticamente Planta, Puesto, Personal y Plantilla.
+' Lógica:
+'   1. Selecciona Planta en cboPlanta
+'   2. Carga y selecciona Puesto en cboPuesto
+'   3. Carga y selecciona Personal en cboPersonal
+'   4. Carga y selecciona Plantilla en cboPlantillas (si se proporcionó ID)
+' ----------------------------------------------------------------------
+Public Sub AplicarPrellenado()
+    On Error GoTo ErrorHandler
+    
+    Dim i As Integer
+    
+    ' --- 1. Seleccionar PLANTA ---
+    If Len(mPlantaInicial) > 0 Then
+        For i = 0 To cboPlanta.ListCount - 1
+            If cboPlanta.List(i) = mPlantaInicial Then
+                ' Establecer variables internas manualmente
+                mPlantaSeleccionada = mPlantaInicial
+                mPlanta = mPlantaInicial
+                
+                ' Cargar puestos para esta planta ANTES de seleccionar
+                Call CargarPuestosPorPlanta(mPlantaSeleccionada)
+                cboPuesto.Enabled = True
+                
+                ' Ahora sí seleccionar en el combo
+                cboPlanta.ListIndex = i
+                Exit For
+            End If
+        Next i
+    End If
+    
+    ' --- 2. Seleccionar PUESTO ---
+    If Len(mPuestoInicial) > 0 Then
+        For i = 0 To cboPuesto.ListCount - 1
+            If cboPuesto.List(i) = mPuestoInicial Then
+                ' Establecer variable interna manualmente
+                mPuestoSeleccionado = mPuestoInicial
+                
+                ' Cargar personal para este puesto y planta ANTES de seleccionar
+                Call CargarPersonalPorPuestoYPlanta(mPuestoSeleccionado, mPlantaSeleccionada)
+                cboPersonal.Enabled = True
+                cboPersonal.BackColor = vbWhite
+                
+                ' Ahora sí seleccionar en el combo
+                cboPuesto.ListIndex = i
+                Exit For
+            End If
+        Next i
+    End If
+    
+    ' --- 3. Seleccionar PERSONAL ---
+    If Len(mPersonalInicial) > 0 Then
+        For i = 0 To cboPersonal.ListCount - 1
+            If cboPersonal.List(i) = mPersonalInicial Then
+                ' Establecer variable interna manualmente
+                mPersonalSeleccionado = mPersonalInicial
+                
+                ' Cargar plantillas para este puesto ANTES de seleccionar
+                Call CargarPlantillasDisponibles(mPuestoSeleccionado)
+                cboPlantillas.Enabled = True
+                cboPlantillas.BackColor = vbWhite
+                
+                ' Ahora sí seleccionar en el combo
+                cboPersonal.ListIndex = i
+                Exit For
+            End If
+        Next i
+    End If
+    
+    ' --- 4. Seleccionar PLANTILLA (si se proporcionó ID) ---
+    If Len(mIDPlantillaInicial) > 0 And cboPlantillas.ListCount > 0 Then
+        For i = 0 To cboPlantillas.ListCount - 1
+            ' La columna 1 contiene "ID|AREA"
+            Dim tagInfo As String
+            tagInfo = cboPlantillas.List(i, 1)
+            Dim partes() As String
+            partes = Split(tagInfo, "|")
+            
+            If partes(0) = mIDPlantillaInicial Then
+                ' Establecer variables internas manualmente
+                mIDPlantilla = partes(0)
+                mAreaSeleccionada = partes(1)
+                mNombrePlantilla = cboPlantillas.List(i, 0)
+                
+                ' Ahora sí seleccionar en el combo
+                cboPlantillas.ListIndex = i
+                
+                ' Habilitar botón Aceptar
+                If Len(mPlanta) > 0 Then
+                    btnAceptar.Enabled = True
+                End If
+                Exit For
+            End If
+        Next i
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    ' No mostrar error crítico, solo log (puede que la plantilla no exista en el combo)
+    Debug.Print "Advertencia en AplicarPrellenado: " & Err.Description
 End Sub
 
 ' ======================================================================

@@ -74,12 +74,6 @@ Public Sub GenerarDatosPrueba()
             
             ' Planta personal
             .Cells(1, tblCronograma.ListColumns("Planta personal").Index).Value = "Therapia iv Santiago"
-            
-            ' Activo
-            .Cells(1, tblCronograma.ListColumns("Activo").Index).Value = "Si"
-            
-            ' Fecha de creación
-            .Cells(1, tblCronograma.ListColumns("Fecha de creacion").Index).Value = Now
         End With
         
         Debug.Print "Registro de prueba creado en tblCronogramaInspecciones"

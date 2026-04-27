@@ -75,7 +75,7 @@ Private Sub Workbook_Open()
     
     ' Registrar apertura del sistema en Audit Trail
     Dim userName As String
-    userName = Environ("USERNAME")
+    userName = Application.UserName  ' Nombre configurado en Excel (consistente con menú principal)
     Call AuditLogger2.LogAction( _
         action:="Apertura del libro", _
         sheetName:="Sistema", _
@@ -214,6 +214,37 @@ End Function
 Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
     On Error GoTo ErrorHandler
     
+    ' ====================================================================================
+    ' REGISTRO AUDIT TRAIL: Guardado del libro
+    ' Fecha: 25/04/2026
+    ' Propósito: Trazabilidad completa de guardados del sistema
+    ' ====================================================================================
+    Dim userName As String
+    userName = Application.UserName  ' Nombre configurado en Excel (consistente con menú principal)
+    
+    Dim tipoGuardado As String
+    If SaveAsUI Then
+        tipoGuardado = "Guardar Como (nueva ubicación)"
+    Else
+        tipoGuardado = "Guardado normal"
+    End If
+    
+    Dim rutaArchivo As String
+    If Len(ThisWorkbook.Path) > 0 Then
+        rutaArchivo = ThisWorkbook.Path & "\" & ThisWorkbook.Name
+    Else
+        rutaArchivo = "(archivo nuevo sin guardar)"
+    End If
+    
+    Call AuditLogger2.LogAction( _
+        action:="Guardado del libro", _
+        sheetName:="Sistema", _
+        dataModified:="Archivo guardado", _
+        beforeChange:="N/A", _
+        afterChange:="Usuario: " & userName & " | Tipo: " & tipoGuardado & " | Ruta: " & rutaArchivo, _
+        moduleAndSubroutine:="ThisWorkbook.Workbook_BeforeSave" _
+    )
+    
     ' ========== BACKUP AUTOMÁTICO TEMPORALMENTE DESACTIVADO ==========
     ' Para reactivar, descomentar la siguiente línea
     ' =================================================================
@@ -221,7 +252,7 @@ Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
     
     Exit Sub
 ErrorHandler:
-    ' Call ErrorLogger2.Log("ThisWorkbook.Workbook_BeforeSave", VBA.Err.Description, VBA.Err.Number)
+    Call ErrorLogger2.Log("ThisWorkbook.Workbook_BeforeSave", VBA.Err.Description, VBA.Err.Number)
 End Sub
 
 '' ----------------------------------------------------------------------
@@ -238,7 +269,7 @@ Private Sub Workbook_BeforeClose(Cancel As Boolean)
     
     ' Registrar cierre del sistema en Audit Trail
     Dim userName As String
-    userName = Environ("USERNAME")
+    userName = Application.UserName  ' Nombre configurado en Excel (consistente con menú principal)
     Call AuditLogger2.LogAction( _
         action:="Cierre del libro", _
         sheetName:="Sistema", _

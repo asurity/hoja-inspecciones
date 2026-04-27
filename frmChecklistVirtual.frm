@@ -27,7 +27,7 @@
 '   Formulario: frmChecklistVirtual (Adaptativo a pantalla completa, 95%x85%, StartUpPosition=CenterScreen)
 '
 '   Frame "fraCabecera" (columna izquierda, 35% del ancho, mín 280pt, diseño vertical con scroll):
-'     14 campos verticales:
+'     18 campos verticales (actualizado 23/04/2026):
 '       - lblEvaluado, txtEvaluado (TextBox, Locked)
 '       - lblPuesto, txtPuesto (TextBox, Locked)
 '       - lblPlanta, txtPlanta (TextBox, Locked)
@@ -42,14 +42,19 @@
 '       - lblAY2, cboAY2 (ComboBox)
 '       - lblOP, cboOP (ComboBox)
 '       - lblLugar, cboLugar (ComboBox)
-'     Inspecciones recurrentes (DEBAJO de los 14 campos):
+'       - lblCalificacionVestuario, cboCalificacionVestuario (ComboBox Si/No) [NUEVO 23/04/2026]
+'       - lblFechaVencVestuario, txtFechaVencVestuario (TextBox con validación fecha) [NUEVO 23/04/2026]
+'       - lblCalificacionOperador, cboCalificacionOperador (ComboBox Si/No) [NUEVO 23/04/2026]
+'       - lblFechaVencOperador, txtFechaVencOperador (TextBox con validación fecha) [NUEVO 23/04/2026]
+'     Inspecciones recurrentes (DEBAJO de los 18 campos):
 '       - fraRecurrentInspection (Frame contenedor)
-'         - chkEsRecurrente (CheckBox)
 '         - btnBuscarHistorico (CommandButton)
 '         - lblInfoHistorico (Label)
 '         - lblNumeroInspeccion, txtNumeroInspeccion (Label, TextBox)
 '         - lblRPNAnterior, txtRPNAnteriorAuto, txtRPNAnteriorManual (Label, 2 TextBox)
 '         - lblModoRPN (Label)
+'         - lblPorcRecuperacion, txtPorcRecuperacion (Label, TextBox) [NUEVO 23/04/2026]
+'         - lblPorcOOL, txtPorcOOL (Label, TextBox) [NUEVO 23/04/2026]
 '
 '   MultiPage "mpPreguntas" (columna derecha, 65% del ancho, 2 páginas):
 '     Page 0: "Auditoría de procesos" → fraPreguntas0 (Frame, ScrollBars=Vertical)
@@ -149,7 +154,18 @@ Private mRPNAnteriorManual As Double
 Private mRPNAnteriorAuto As Double
 Private mIDInspeccionAnterior As String
 Private mModoRPN As String  ' "AUTO" o "MANUAL"
-Private mActualizandoCheckbox As Boolean  ' Flag para prevenir recursión en Click event
+Private mModoRecurrenteManual As Boolean  ' True si el usuario activó modo recurrente sin historial (carga manual)
+
+' --- Factores adicionales (FASE 6 - 23/04/2026) ---
+Private mPorcRecuperacion As Double
+Private mPorcOOL As Double
+Private mRequiereFactoresAdicionales As Boolean  ' Depende del tipo de checklist
+
+' --- Calificaciones y vencimientos (FASE 7 - 23/04/2026) ---
+Private mCalificacionVestuario As String
+Private mFechaVencVestuario As String
+Private mCalificacionOperador As String
+Private mFechaVencOperador As String
 
 ' ======================================================================
 ' PROPIEDADES PÚBLICAS (Let/Get)
@@ -243,6 +259,42 @@ Public Property Get ObservacionGeneral() As String
     ObservacionGeneral = Trim(txtObsGeneral.Value)
 End Property
 
+Public Property Get CalificacionVestuario() As String
+    ' Si el puesto no requiere calificaciones, retornar "-"
+    If Not RequiereCalificaciones() Then
+        CalificacionVestuario = "-"
+    Else
+        CalificacionVestuario = Trim(cboCalificacionVestuario.Value)
+    End If
+End Property
+
+Public Property Get FechaVencVestuario() As String
+    ' Si el puesto no requiere calificaciones, retornar "-"
+    If Not RequiereCalificaciones() Then
+        FechaVencVestuario = "-"
+    Else
+        FechaVencVestuario = Trim(txtFechaVencVestuario.Value)
+    End If
+End Property
+
+Public Property Get CalificacionOperador() As String
+    ' Si el puesto no requiere calificaciones, retornar "-"
+    If Not RequiereCalificaciones() Then
+        CalificacionOperador = "-"
+    Else
+        CalificacionOperador = Trim(cboCalificacionOperador.Value)
+    End If
+End Property
+
+Public Property Get FechaVencOperador() As String
+    ' Si el puesto no requiere calificaciones, retornar "-"
+    If Not RequiereCalificaciones() Then
+        FechaVencOperador = "-"
+    Else
+        FechaVencOperador = Trim(txtFechaVencOperador.Value)
+    End If
+End Property
+
 Public Property Get FrecuenciaMeses() As Long
     FrecuenciaMeses = mFrecuenciaMeses
 End Property
@@ -280,6 +332,19 @@ Public Property Get ModoRPN() As String
     ModoRPN = mModoRPN
 End Property
 
+' --- Factores adicionales (FASE 6 - 23/04/2026) ---
+Public Property Get PorcRecuperacion() As Double
+    PorcRecuperacion = mPorcRecuperacion
+End Property
+
+Public Property Get PorcOOL() As Double
+    PorcOOL = mPorcOOL
+End Property
+
+Public Property Get RequiereFactoresAdicionales() As Boolean
+    RequiereFactoresAdicionales = mRequiereFactoresAdicionales
+End Property
+
 ' ======================================================================
 ' INICIALIZACIÓN
 ' ======================================================================
@@ -299,8 +364,13 @@ Private Sub UserForm_Initialize()
     mRPNAnteriorAuto = 0
     mIDInspeccionAnterior = ""
     mModoRPN = "NINGUNO"
-    mActualizandoCheckbox = False  ' Flag de control
+    mModoRecurrenteManual = False
     mAreaPendiente = ""
+    
+    ' Inicializar factores adicionales (FASE 6 - 23/04/2026)
+    mPorcRecuperacion = 0
+    mPorcOOL = 0
+    mRequiereFactoresAdicionales = False
     
     ' --- Configurar todos los controles ---
     Call ConfigurarFormulario
@@ -419,7 +489,7 @@ Private Sub ConfigurarCabecera()
         .BorderColor = &HD0C8C0
         .SpecialEffect = fmSpecialEffectFlat
         .ScrollBars = fmScrollBarsVertical
-        .ScrollHeight = 750  ' Altura total: 14 campos (308pt) + frame recurrente (240pt) + márgenes
+        .ScrollHeight = 840  ' Altura total: 18 campos (396pt) + frame recurrente (240pt) + márgenes (actualizad o 23/04/2026)
         .KeepScrollBarsVisible = fmScrollBarsVertical
     End With
     
@@ -793,13 +863,138 @@ Private Sub ConfigurarCabecera()
     rowIdx = rowIdx + 1
     
     ' ═══════════════════════════════════════════════════════════════════
-    ' SECCIÓN: INSPECCIONES RECURRENTES (FASE 2 - 21/04/2026)
-    ' POSICIONADO DEBAJO DE LOS 14 CAMPOS
+    ' NUEVOS CAMPOS: CALIFICACIONES Y VENCIMIENTOS (FASE 7 - 23/04/2026)
     ' ═══════════════════════════════════════════════════════════════════
     
-    ' Calcular posición vertical para el frame (debajo de los 14 campos)
+    ' FILA 15: Calificación de Vestuario
+    With Me.lblCalificacionVestuario
+        .Left = lblLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = 95
+        .Height = 18
+        .Caption = "Calif. Vestuario:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .TextAlign = fmTextAlignLeft
+        .BackStyle = fmBackStyleTransparent
+    End With
+    With Me.cboCalificacionVestuario
+        .Left = ctrlLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = ctrlW
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Style = fmStyleDropDownList
+        .TabIndex = 11
+    End With
+    rowIdx = rowIdx + 1
+    
+    ' FILA 16: Fecha Vencimiento Vestuario
+    With Me.lblFechaVencVestuario
+        .Left = lblLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = 95
+        .Height = 18
+        .Caption = "Venc. Vestuario:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .TextAlign = fmTextAlignLeft
+        .BackStyle = fmBackStyleTransparent
+    End With
+    With Me.txtFechaVencVestuario
+        .Left = ctrlLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = ctrlW
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .TabIndex = 12
+    End With
+    rowIdx = rowIdx + 1
+    
+    ' FILA 17: Calificación de Operador
+    With Me.lblCalificacionOperador
+        .Left = lblLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = 95
+        .Height = 18
+        .Caption = "Calif. Operador:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .TextAlign = fmTextAlignLeft
+        .BackStyle = fmBackStyleTransparent
+    End With
+    With Me.cboCalificacionOperador
+        .Left = ctrlLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = ctrlW
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Style = fmStyleDropDownList
+        .TabIndex = 13
+    End With
+    rowIdx = rowIdx + 1
+    
+    ' FILA 18: Fecha Vencimiento Operador
+    With Me.lblFechaVencOperador
+        .Left = lblLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = 95
+        .Height = 18
+        .Caption = "Venc. Operador:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .TextAlign = fmTextAlignLeft
+        .BackStyle = fmBackStyleTransparent
+    End With
+    With Me.txtFechaVencOperador
+        .Left = ctrlLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = ctrlW
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .TabIndex = 14
+    End With
+    rowIdx = rowIdx + 1
+    
+    ' ═══════════════════════════════════════════════════════════════════
+    ' SECCIÓN: INSPECCIONES RECURRENTES (FASE 2 - 21/04/2026)
+    ' BOTÓN TOGGLE FUERA DEL FRAME - SIEMPRE VISIBLE
+    ' ═══════════════════════════════════════════════════════════════════
+    
+    ' Botón toggle para modo recurrente (FUERA del frame, debajo de los nuevos campos)
+    With Me.btnToggleRecurrente
+        .Left = lblLeft
+        .Top = rowTop + (rowIdx * ROW_HEIGHT)
+        .Width = mLeftColWidth - 12
+        .Height = 24
+        .Caption = "Activar Modo Recurrente"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 8.5
+        .Font.Bold = False
+        .TabIndex = 15
+        .TabStop = True
+        .BackColor = &HFFFFFF
+        .Enabled = True
+        .Visible = True
+        .ZOrder 0
+    End With
+    rowIdx = rowIdx + 1
+    
+    ' Calcular posición vertical para el frame (debajo del botón con MÁS separación)
     Dim recTop As Single
-    recTop = rowTop + (rowIdx * ROW_HEIGHT) + 8
+    recTop = rowTop + (rowIdx * ROW_HEIGHT) + 30
     
     ' Frame contenedor (ancho completo de la columna)
     With Me.fraRecurrentInspection
@@ -816,27 +1011,12 @@ Private Sub ConfigurarCabecera()
         .BorderStyle = fmBorderStyleSingle
         .BorderColor = &HD0C8C0
         .SpecialEffect = fmSpecialEffectFlat
+        .ZOrder 1  ' CRÍTICO: Frame detrás del checkbox
     End With
     
-    ' Ancho interno para controles
+    ' Ancho interno para controles del frame
     Dim frameInnerW As Single
     frameInnerW = mLeftColWidth - 28
-    
-    ' Checkbox principal
-    With Me.chkEsRecurrente
-        .Left = 8
-        .Top = 18
-        .Width = frameInnerW
-        .Height = 18
-        .Caption = "Esta NO es la primera inspección"
-        .Font.Name = "Segoe UI"
-        .Font.Size = 8
-        .Font.Bold = False
-        .Value = False
-        .TabIndex = 11
-        .BackColor = &HFFFFFF  ' Blanco (no gris)
-        .Enabled = True  ' Siempre habilitado
-    End With
     
     ' Botón búsqueda histórico
     With Me.btnBuscarHistorico
@@ -952,6 +1132,72 @@ Private Sub ConfigurarCabecera()
         .WordWrap = True
         .Visible = False
     End With
+    
+    ' ═══════════════════════════════════════════════════════════════════
+    ' FACTORES ADICIONALES (FASE 6 - 23/04/2026)
+    ' Solo visible en inspecciones recurrentes de ciertos tipos de checklist
+    ' ═══════════════════════════════════════════════════════════════════
+    
+    ' Label % Recuperación
+    With Me.lblPorcRecuperacion
+        .Left = 8
+        .Top = 204
+        .Width = 100
+        .Height = 16
+        .Caption = "% Recuperación:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 8
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .BackStyle = fmBackStyleTransparent
+        .TextAlign = fmTextAlignLeft
+        .Visible = False
+    End With
+    
+    ' TextBox % Recuperación
+    With Me.txtPorcRecuperacion
+        .Left = 112
+        .Top = 204
+        .Width = frameInnerW - 104
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Locked = False
+        .BackColor = &HFFFFFF  ' Blanco
+        .Visible = False
+    End With
+    
+    ' Label % OOL
+    With Me.lblPorcOOL
+        .Left = 8
+        .Top = 230
+        .Width = 100
+        .Height = 16
+        .Caption = "% OOL:"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 8
+        .Font.Bold = True
+        .ForeColor = COLOR_LABEL
+        .BackStyle = fmBackStyleTransparent
+        .TextAlign = fmTextAlignLeft
+        .Visible = False
+    End With
+    
+    ' TextBox % OOL
+    With Me.txtPorcOOL
+        .Left = 112
+        .Top = 230
+        .Width = frameInnerW - 104
+        .Height = 20
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Locked = False
+        .BackColor = &HFFFFFF  ' Blanco
+        .Visible = False
+    End With
+    
+    ' Ajustar altura del frame para incluir factores adicionales
+    Me.fraRecurrentInspection.Height = 260
     
     ' Ocultar frame de inspección recurrente al inicio
     ' (Se mostrará automáticamente si hay historial al activar el formulario)
@@ -1103,14 +1349,6 @@ End Sub
 Private Sub UserForm_Activate()
     On Error GoTo ErrorHandler
     
-    Debug.Print "=== UserForm_Activate INICIADO ==="
-    Debug.Print "Valores recibidos en UserForm_Activate:"
-    Debug.Print "  mEvaluado: [" & mEvaluado & "]"
-    Debug.Print "  mPuesto: [" & mPuesto & "]"
-    Debug.Print "  mIDPlantilla: [" & mIDPlantilla & "]"
-    Debug.Print "  mPlanta: [" & mPlanta & "]"
-    Debug.Print "  mIDCronograma: [" & mIDCronograma & "]"
-    
     ' Validar que tenemos datos mínimos
     If Len(mEvaluado) = 0 Or Len(mPuesto) = 0 Or Len(mIDPlantilla) = 0 Then
         MsgBox "ERROR: Datos incompletos." & vbCrLf & _
@@ -1166,6 +1404,10 @@ Private Sub UserForm_Activate()
     ' Debug.Print "  Evaluadores: OK"
     Call CargarComboLugar
     ' Debug.Print "  Lugar: OK"
+    Call CargarCombosCalificacion  ' NUEVO: Cargar combos de calificación (FASE 7 - 23/04/2026)
+    ' Debug.Print "  Calificaciones: OK"
+    Call ConfigurarVisibilidadCalificaciones  ' FASE 7: Configurar visibilidad según puesto
+    ' Debug.Print "  Visibilidad calificaciones configurada: OK"
     Call CargarFrecuenciaPlantilla
     ' Debug.Print "  Frecuencia: OK"
     On Error GoTo ErrorHandler
@@ -1188,9 +1430,7 @@ Private Sub UserForm_Activate()
     End If
     
     ' --- Búsqueda automática de historial (silenciosa) ---
-    Debug.Print "Buscando historial automáticamente..."
     Call BuscarHistorialSilencioso
-    Debug.Print "Búsqueda automática completada"
     
     Exit Sub
     
@@ -1259,8 +1499,6 @@ End Function
 Public Function ObtenerRespuestasConSeccion() As Collection
     On Error GoTo ErrorHandler
     
-    Debug.Print "[frmChecklistVirtual.ObtenerRespuestasConSeccion] Iniciando - Total respuestas en mRespuestas: " & mRespuestas.Count
-    
     Dim resultado As New Collection
     Dim key As Variant
     Dim contador As Long
@@ -1280,12 +1518,8 @@ Public Function ObtenerRespuestasConSeccion() As Collection
         dictResp("IDSeccion") = dictOrig("IDSeccion")
         dictResp("IDCriticidad") = dictOrig("IDCriticidad")
         
-        Debug.Print "  [ObtenerRespuestasConSeccion] Respuesta #" & contador & " - IDPregunta: " & key & ", IDSeccion: " & dictOrig("IDSeccion") & ", IDCriticidad: " & dictOrig("IDCriticidad") & ", IDOpcion: " & dictOrig("IDOpcion")
-        
         resultado.Add dictResp
     Next key
-    
-    Debug.Print "[frmChecklistVirtual.ObtenerRespuestasConSeccion] Completado - Total items en Collection: " & resultado.Count
     
     Set ObtenerRespuestasConSeccion = resultado
     Exit Function
@@ -1307,9 +1541,6 @@ Public Function ObtenerCantidadPreguntas() As Long
     Dim totalPreguntas As Long
     totalPreguntas = 0
     
-    Debug.Print "[ObtenerCantidadPreguntas] ===== INICIO ====="
-    Debug.Print "[ObtenerCantidadPreguntas] mSecciones.Count = " & mSecciones.Count
-    
     Dim secIdx As Long
     For secIdx = 0 To mSecciones.Count - 1
         Dim fraName As String
@@ -1330,24 +1561,17 @@ Public Function ObtenerCantidadPreguntas() As Long
                 If Left(ctrl.Name, 5) = "cboR_" Then
                     totalPreguntas = totalPreguntas + 1
                     preguntasSeccion = preguntasSeccion + 1
-                    Debug.Print "  [" & secIdx & "] cboR_ encontrado: " & ctrl.Name
                 End If
             Next ctrl
-            
-            Debug.Print "[ObtenerCantidadPreguntas] Sección " & secIdx & " (" & fraName & "): " & preguntasSeccion & " preguntas"
-        Else
-            Debug.Print "[ObtenerCantidadPreguntas] Frame " & fraName & " NO ENCONTRADO"
         End If
     Next secIdx
     
     ObtenerCantidadPreguntas = totalPreguntas
-    Debug.Print "[ObtenerCantidadPreguntas] ===== TOTAL: " & totalPreguntas & " preguntas ====="
     Exit Function
     
 ErrorHandler:
     ' En caso de error, devolver 0 para que la validación falle
     ObtenerCantidadPreguntas = 0
-    Debug.Print "[ObtenerCantidadPreguntas] ERROR: " & Err.Description
 End Function
 
 '' ----------------------------------------------------------------------
@@ -1479,6 +1703,90 @@ ErrorHandler:
     Call ErrorLogger2.Log("frmChecklistVirtual.txtHoraInicio_Exit", Err.Description, Err.Number)
 End Sub
 
+'' ----------------------------------------------------------------------
+' Evento: txtFechaVencVestuario_Exit
+' Propósito: Valida que la fecha de vencimiento de vestuario tenga formato válido (dd/mm/yyyy)
+'            y que NO esté vencida (debe ser mayor a la fecha actual)
+' Fecha: 23/04/2026 - FASE 7
+' Actualizado: 24/04/2026 - Validación estricta de fecha futura
+' ----------------------------------------------------------------------
+Private Sub txtFechaVencVestuario_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    On Error GoTo ErrorHandler
+    
+    Dim fechaTexto As String
+    fechaTexto = Trim(txtFechaVencVestuario.Value)
+    
+    ' Si está vacío, permitir (campo opcional)
+    If Len(fechaTexto) = 0 Then Exit Sub
+    
+    ' Validar formato de fecha
+    If Not IsDate(fechaTexto) Then
+        MsgBox "La fecha de vencimiento de vestuario debe tener un formato válido (dd/mm/yyyy)." & vbCrLf & _
+               "Ejemplo: 31/12/2026", vbExclamation, "Formato de fecha inválido"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    ' VALIDACIÓN CRÍTICA: La fecha de vencimiento DEBE ser mayor a la fecha actual
+    ' Si está vencida, la calificación no es válida y NO se puede continuar
+    If CDate(fechaTexto) <= Date Then
+        MsgBox "La fecha de vencimiento de vestuario ya pasó (" & fechaTexto & ")." & vbCrLf & vbCrLf & _
+               "La calificación de vestuario está VENCIDA." & vbCrLf & _
+               "El personal debe renovar su calificación antes de realizar la inspección." & vbCrLf & vbCrLf & _
+               "No se puede continuar con una calificación vencida.", _
+               vbCritical, "Calificación vencida"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.txtFechaVencVestuario_Exit", Err.Description, Err.Number)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Evento: txtFechaVencOperador_Exit
+' Propósito: Valida que la fecha de vencimiento de operador tenga formato válido (dd/mm/yyyy)
+'            y que NO esté vencida (debe ser mayor a la fecha actual)
+' Fecha: 23/04/2026 - FASE 7
+' Actualizado: 24/04/2026 - Validación estricta de fecha futura
+' ----------------------------------------------------------------------
+Private Sub txtFechaVencOperador_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    On Error GoTo ErrorHandler
+    
+    Dim fechaTexto As String
+    fechaTexto = Trim(txtFechaVencOperador.Value)
+    
+    ' Si está vacío, permitir (campo opcional)
+    If Len(fechaTexto) = 0 Then Exit Sub
+    
+    ' Validar formato de fecha
+    If Not IsDate(fechaTexto) Then
+        MsgBox "La fecha de vencimiento de operador debe tener un formato válido (dd/mm/yyyy)." & vbCrLf & _
+               "Ejemplo: 31/12/2026", vbExclamation, "Formato de fecha inválido"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    ' VALIDACIÓN CRÍTICA: La fecha de vencimiento DEBE ser mayor a la fecha actual
+    ' Si está vencida, la calificación no es válida y NO se puede continuar
+    If CDate(fechaTexto) <= Date Then
+        MsgBox "La fecha de vencimiento de operador ya pasó (" & fechaTexto & ")." & vbCrLf & vbCrLf & _
+               "La calificación de operador está VENCIDA." & vbCrLf & _
+               "El personal debe renovar su calificación antes de realizar la inspección." & vbCrLf & vbCrLf & _
+               "No se puede continuar con una calificación vencida.", _
+               vbCritical, "Calificación vencida"
+        Cancel = True
+        Exit Sub
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.txtFechaVencOperador_Exit", Err.Description, Err.Number)
+End Sub
+
 Private Sub btnGuardar_Click()
     On Error GoTo ErrorHandler
     
@@ -1525,6 +1833,58 @@ Private Sub btnGuardar_Click()
 ErrorHandler:
     Call ErrorLogger2.Log("frmChecklistVirtual.btnGuardar_Click", Err.Description, Err.Number)
     MsgBox "Error al guardar: " & Err.Description, vbCritical, "Error"
+End Sub
+
+'' ----------------------------------------------------------------------
+' Función: RequiereCalificaciones
+' Propósito: Determina si el puesto actual requiere calificaciones de
+'            vestuario y operador.
+' Retorna: True si el puesto es: Operador, Ayudante 1, Ayudante 2, Sanitizador
+' FASE 7 - 23/04/2026
+' ----------------------------------------------------------------------
+Private Function RequiereCalificaciones() As Boolean
+    Dim puestoUpper As String
+    puestoUpper = UCase(Trim(mPuesto))
+    
+    ' Lista de puestos que requieren calificaciones
+    RequiereCalificaciones = (puestoUpper = "OPERADOR" Or _
+                             puestoUpper = "AYUDANTE 1" Or _
+                             puestoUpper = "AYUDANTE 2" Or _
+                             puestoUpper = "SANITIZADOR")
+End Function
+
+'' ----------------------------------------------------------------------
+' Subrutina: ConfigurarVisibilidadCalificaciones
+' Propósito: Muestra u oculta los controles de calificaciones según el puesto.
+'            Solo se muestran para: Operador, Ayudante 1, Ayudante 2, Sanitizador
+' FASE 7 - 23/04/2026
+' ----------------------------------------------------------------------
+Private Sub ConfigurarVisibilidadCalificaciones()
+    On Error Resume Next
+    
+    Dim mostrar As Boolean
+    mostrar = RequiereCalificaciones()
+    
+    ' Configurar visibilidad de todos los controles de calificación
+    lblCalificacionVestuario.Visible = mostrar
+    cboCalificacionVestuario.Visible = mostrar
+    lblFechaVencVestuario.Visible = mostrar
+    txtFechaVencVestuario.Visible = mostrar
+    
+    lblCalificacionOperador.Visible = mostrar
+    cboCalificacionOperador.Visible = mostrar
+    lblFechaVencOperador.Visible = mostrar
+    txtFechaVencOperador.Visible = mostrar
+    
+    ' Si no se muestran, limpiar valores (para evitar datos residuales)
+    If Not mostrar Then
+        cboCalificacionVestuario.Value = ""
+        txtFechaVencVestuario.Value = ""
+        cboCalificacionOperador.Value = ""
+        txtFechaVencOperador.Value = ""
+    End If
+    
+    On Error GoTo 0
 End Sub
 
 Private Sub btnCancelar_Click()
@@ -1784,6 +2144,34 @@ ErrorHandler:
 End Sub
 
 '' ----------------------------------------------------------------------
+' Subrutina: CargarCombosCalificacion
+' Propósito: Carga los combos de calificación de vestuario y operador
+'            con valores "Si" y "No", estableciendo "Si" como predeterminado.
+' Fecha: 23/04/2026 - FASE 7
+' ----------------------------------------------------------------------
+Private Sub CargarCombosCalificacion()
+    On Error GoTo ErrorHandler
+    
+    ' Combo Calificación de Vestuario
+    cboCalificacionVestuario.Clear
+    cboCalificacionVestuario.AddItem "Si"
+    cboCalificacionVestuario.AddItem "No"
+    cboCalificacionVestuario.Value = "Si"  ' Valor predeterminado
+    
+    ' Combo Calificación de Operador
+    cboCalificacionOperador.Clear
+    cboCalificacionOperador.AddItem "Si"
+    cboCalificacionOperador.AddItem "No"
+    cboCalificacionOperador.Value = "Si"  ' Valor predeterminado
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "ERROR CargarCombosCalificacion: " & Err.Description
+    Call ErrorLogger2.Log("frmChecklistVirtual.CargarCombosCalificacion", Err.Description, Err.Number)
+End Sub
+
+'' ----------------------------------------------------------------------
 ' Subrutina: ConfigurarCampoLineaPorPuesto
 ' Propósito: Configura el campo de Línea/Equipo según el puesto evaluado.
 '            Para ciertos puestos técnicos que no tienen línea/equipo asignado,
@@ -1816,18 +2204,16 @@ Private Sub ConfigurarCampoLineaPorPuesto()
     
     ' Configurar el campo según el resultado
     If esPuestoSinLinea Then
-        ' Bloquear y establecer "N/A"
+        ' Bloquear y establecer Configuration2.VALOR_NO_APLICA
         cboLineaAuditada.Clear
-        cboLineaAuditada.AddItem "N/A"
-        cboLineaAuditada.Value = "N/A"
+        cboLineaAuditada.AddItem Configuration2.VALOR_NO_APLICA
+        cboLineaAuditada.Value = Configuration2.VALOR_NO_APLICA
         cboLineaAuditada.Enabled = False
         cboLineaAuditada.BackColor = &H8000000F  ' Gris (bloqueado)
-        Debug.Print "[ConfigurarCampoLinea] Puesto sin línea detectado: " & puesto & " - Campo bloqueado con N/A"
     Else
         ' Habilitar campo normal
         cboLineaAuditada.Enabled = True
         cboLineaAuditada.BackColor = &H80000005  ' Blanco (habilitado)
-        Debug.Print "[ConfigurarCampoLinea] Puesto con línea: " & puesto & " - Campo habilitado"
     End If
     
     Exit Sub
@@ -2233,9 +2619,6 @@ End Sub
 Private Sub RecopilarRespuestas()
     On Error GoTo ErrorHandler
     
-    Debug.Print "[RecopilarRespuestas] ===== INICIO ====="
-    Debug.Print "[RecopilarRespuestas] mSecciones.Count = " & mSecciones.Count
-    
     Dim pageIdx As Long
     Dim secIdx As Long
     secIdx = 0
@@ -2279,7 +2662,6 @@ Private Sub RecopilarRespuestas()
                     
                     If cboResp.ListIndex >= 0 Then
                         respuestasSeccion = respuestasSeccion + 1
-                        Debug.Print "  [" & secIdx & "] " & ctrl.Name & " - Respondida (ListIndex=" & cboResp.ListIndex & ")"
                         
                         ' Obtener opciones filtradas por sección Y criticidad
                         Dim opciones As Collection
@@ -2307,26 +2689,17 @@ Private Sub RecopilarRespuestas()
                                     dictResp("IDCriticidad") = idCriticidad
                                     Set mRespuestas(idPregunta) = dictResp
                                     
-                                    Debug.Print "[frmChecklistVirtual.RecopilarRespuestas] Pregunta " & idPregunta & ": IDOpcion=" & arrOp(0) & ", ValorNum=" & arrOp(2) & ", IDCriticidad=" & idCriticidad
                                     Exit For
                                 End If
                             Next op
                         End If
-                    Else
-                        Debug.Print "  [" & secIdx & "] " & ctrl.Name & " - NO RESPONDIDA (ListIndex=-1)"
                     End If
                 End If
             Next ctrl
-            
-            Debug.Print "[RecopilarRespuestas] Sección " & secIdx & ": " & cbosEncontrados & " combos encontrados, " & respuestasSeccion & " respondidas"
-        Else
-            Debug.Print "[RecopilarRespuestas] Frame " & fraName & " NO ENCONTRADO"
-        End If
+        End If  ' Cierre de If Not fraContainer Is Nothing
         
         secIdx = secIdx + 1
     Next sec
-    
-    Debug.Print "[RecopilarRespuestas] ===== TOTAL RECOPILADO: " & mRespuestas.Count & " respuestas ====="
     
     Exit Sub
     
@@ -2393,76 +2766,94 @@ End Sub
 ' ======================================================================
 
 ' ----------------------------------------------------------------------
+' btnToggleRecurrente_Click
+' Propósito: Evento disparado cuando el USUARIO hace clic en el botón toggle
+'            Alterna entre mostrar/ocultar el frame de inspección recurrente
+'            Actualiza el caption del botón según el estado
+'            IMPORTANTE: Actualiza mEsInspeccionRecurrente para mantener
+'            consistencia con el resto del sistema
 ' ----------------------------------------------------------------------
-' chkEsRecurrente_Click
-' Propósito: Evento disparado cuando el USUARIO hace clic en el checkbox
-'            Actualiza variables y controles según el estado del checkbox
-'            Usa flag mActualizandoCheckbox para prevenir recursión
-' ----------------------------------------------------------------------
-Private Sub chkEsRecurrente_Click()
+Private Sub btnToggleRecurrente_Click()
     On Error GoTo ErrorHandler
     
-    ' PREVENIR RECURSIÓN: Si estamos actualizando programáticamente, salir
-    If mActualizandoCheckbox Then Exit Sub
-    
-    ' Debug.Print "[RECURRENT] Click del USUARIO - Valor: " & chkEsRecurrente.Value
-    
-    If chkEsRecurrente.Value = True Then
+    If mEsInspeccionRecurrente Then
+        ' ===== DESACTIVAR MODO RECURRENTE =====
+        mEsInspeccionRecurrente = False
+        mModoRecurrenteManual = False
+        fraRecurrentInspection.Visible = False
+        btnToggleRecurrente.Caption = "Activar Modo Recurrente"
+        
+        ' Limpiar campos
+        txtNumeroInspeccion.Value = ""
+        txtRPNAnteriorManual.Value = ""
+        txtRPNAnteriorAuto.Value = ""
+        txtPorcRecuperacion.Value = ""
+        txtPorcOOL.Value = ""
+        lblInfoHistorico.Caption = "(Info de inspecciones previas aparecerá aquí)"
+        lblInfoHistorico.ForeColor = &H808080  ' Gris
+    Else
         ' ===== ACTIVAR MODO RECURRENTE =====
-        ' Debug.Print "[RECURRENT] Activando modo recurrente..."
-        
         mEsInspeccionRecurrente = True
+        mModoRecurrenteManual = True  ' Activación manual
         
-        ' Mostrar controles
+        ' Configurar factores adicionales según tipo de checklist
+        Call ConfigurarFactoresAdicionales(mPuesto)
+        
+        fraRecurrentInspection.Visible = True
+        fraRecurrentInspection.ZOrder 1  ' Frame al fondo
+        btnToggleRecurrente.ZOrder 0      ' Botón al frente
+        btnToggleRecurrente.Caption = "Desactivar Modo Recurrente"
+        
+        ' Mostrar controles básicos
         lblNumeroInspeccion.Visible = True
         txtNumeroInspeccion.Visible = True
         lblRPNAnterior.Visible = True
+        txtRPNAnteriorManual.Visible = True
         lblModoRPN.Visible = True
         
-        ' Asignar valores por defecto
-        If mNumeroInspeccion <= 1 Then
-            mNumeroInspeccion = 2
-            txtNumeroInspeccion.Value = "2"
-        Else
-            txtNumeroInspeccion.Value = CStr(mNumeroInspeccion)
-        End If
+        ' MODO MANUAL: Habilitar edición de número de inspección
+        txtNumeroInspeccion.Locked = False
+        txtNumeroInspeccion.BackColor = &HFFFFFF  ' Blanco
+        txtNumeroInspeccion.Value = ""  ' Vacío para que el usuario ingrese
         
-        ' Debug.Print "[RECURRENT] Modo recurrente ACTIVADO - Número: " & mNumeroInspeccion
-    Else
-        ' ===== DESACTIVAR MODO RECURRENTE =====
-        ' Debug.Print "[RECURRENT] Desactivando modo recurrente..."
-        
-        ' Ocultar todos los controles
-        lblNumeroInspeccion.Visible = False
-        txtNumeroInspeccion.Visible = False
-        lblRPNAnterior.Visible = False
-        txtRPNAnteriorAuto.Visible = False
-        txtRPNAnteriorManual.Visible = False
-        lblModoRPN.Visible = False
-        
-        ' Resetear TODAS las variables
-        mEsInspeccionRecurrente = False
-        mNumeroInspeccion = 1
-        mRPNAnteriorManual = 0
-        mRPNAnteriorAuto = 0
-        mIDInspeccionAnterior = ""
-        mModoRPN = "NINGUNO"
-        
-        ' Limpiar valores de controles
-        txtNumeroInspeccion.Value = ""
-        txtRPNAnteriorAuto.Value = ""
+        ' Mostrar textbox manual para RPN
+        txtRPNAnteriorManual.Visible = True
+        txtRPNAnteriorManual.Locked = False
+        txtRPNAnteriorManual.BackColor = &HFFFFFF
         txtRPNAnteriorManual.Value = ""
-        lblModoRPN.Caption = "[Modo RPN: no determinado]"
-        lblInfoHistorico.Caption = "(Info de inspecciones previas aparecerá aquí)"
-        lblInfoHistorico.ForeColor = &H808080
+        txtRPNAnteriorAuto.Visible = False
         
-        ' Debug.Print "[RECURRENT] Modo recurrente DESACTIVADO - Todo reseteado"
+        ' Configurar modo RPN
+        mModoRPN = "MANUAL"
+        lblModoRPN.Caption = "[Modo MANUAL - Carga de datos históricos]" & vbCrLf & _
+                            "Ingrese los valores de la inspección anterior realizada"
+        lblModoRPN.ForeColor = &HFF8000  ' Naranja (indica que es manual)
+        
+        ' Mostrar mensaje informativo
+        lblInfoHistorico.Caption = "MODO CARGA MANUAL: Ingrese los datos de la inspección anterior" & vbCrLf & _
+                                  "(inspección realizada pero no registrada en el sistema)"
+        lblInfoHistorico.ForeColor = &HFF8000  ' Naranja
+        
+        ' Mostrar factores adicionales si aplica
+        If mRequiereFactoresAdicionales Then
+            lblPorcRecuperacion.Visible = True
+            txtPorcRecuperacion.Visible = True
+            txtPorcRecuperacion.Locked = False
+            txtPorcRecuperacion.BackColor = &HFFFFFF
+            txtPorcRecuperacion.Value = ""
+            
+            lblPorcOOL.Visible = True
+            txtPorcOOL.Visible = True
+            txtPorcOOL.Locked = False
+            txtPorcOOL.BackColor = &HFFFFFF
+            txtPorcOOL.Value = ""
+        End If
     End If
     
     Exit Sub
     
 ErrorHandler:
-    Call ErrorLogger2.Log("frmChecklistVirtual.chkEsRecurrente_Click", Err.Description, Err.Number)
+    Call ErrorLogger2.Log("frmChecklistVirtual.btnToggleRecurrente_Click", Err.Description, Err.Number)
 End Sub
 
 ' ----------------------------------------------------------------------
@@ -2476,81 +2867,76 @@ End Sub
 Private Sub BuscarHistorialSilencioso()
     On Error GoTo ErrorHandler
     
-    Debug.Print "[AUTO-BUSCAR] ===== Búsqueda automática de historial al iniciar ====="
-    Debug.Print "[AUTO-BUSCAR] Evaluado: [" & mEvaluado & "]"
-    Debug.Print "[AUTO-BUSCAR] Puesto: [" & Me.txtPuesto.Value & "]"
-    Debug.Print "[AUTO-BUSCAR] IDPlantilla: [" & mIDPlantilla & "]"
-    
     ' Validar datos mínimos (silencioso, sin mensajes)
     If Len(Trim(mEvaluado)) = 0 Or Len(Trim(Me.txtPuesto.Value)) = 0 Then
-        Debug.Print "[AUTO-BUSCAR] Datos incompletos, ocultando frame recurrente"
         fraRecurrentInspection.Visible = False
         Exit Sub
     End If
     
     ' Buscar inspecciones previas
+    ' CRITERIO RECURRENCIA: Solo iniciales + puesto (sin filtrar por área/planta)
     Dim inspecciones As Object
     Dim iniciales As String
     Dim puestoEval As String
-    Dim plantillaID As String
     
     iniciales = Trim(mEvaluado)
     puestoEval = Trim(Me.txtPuesto.Value)
-    plantillaID = Trim(mIDPlantilla)
+    
+    Debug.Print "[AUTO-BUSCAR] Criterio: Iniciales='" & iniciales & "' + Puesto='" & puestoEval & "' (sin filtro de plantilla)"
     
     On Error Resume Next
     Set inspecciones = InspectionHistoryService.BuscarInspeccionesPrevias( _
-        iniciales, True, puestoEval, plantillaID)
+        iniciales, True, puestoEval, "")
     
     ' Verificar si hubo error
     If Err.Number <> 0 Then
         Debug.Print "[AUTO-BUSCAR] ERROR en BuscarInspeccionesPrevias: " & Err.Number & " - " & Err.Description
+        Err.Clear
         fraRecurrentInspection.Visible = False
         Exit Sub
     End If
+    Err.Clear  ' Limpiar cualquier error residual
     On Error GoTo ErrorHandler
     
     ' Verificar resultado
     If inspecciones Is Nothing Then
-        Debug.Print "[AUTO-BUSCAR] BuscarInspeccionesPrevias devolvió Nothing"
         fraRecurrentInspection.Visible = False
         Exit Sub
     End If
     
-    Debug.Print "[AUTO-BUSCAR] Inspecciones encontradas: " & inspecciones.Count
-    
     ' ===== SI NO HAY HISTORIAL =====
     If inspecciones.Count = 0 Then
-        Debug.Print "[AUTO-BUSCAR] Sin historial previo - Ocultando frame recurrente"
+        Debug.Print "[AUTO-BUSCAR] Sin historial previo - No se encontraron inspecciones anteriores"
+        Debug.Print "[AUTO-BUSCAR] Frame oculto - El usuario podrá activar modo recurrente manualmente si lo desea"
+        ' Ocultar frame de inspección recurrente
         fraRecurrentInspection.Visible = False
+        btnToggleRecurrente.Caption = "Activar Modo Recurrente"
         Exit Sub
     End If
     
     ' ===== SI HAY HISTORIAL: ACTIVAR MODO RECURRENTE AUTOMÁTICAMENTE =====
     Debug.Print "[AUTO-BUSCAR] Historial encontrado - Activando modo recurrente automáticamente"
     
-    ' Obtener última inspección
+    ' Obtener última inspección (sin filtro de plantilla)
     Dim ultInsp As Object
     
     On Error Resume Next
     Set ultInsp = InspectionHistoryService.ObtenerUltimaInspeccion( _
-        iniciales, True, puestoEval, plantillaID)
+        iniciales, True, puestoEval, "")
     
     If Err.Number <> 0 Then
         Debug.Print "[AUTO-BUSCAR] ERROR en ObtenerUltimaInspeccion: " & Err.Number & " - " & Err.Description
+        Err.Clear
         fraRecurrentInspection.Visible = False
         Exit Sub
     End If
+    Err.Clear  ' Limpiar cualquier error residual
     On Error GoTo ErrorHandler
     
     If ultInsp Is Nothing Then
-        Debug.Print "[AUTO-BUSCAR] ObtenerUltimaInspeccion devolvió Nothing (inconsistencia)"
         fraRecurrentInspection.Visible = False
         Exit Sub
     End If
-    
-    Debug.Print "[AUTO-BUSCAR] Última inspección obtenida: " & ultInsp("IDInspeccion")
-    Debug.Print "[AUTO-BUSCAR] Verificando campo RPN..."
     
     ' Validar que el campo RPN existe
     On Error Resume Next
@@ -2559,28 +2945,38 @@ Private Sub BuscarHistorialSilencioso()
     If Err.Number <> 0 Then
         Debug.Print "[AUTO-BUSCAR] ERROR: Campo 'RPN' no existe en ultInsp. Error: " & Err.Description
         Debug.Print "[AUTO-BUSCAR] Campos disponibles: " & Join(ultInsp.Keys, ", ")
+        Err.Clear
         fraRecurrentInspection.Visible = False
         Exit Sub
     End If
+    Err.Clear  ' Limpiar cualquier error residual
     On Error GoTo ErrorHandler
-    
-    Debug.Print "[AUTO-BUSCAR] Campo RPN existe. Valor: " & tempRPN
-    
-    ' Activar checkbox (usando flag para evitar disparar evento)
-    mActualizandoCheckbox = True
-    chkEsRecurrente.Value = True
-    mActualizandoCheckbox = False
     
     ' Actualizar variable interna
     mEsInspeccionRecurrente = True
     
-    ' Mostrar frame y controles
+    ' Configurar factores adicionales según tipo de checklist
+    Call ConfigurarFactoresAdicionales(mPuesto)
+    
+    ' Mostrar frame y controles básicos
     fraRecurrentInspection.Visible = True
+    
+    ' CRÍTICO: Traer botón al frente para que no sea cubierto por el frame
+    btnToggleRecurrente.ZOrder 0
+    
     lblNumeroInspeccion.Visible = True
     txtNumeroInspeccion.Visible = True
     lblRPNAnterior.Visible = True
     txtRPNAnteriorAuto.Visible = True
     lblModoRPN.Visible = True
+    
+    ' Mostrar factores adicionales SOLO si aplica
+    If mRequiereFactoresAdicionales Then
+        lblPorcRecuperacion.Visible = True
+        txtPorcRecuperacion.Visible = True
+        lblPorcOOL.Visible = True
+        txtPorcOOL.Visible = True
+    End If
     
     ' Calcular número de inspección
     Dim numInspeccion As Long
@@ -2599,25 +2995,30 @@ Private Sub BuscarHistorialSilencioso()
     ' Guardar ID de inspección anterior
     mIDInspeccionAnterior = ultInsp("IDInspeccion")
     
-    Debug.Print "[AUTO-BUSCAR] Datos cargados:"
-    Debug.Print "  Número inspección siguiente: " & numInspeccion
-    Debug.Print "  RPN Anterior: " & rpnAnterior
-    Debug.Print "  mRPNAnteriorAuto asignado: " & mRPNAnteriorAuto
-    Debug.Print "  ID Inspección Anterior: " & mIDInspeccionAnterior
-    
     ' Actualizar etiqueta informativa
     Dim fechaInsp As String
-    fechaInsp = Format(ultInsp("FechaInspeccion"), "dd/mm/yyyy")
+    If ultInsp.Exists("FechaInspeccion") Then
+        On Error Resume Next
+        fechaInsp = Format(CDate(ultInsp("FechaInspeccion")), "dd/mm/yyyy")
+        If Err.Number <> 0 Then
+            fechaInsp = CStr(ultInsp("FechaInspeccion"))  ' Si falla, mostrar como texto
+            Err.Clear
+        End If
+        Err.Clear  ' Limpiar cualquier error residual
+        On Error GoTo ErrorHandler
+    Else
+        fechaInsp = "(sin fecha)"
+    End If
+    
     lblInfoHistorico.Caption = "Última: " & fechaInsp & " | RPN: " & Format(rpnAnterior, "0.00")
     lblInfoHistorico.ForeColor = &H8000&  ' Verde
     
-    Debug.Print "[AUTO-BUSCAR] Modo recurrente activado automáticamente - Inspección #" & numInspeccion
-    Debug.Print "[AUTO-BUSCAR] ===== FIN Búsqueda automática - ÉXITO ====="
+    ' Actualizar caption del botón
+    btnToggleRecurrente.Caption = "Desactivar Modo Recurrente"
     
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "[AUTO-BUSCAR] ERROR inesperado: " & Err.Number & " - " & Err.Description
     ' En caso de error, ocultar frame para no confundir al usuario
     On Error Resume Next
     fraRecurrentInspection.Visible = False
@@ -2633,14 +3034,8 @@ End Sub
 Private Sub btnBuscarHistorico_Click()
     On Error GoTo ErrorHandler
     
-    Debug.Print "[BUSCAR] ===== INICIO Búsqueda de historial ====="
-    Debug.Print "[BUSCAR] Evaluado: [" & mEvaluado & "]"
-    Debug.Print "[BUSCAR] Puesto: [" & Me.txtPuesto.Value & "]"
-    Debug.Print "[BUSCAR] IDPlantilla: [" & mIDPlantilla & "]"
-    
     ' Validar que hay personal seleccionado
     If Len(Trim(mEvaluado)) = 0 Then
-        Debug.Print "[BUSCAR] ERROR: mEvaluado está vacío"
         MsgBox "Error: No se ha definido el personal evaluado (Iniciales)." & vbCrLf & vbCrLf & _
                "Por favor, regrese al selector y elija el personal a inspeccionar.", _
                vbExclamation, "Datos incompletos"
@@ -2648,45 +3043,38 @@ Private Sub btnBuscarHistorico_Click()
     End If
     
     If Len(Trim(Me.txtPuesto.Value)) = 0 Then
-        Debug.Print "[BUSCAR] ERROR: Puesto está vacío"
         MsgBox "Error: No se ha definido el puesto del personal." & vbCrLf & vbCrLf & _
                "Por favor, regrese al selector y elija el puesto a inspeccionar.", _
                vbExclamation, "Datos incompletos"
         Exit Sub
     End If
     
-    If Len(Trim(mIDPlantilla)) = 0 Then
-        Debug.Print "[BUSCAR] ADVERTENCIA: IDPlantilla está vacío"
-    End If
-    
     ' Buscar inspecciones previas usando InspectionHistoryService
-    ' Parámetros: iniciales, filtroPorPuesto=True, puesto, idPlantilla=""
+    ' CRITERIO RECURRENCIA: Solo iniciales + puesto (sin filtrar por área/planta)
     Dim inspecciones As Object
     Dim iniciales As String
     Dim puestoEval As String
-    Dim plantillaID As String
     
     iniciales = Trim(mEvaluado)
     puestoEval = Trim(Me.txtPuesto.Value)
-    plantillaID = Trim(mIDPlantilla)
     
     Debug.Print "[BUSCAR] Llamando a InspectionHistoryService.BuscarInspeccionesPrevias..."
     Debug.Print "[BUSCAR]   - iniciales: [" & iniciales & "]"
     Debug.Print "[BUSCAR]   - filtroPorPuesto: True"
     Debug.Print "[BUSCAR]   - puesto: [" & puestoEval & "]"
-    Debug.Print "[BUSCAR]   - plantillaID: [" & plantillaID & "]"
+    Debug.Print "[BUSCAR]   - plantillaID: [''] (SIN FILTRO - Recurrencia por persona+puesto solamente)"
     
     On Error Resume Next
     Set inspecciones = InspectionHistoryService.BuscarInspeccionesPrevias( _
-        iniciales, True, puestoEval, plantillaID)
+        iniciales, True, puestoEval, "")
     
     ' Verificar si hubo error en la llamada
     If Err.Number <> 0 Then
         Dim errNum As Long: errNum = Err.Number
         Dim errDesc As String: errDesc = Err.Description
-        On Error GoTo ErrorHandler
+        Err.Clear  ' Limpiar error antes de continuar
+        On Error GoTo 0  ' Desactivar manejo temporal
         
-        Debug.Print "[BUSCAR] ERROR en BuscarInspeccionesPrevias: " & errNum & " - " & errDesc
         MsgBox "Error al buscar inspecciones previas:" & vbCrLf & vbCrLf & _
                "Número: " & errNum & vbCrLf & _
                "Descripción: " & errDesc & vbCrLf & vbCrLf & _
@@ -2694,90 +3082,155 @@ Private Sub btnBuscarHistorico_Click()
                vbCritical, "Error de búsqueda"
         Exit Sub
     End If
+    Err.Clear  ' Limpiar cualquier error residual
     On Error GoTo ErrorHandler
     
     ' Verificar que el resultado no sea Nothing
     If inspecciones Is Nothing Then
-        Debug.Print "[BUSCAR] ERROR: BuscarInspeccionesPrevias devolvió Nothing"
         MsgBox "Error: No se pudo realizar la búsqueda de inspecciones previas." & vbCrLf & vbCrLf & _
-               "El servicio de historial no respondió correctamente.", _
+               "El servicio de historial no respondió correctamente." & vbCrLf & vbCrLf & _
+               "Verifique que la tabla tblInspecciones existe y tiene datos.", _
                vbCritical, "Error de sistema"
         Exit Sub
     End If
     
-    Debug.Print "[BUSCAR] Inspecciones encontradas: " & inspecciones.Count
-    
     If inspecciones.Count = 0 Then
         ' No hay inspecciones anteriores
-        MsgBox "No se encontraron inspecciones anteriores para:" & vbCrLf & _
+        Dim respuesta As VbMsgBoxResult
+        respuesta = MsgBox("No se encontraron inspecciones anteriores para:" & vbCrLf & _
                "Personal: " & mEvaluado & vbCrLf & _
                "Puesto: " & Me.txtPuesto.Value & vbCrLf & vbCrLf & _
-               "Esta es la PRIMERA inspección de este puesto.", _
-               vbInformation, "Sin historial previo"
+               "Esta es la PRIMERA inspección según el sistema." & vbCrLf & vbCrLf & _
+               "¿Desea activar el modo recurrente para cargar datos de" & vbCrLf & _
+               "una inspección anterior realizada pero no registrada?" & vbCrLf & vbCrLf & _
+               "(Podrá ingresar manualmente: N° de inspección, RPN anterior, % Recuperación y % OOL)", _
+               vbQuestion + vbYesNo, "Cargar datos históricos")
         
-        ' DESACTIVAR modo recurrente (usando flag para evitar disparar evento Click)
-        mActualizandoCheckbox = True
-        chkEsRecurrente.Value = False
-        mActualizandoCheckbox = False
-        
-        ' Resetear variables y controles
-        mEsInspeccionRecurrente = False
-        mNumeroInspeccion = 1
-        mRPNAnteriorManual = 0
-        mRPNAnteriorAuto = 0
-        mIDInspeccionAnterior = ""
-        mModoRPN = "NINGUNO"
-        
-        ' Ocultar frame completo
-        fraRecurrentInspection.Visible = False
+        If respuesta = vbYes Then
+            ' ===== ACTIVAR MODO RECURRENTE MANUAL =====
+            mEsInspeccionRecurrente = True
+            mModoRecurrenteManual = True
+            mModoRPN = "MANUAL"
+            
+            ' Configurar factores adicionales según tipo de checklist
+            Call ConfigurarFactoresAdicionales(mPuesto)
+            
+            ' Mostrar frame y controles
+            fraRecurrentInspection.Visible = True
+            btnToggleRecurrente.ZOrder 0
+            
+            lblNumeroInspeccion.Visible = True
+            txtNumeroInspeccion.Visible = True
+            lblRPNAnterior.Visible = True
+            lblModoRPN.Visible = True
+            
+            ' MODO MANUAL: Permitir editar número de inspección
+            txtNumeroInspeccion.Locked = False
+            txtNumeroInspeccion.BackColor = &HFFFFFF
+            txtNumeroInspeccion.Value = "2"  ' Sugerir 2 como valor inicial (esta sería la segunda)
+            
+            ' Mostrar textbox manual para RPN
+            txtRPNAnteriorManual.Visible = True
+            txtRPNAnteriorManual.Locked = False
+            txtRPNAnteriorManual.BackColor = &HFFFFFF
+            txtRPNAnteriorManual.Value = ""
+            txtRPNAnteriorAuto.Visible = False
+            
+            ' Configurar labels informativos
+            lblModoRPN.Caption = "[Modo MANUAL - Carga de datos históricos]" & vbCrLf & _
+                                "Ingrese los valores de la inspección anterior realizada"
+            lblModoRPN.ForeColor = &HFF8000  ' Naranja
+            
+            lblInfoHistorico.Caption = "MODO CARGA MANUAL: Ingrese los datos de la inspección anterior" & vbCrLf & _
+                                      "(inspección realizada pero no registrada en el sistema)"
+            lblInfoHistorico.ForeColor = &HFF8000  ' Naranja
+            
+            ' Mostrar factores adicionales si aplica
+            If mRequiereFactoresAdicionales Then
+                lblPorcRecuperacion.Visible = True
+                txtPorcRecuperacion.Visible = True
+                txtPorcRecuperacion.Locked = False
+                txtPorcRecuperacion.BackColor = &HFFFFFF
+                txtPorcRecuperacion.Value = ""
+                
+                lblPorcOOL.Visible = True
+                txtPorcOOL.Visible = True
+                txtPorcOOL.Locked = False
+                txtPorcOOL.BackColor = &HFFFFFF
+                txtPorcOOL.Value = ""
+            End If
+            
+            ' Actualizar caption del botón
+            btnToggleRecurrente.Caption = "Desactivar Modo Recurrente"
+            
+            ' Mensaje de confirmación
+            MsgBox "Modo recurrente activado para carga manual." & vbCrLf & vbCrLf & _
+                   "Por favor, complete los siguientes campos:" & vbCrLf & _
+                   "• Número de inspección (ej: 2 si esta es la segunda)" & vbCrLf & _
+                   "• RPN anterior (0-100)" & vbCrLf & _
+                   IIf(mRequiereFactoresAdicionales, "• % Recuperación" & vbCrLf & "• % OOL" & vbCrLf, "") & vbCrLf & _
+                   "Estos datos corresponden a la inspección anterior realizada.", _
+                   vbInformation, "Modo manual activado"
+        Else
+            ' El usuario NO quiere cargar datos manuales
+            mEsInspeccionRecurrente = False
+            mModoRecurrenteManual = False
+            mNumeroInspeccion = 1
+            mRPNAnteriorManual = 0
+            mRPNAnteriorAuto = 0
+            mIDInspeccionAnterior = ""
+            mModoRPN = "NINGUNO"
+            
+            ' Ocultar frame completo
+            fraRecurrentInspection.Visible = False
+            
+            ' Actualizar caption del botón
+            btnToggleRecurrente.Caption = "Activar Modo Recurrente"
+        End If
         
         Exit Sub
     End If
     
-    ' Obtener la última inspección (función correcta: ObtenerUltimaInspeccion)
-    Debug.Print "[BUSCAR] Obteniendo última inspección..."
+    ' Obtener la última inspección (sin filtro de plantilla - criterio: persona+puesto)
     
     Dim ultInsp As Object
     
     On Error Resume Next
     Set ultInsp = InspectionHistoryService.ObtenerUltimaInspeccion( _
-        iniciales, True, puestoEval, plantillaID)
+        iniciales, True, puestoEval, "")
     
     ' Verificar si hubo error en la llamada
     If Err.Number <> 0 Then
         Dim errNum2 As Long: errNum2 = Err.Number
         Dim errDesc2 As String: errDesc2 = Err.Description
-        On Error GoTo ErrorHandler
+        Err.Clear  ' Limpiar error antes de continuar
+        On Error GoTo 0  ' Desactivar manejo temporal
         
-        Debug.Print "[BUSCAR] ERROR en ObtenerUltimaInspeccion: " & errNum2 & " - " & errDesc2
         MsgBox "Error al obtener la última inspección:" & vbCrLf & vbCrLf & _
                "Número: " & errNum2 & vbCrLf & _
                "Descripción: " & errDesc2, _
                vbCritical, "Error de búsqueda"
         Exit Sub
     End If
+    Err.Clear  ' Limpiar cualquier error residual
     On Error GoTo ErrorHandler
     
     If ultInsp Is Nothing Then
-        Debug.Print "[BUSCAR] ERROR: ObtenerUltimaInspeccion devolvió Nothing (esto no debería pasar si Count > 0)"
         MsgBox "Error interno: Se encontraron inspecciones pero no se pudo obtener la última." & vbCrLf & vbCrLf & _
                "Por favor, contacte al administrador del sistema.", _
                vbCritical, "Error de sistema"
         Exit Sub
     End If
     
-    Debug.Print "[BUSCAR] Última inspección obtenida: " & ultInsp("IDInspeccion")
-    
-    ' ACTIVAR modo recurrente (usando flag para evitar disparar evento Click)
-    mActualizandoCheckbox = True
-    chkEsRecurrente.Value = True
-    mActualizandoCheckbox = False
-    
     ' Actualizar variable interna
     mEsInspeccionRecurrente = True
     
     ' Mostrar frame y controles
     fraRecurrentInspection.Visible = True
+    
+    ' CRÍTICO: Traer botón al frente para que no sea cubierto por el frame
+    btnToggleRecurrente.ZOrder 0
+    
     lblNumeroInspeccion.Visible = True
     txtNumeroInspeccion.Visible = True
     lblRPNAnterior.Visible = True
@@ -2816,9 +3269,24 @@ Private Sub btnBuscarHistorico_Click()
     
     ' Mostrar información
     Dim fechaInsp As String
-    fechaInsp = Format(ultInsp("FechaInspeccion"), "DD/MM/YYYY")
+    If ultInsp.Exists("FechaInspeccion") Then
+        On Error Resume Next
+        fechaInsp = Format(CDate(ultInsp("FechaInspeccion")), "dd/mm/yyyy")
+        If Err.Number <> 0 Then
+            fechaInsp = CStr(ultInsp("FechaInspeccion"))  ' Si falla, mostrar como texto
+            Err.Clear
+        End If
+        Err.Clear  ' Limpiar cualquier error residual
+        On Error GoTo ErrorHandler
+    Else
+        fechaInsp = "(sin fecha)"
+    End If
+    
     lblInfoHistorico.Caption = "Última: " & ultInsp("IDInspeccion") & " (" & fechaInsp & ") - RPN: " & Format(rpnAnterior, "0.00")
     lblInfoHistorico.ForeColor = &H8000&  ' Verde
+    
+    ' Actualizar caption del botón
+    btnToggleRecurrente.Caption = "Desactivar Modo Recurrente"
     
     MsgBox "Historial actualizado correctamente:" & vbCrLf & vbCrLf & _
            "Inspecciones previas: " & inspecciones.Count & vbCrLf & _
@@ -2828,15 +3296,9 @@ Private Sub btnBuscarHistorico_Click()
            "Esta será la inspección #" & numInspeccion & " del puesto.", _
            vbInformation, "Historial actualizado"
     
-    Debug.Print "[BUSCAR] ===== FIN Búsqueda de historial - ÉXITO ====="
     Exit Sub
     
 ErrorHandler:
-    Debug.Print "[BUSCAR] ===== ERROR en btnBuscarHistorico_Click ====="
-    Debug.Print "[BUSCAR] Error Number: " & Err.Number
-    Debug.Print "[BUSCAR] Error Description: " & Err.Description
-    Debug.Print "[BUSCAR] Error Source: " & Err.Source
-    
     Call ErrorLogger2.Log("frmChecklistVirtual.btnBuscarHistorico_Click", Err.Description, Err.Number)
     
     ' Mensaje de error mejorado
@@ -2876,8 +3338,29 @@ Public Function ValidarDatosRecurrentes() As Boolean
     End If
     
     ' Validar número de inspección
+    ' En modo manual, el usuario debe ingresar el número
+    If mModoRecurrenteManual Then
+        If Len(Trim(txtNumeroInspeccion.Value)) = 0 Then
+            MsgBox "Debe ingresar el número de inspección." & vbCrLf & vbCrLf & _
+                   "Ejemplo: Si esta es la segunda inspección, ingrese 2.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        If Not IsNumeric(txtNumeroInspeccion.Value) Then
+            MsgBox "El número de inspección debe ser un valor numérico.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        mNumeroInspeccion = CLng(txtNumeroInspeccion.Value)
+    End If
+    
     If mNumeroInspeccion < 2 Then
-        MsgBox "El número de inspección debe ser >= 2 para inspecciones recurrentes.", _
+        MsgBox "El número de inspección debe ser >= 2 para inspecciones recurrentes." & vbCrLf & vbCrLf & _
+               "Si esta es la primera inspección, desactive el modo recurrente.", _
                vbExclamation, "Validación"
         ValidarDatosRecurrentes = False
         Exit Function
@@ -2922,6 +3405,63 @@ Public Function ValidarDatosRecurrentes() As Boolean
         mModoRPN = "MANUAL"
     End If
     
+    ' ═══════════════════════════════════════════════════════════════════
+    ' VALIDAR FACTORES ADICIONALES (FASE 6 - 23/04/2026)
+    ' Solo para checklists específicos: Operador, Muestreador, Ayudante 1, Ayudante 2
+    ' ═══════════════════════════════════════════════════════════════════
+    If mRequiereFactoresAdicionales Then
+        ' Validar % Recuperación
+        If Len(Trim(txtPorcRecuperacion.Value)) = 0 Then
+            MsgBox "Debe proporcionar el % Recuperación para inspecciones recurrentes de este tipo de checklist.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        If Not IsNumeric(txtPorcRecuperacion.Value) Then
+            MsgBox "El % Recuperación debe ser un valor numérico.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        mPorcRecuperacion = CDbl(txtPorcRecuperacion.Value)
+        If mPorcRecuperacion < 0 Then
+            MsgBox "El % Recuperación no puede ser negativo.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        ' Validar % OOL
+        If Len(Trim(txtPorcOOL.Value)) = 0 Then
+            MsgBox "Debe proporcionar el % OOL para inspecciones recurrentes de este tipo de checklist.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        If Not IsNumeric(txtPorcOOL.Value) Then
+            MsgBox "El % OOL debe ser un valor numérico.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+        
+        mPorcOOL = CDbl(txtPorcOOL.Value)
+        If mPorcOOL < 0 Then
+            MsgBox "El % OOL no puede ser negativo.", _
+                   vbExclamation, "Validación"
+            ValidarDatosRecurrentes = False
+            Exit Function
+        End If
+    Else
+        ' No requiere factores, resetear a 0
+        ' Se guardarán como 0 en la BD para evitar columnas vacías
+        mPorcRecuperacion = 0
+        mPorcOOL = 0
+    End If
+    
     ' Si llegamos aquí, todo es válido
     ' Debug.Print "Validación inspección recurrente OK:"
     ' Debug.Print "  Número inspección: " & mNumeroInspeccion
@@ -2939,3 +3479,66 @@ ErrorHandler:
     Call ErrorLogger2.Log("frmChecklistVirtual.ValidarDatosRecurrentes", Err.Description, Err.Number)
     ValidarDatosRecurrentes = False
 End Function
+
+' ----------------------------------------------------------------------
+' ConfigurarFactoresAdicionales
+' Propósito: Determina si requiere factores adicionales según el tipo de
+'            checklist y configura las etiquetas con el grado apropiado
+' Entrada:  puesto (String) - Puesto del evaluado
+' Salida:   Actualiza mRequiereFactoresAdicionales y labels
+' ----------------------------------------------------------------------
+Private Sub ConfigurarFactoresAdicionales(ByVal puesto As String)
+    On Error GoTo ErrorHandler
+    
+    Dim puestoUpper As String
+    puestoUpper = Trim(UCase(puesto))
+    
+    Dim grado As String
+    Dim requiere As Boolean
+    
+    ' Determinar si requiere factores y qué grado
+    If InStr(puestoUpper, "OPERADOR") > 0 Then
+        ' Operador → Grado A
+        requiere = True
+        grado = "Grado A"
+        
+    ElseIf InStr(puestoUpper, "MUESTREADOR") > 0 Or _
+           InStr(puestoUpper, "AYUDANTE 1") > 0 Or _
+           InStr(puestoUpper, "AYUDANTE 2") > 0 Then
+        ' Muestreador, Ayudante 1, Ayudante 2 → Grado B
+        requiere = True
+        grado = "Grado B"
+        
+    ElseIf InStr(puestoUpper, "TÉCNICO") > 0 Or _
+           InStr(puestoUpper, "TECNICO") > 0 Or _
+           InStr(puestoUpper, "SANITIZADOR") > 0 Then
+        ' Técnico Grado C, Técnico Grado D, Sanitizador → NO requiere
+        requiere = False
+        grado = ""
+        
+    Else
+        ' Tipo desconocido → NO requiere por seguridad
+        requiere = False
+        grado = ""
+        Debug.Print "[FACTORES] Tipo de checklist desconocido: " & puesto & " → NO requiere factores"
+    End If
+    
+    ' Guardar estado
+    mRequiereFactoresAdicionales = requiere
+    
+    ' Configurar labels
+    If requiere Then
+        lblPorcRecuperacion.Caption = "% Recuperación " & grado & ":"
+        lblPorcOOL.Caption = "% OOL " & grado & ":"
+        Debug.Print "[FACTORES] Configurado para " & puesto & " → Requiere factores (" & grado & ")"
+    Else
+        Debug.Print "[FACTORES] Configurado para " & puesto & " → NO requiere factores"
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Call ErrorLogger2.Log("frmChecklistVirtual.ConfigurarFactoresAdicionales", Err.Description, Err.Number)
+    ' En caso de error, asumir que NO requiere factores
+    mRequiereFactoresAdicionales = False
+End Sub

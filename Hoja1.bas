@@ -49,12 +49,99 @@ End Sub
 
 '' ----------------------------------------------------------------------
 ' Evento: Worksheet_BeforeDoubleClick
-' Propósito: DESHABILITADO - El flujo de inspecciones ahora usa botón con
-'            selector de Puesto → Personal → Plantilla.
+' Propósito: Detecta doble clic en una fila de tblResumenCronograma y abre
+'            frmSelectorInspeccion con los campos prellenados (Planta,
+'            Puesto, Personal e ID Plantilla).
+' Parámetros:
+'   Target: Celda donde se hizo doble clic
+'   Cancel: Cancela el comportamiento por defecto
+' Fecha implementación: 23/04/2026
 ' ----------------------------------------------------------------------
-' Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-'     ' FLUJO DESCARTADO: Ver CronogramaButtons.btnNuevaInspeccionDirecta_Click
-' End Sub
+Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+    On Error GoTo ErrorHandler
+    
+    Dim tblResumen As ListObject
+    Dim filaTabla As ListRow
+    Dim iniciales As String
+    Dim puesto As String
+    Dim idPlantilla As String
+    Dim idCronograma As String
+    Dim planta As String
+    
+    ' Obtener referencia a la tabla tblResumenCronograma
+    On Error Resume Next
+    Set tblResumen = Me.ListObjects(Configuration2.TABLE_RESUMEN_CRONOGRAMA)
+    On Error GoTo ErrorHandler
+    
+    ' Verificar que la tabla existe
+    If tblResumen Is Nothing Then Exit Sub
+    
+    ' Verificar que hay datos en la tabla
+    If tblResumen.DataBodyRange Is Nothing Then Exit Sub
+    
+    ' Verificar que el doble clic fue dentro del DataBodyRange
+    If Not Intersect(Target, tblResumen.DataBodyRange) Is Nothing Then
+        
+        ' Obtener la fila de la tabla donde se hizo doble clic
+        Set filaTabla = tblResumen.ListRows(Target.Row - tblResumen.Range.Row)
+        
+        ' Leer los valores de la fila
+        iniciales = Trim(filaTabla.Range.Cells(1, tblResumen.ListColumns("Iniciales").Index).Value)
+        puesto = Trim(filaTabla.Range.Cells(1, tblResumen.ListColumns("Puesto").Index).Value)
+        idPlantilla = Trim(filaTabla.Range.Cells(1, tblResumen.ListColumns("ID Plantilla").Index).Value)
+        idCronograma = Trim(filaTabla.Range.Cells(1, tblResumen.ListColumns("ID Cronograma").Index).Value)
+        
+        ' Validar que tenemos los datos mínimos
+        If Len(iniciales) = 0 Or Len(puesto) = 0 Or Len(idPlantilla) = 0 Then
+            MsgBox "Datos incompletos en la fila seleccionada.", vbExclamation, "Error"
+            Cancel = True
+            Exit Sub
+        End If
+        
+        ' Obtener la planta del personal usando ChecklistRepository
+        planta = ChecklistRepository.ObtenerPlantaPersonal(iniciales)
+        
+        If Len(planta) = 0 Then
+            MsgBox "No se pudo obtener la planta del personal '" & iniciales & "'." & vbCrLf & _
+                   "Verifique que el personal esté registrado en tblPersonal.", _
+                   vbExclamation, "Error"
+            Cancel = True
+            Exit Sub
+        End If
+        
+        ' Cancelar el comportamiento por defecto del doble clic
+        Cancel = True
+        
+        ' Crear y configurar el formulario de selección con valores prellenados
+        Dim frmSelector As frmSelectorInspeccion
+        Set frmSelector = New frmSelectorInspeccion
+        
+        ' Prellenar los valores iniciales
+        frmSelector.PlantaInicial = planta
+        frmSelector.PuestoInicial = puesto
+        frmSelector.PersonalInicial = iniciales
+        frmSelector.IDPlantillaInicial = idPlantilla
+        
+        ' IMPORTANTE: Aplicar prellenado DESPUÉS de asignar las propiedades
+        frmSelector.AplicarPrellenado
+        
+        ' Mostrar el formulario de forma modal
+        frmSelector.Show vbModal
+        
+        ' Liberar referencia
+        Set frmSelector = Nothing
+        
+        ' Refrescar el cronograma por si hubo cambios
+        Call CronogramaResumen.RefrescarResumenCronograma
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    Cancel = True
+    Debug.Print "[Menú principal.BeforeDoubleClick] ERROR: " & Err.Description
+    Call ErrorLogger2.Log("Menú principal.Worksheet_BeforeDoubleClick", Err.Description, Err.Number)
+End Sub
 
 '' ----------------------------------------------------------------------
 ' Evento: Worksheet_Deactivate

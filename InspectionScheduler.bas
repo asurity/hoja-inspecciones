@@ -428,7 +428,6 @@ Private Sub ActualizarRegistroCronogramaInterno( _
         .Cells(1, tblCronograma.ListColumns("Total inspecciones").Index).Value = totalInspecciones
         
         If encontradaInspeccion Then
-            .Cells(1, tblCronograma.ListColumns("Fecha primera inspeccion").Index).Value = "" ' Se puede calcular si se necesita
             .Cells(1, tblCronograma.ListColumns("Fecha ultima inspeccion").Index).Value = ultimaFecha
             .Cells(1, tblCronograma.ListColumns("ID Ultima inspeccion").Index).Value = ultimoID
             .Cells(1, tblCronograma.ListColumns("RPN ultima inspeccion").Index).Value = ultimoRPN
@@ -437,7 +436,6 @@ Private Sub ActualizarRegistroCronogramaInterno( _
             .Cells(1, tblCronograma.ListColumns("Dias para vencimiento").Index).Value = diasVencimiento
         Else
             ' Limpiar campos si nunca ha sido inspeccionado
-            .Cells(1, tblCronograma.ListColumns("Fecha primera inspeccion").Index).Value = ""
             .Cells(1, tblCronograma.ListColumns("Fecha ultima inspeccion").Index).Value = ""
             .Cells(1, tblCronograma.ListColumns("ID Ultima inspeccion").Index).Value = ""
             .Cells(1, tblCronograma.ListColumns("RPN ultima inspeccion").Index).Value = ""

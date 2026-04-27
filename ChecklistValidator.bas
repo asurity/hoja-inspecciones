@@ -382,6 +382,90 @@ ErrorHandler:
 End Function
 
 '' ======================================================================
+' Función: CorregirYValidarFechaVencimiento
+' Propósito: Intenta convertir entrada de fecha de VENCIMIENTO a formato dd-mm-yyyy.
+'            VALIDA que la fecha sea FUTURA (no vencida).
+'            Acepta múltiples formatos: dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd, etc.
+' Parámetros:
+'   fechaStr: Cadena con fecha a corregir
+' Retorna: Dictionary con:
+'   "valido": True/False
+'   "valor": Fecha en formato dd-mm-yyyy (si válido) o vacío (si inválido)
+'   "mensaje": Mensaje para el usuario
+' FASE 7 - 23/04/2026
+' ACTUALIZADO: 24/04/2026 - Validación de fecha futura obligatoria
+' ======================================================================
+Public Function CorregirYValidarFechaVencimiento(ByVal fechaStr As String) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim resultado As Object
+    Set resultado = CreateObject("Scripting.Dictionary")
+    resultado("valido") = False
+    resultado("valor") = ""
+    resultado("mensaje") = ""
+    
+    ' Limpiar espacios
+    fechaStr = Trim(fechaStr)
+    
+    ' Validar que no esté vacío
+    If fechaStr = "" Then
+        resultado("mensaje") = "El campo de fecha está vacío."
+        Set CorregirYValidarFechaVencimiento = resultado
+        Exit Function
+    End If
+    
+    ' Intentar interpretar como fecha
+    Dim fechaDate As Date
+    Dim esValida As Boolean
+    esValida = False
+    
+    On Error Resume Next
+    fechaDate = CDate(fechaStr)
+    If Err.Number = 0 Then esValida = True
+    On Error GoTo ErrorHandler
+    
+    If Not esValida Then
+        resultado("mensaje") = "Fecha no válida. Use formato dd-mm-yyyy o dd/mm/yyyy."
+        Set CorregirYValidarFechaVencimiento = resultado
+        Exit Function
+    End If
+    
+    ' VALIDACIÓN CRÍTICA: La fecha de vencimiento DEBE ser mayor a la fecha actual
+    ' Si está vencida, el personal NO puede realizar la inspección
+    If fechaDate <= Date Then
+        resultado("mensaje") = "La fecha de vencimiento ya pasó (" & Format(fechaDate, "dd/mm/yyyy") & "). " & _
+                               "La calificación está vencida y debe renovarse antes de realizar la inspección."
+        Set CorregirYValidarFechaVencimiento = resultado
+        Exit Function
+    End If
+    
+    ' Convertir al formato dd-mm-yyyy
+    Dim fechaCorregida As String
+    fechaCorregida = Format(fechaDate, "dd-mm-yyyy")
+    
+    ' Comparar con original
+    Dim esCambio As Boolean
+    esCambio = (Format(fechaDate, "dd-mm-yyyy") <> fechaStr)
+    
+    resultado("valido") = True
+    resultado("valor") = fechaCorregida
+    
+    If esCambio Then
+        resultado("mensaje") = "Fecha convertida a formato dd-mm-yyyy: " & fechaCorregida
+    Else
+        resultado("mensaje") = ""
+    End If
+    
+    Set CorregirYValidarFechaVencimiento = resultado
+    Exit Function
+    
+ErrorHandler:
+    resultado("mensaje") = "Error al validar fecha: " & Err.Description
+    Call ErrorLogger2.Log("ChecklistValidator.CorregirYValidarFechaVencimiento", Err.Description, Err.Number)
+    Set CorregirYValidarFechaVencimiento = resultado
+End Function
+
+'' ======================================================================
 ' Función: CorregirYValidarHora
 ' Propósito: Intenta convertir entrada de hora a formato HH:MM.
 '            Acepta: HH:MM, HHMM, H:MM, etc.
@@ -609,6 +693,56 @@ Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
         End If
     End If
     
+    ' ═══════════════════════════════════════════════════════════════════
+    ' VALIDAR CALIFICACIONES (FASE 7 - 23/04/2026)
+    ' Solo para puestos: Operador, Ayudante 1, Ayudante 2, Sanitizador
+    ' ═══════════════════════════════════════════════════════════════════
+    If RequiereCalificaciones(frm) Then
+        ' --- Calificación Vestuario (obligatorio) ---
+        If Trim(frm.cboCalificacionVestuario.Value) = "" Then
+            errores.Add "Debe seleccionar la Calificación de Vestuario (Si/No)."
+        End If
+        
+        ' --- Fecha Vencimiento Vestuario (opcional, pero si existe debe ser válida) ---
+        Dim fechaVencVestuario As String
+        fechaVencVestuario = Trim(frm.txtFechaVencVestuario.Value)
+        If fechaVencVestuario <> "" Then
+            Dim resultFechaVencVestuario As Object
+            Set resultFechaVencVestuario = CorregirYValidarFechaVencimiento(fechaVencVestuario)
+            
+            If resultFechaVencVestuario("valido") Then
+                frm.txtFechaVencVestuario.Value = resultFechaVencVestuario("valor")
+                If resultFechaVencVestuario("mensaje") <> "" Then
+                    correcciones.Add resultFechaVencVestuario("mensaje")
+                End If
+            Else
+                errores.Add "Fecha Venc. Vestuario: " & resultFechaVencVestuario("mensaje")
+            End If
+        End If
+        
+        ' --- Calificación Operador (obligatorio) ---
+        If Trim(frm.cboCalificacionOperador.Value) = "" Then
+            errores.Add "Debe seleccionar la Calificación de Operador (Si/No)."
+        End If
+        
+        ' --- Fecha Vencimiento Operador (opcional, pero si existe debe ser válida) ---
+        Dim fechaVencOperador As String
+        fechaVencOperador = Trim(frm.txtFechaVencOperador.Value)
+        If fechaVencOperador <> "" Then
+            Dim resultFechaVencOperador As Object
+            Set resultFechaVencOperador = CorregirYValidarFechaVencimiento(fechaVencOperador)
+            
+            If resultFechaVencOperador("valido") Then
+                frm.txtFechaVencOperador.Value = resultFechaVencOperador("valor")
+                If resultFechaVencOperador("mensaje") <> "" Then
+                    correcciones.Add resultFechaVencOperador("mensaje")
+                End If
+            Else
+                errores.Add "Fecha Venc. Operador: " & resultFechaVencOperador("mensaje")
+            End If
+        End If
+    End If
+    
     ' --- Construir resultado final ---
     Dim errorArray() As String
     Dim corrArray() As String
@@ -640,4 +774,31 @@ ErrorHandler:
     resultado("errores") = errorArray
     Call ErrorLogger2.Log("ChecklistValidator.ValidarCabeceraConAutoCorrecion", Err.Description, Err.Number)
     Set ValidarCabeceraConAutoCorrecion = resultado
+End Function
+
+'' ----------------------------------------------------------------------
+' Función: RequiereCalificaciones
+' Propósito: Determina si el puesto actual requiere validación de
+'            calificaciones de vestuario y operador.
+' Parámetros:
+'   frm: Referencia al formulario frmChecklistVirtual
+' Retorna: True si el puesto es: Operador, Ayudante 1, Ayudante 2, Sanitizador
+' FASE 7 - 23/04/2026
+' ----------------------------------------------------------------------
+Private Function RequiereCalificaciones(ByRef frm As Object) As Boolean
+    On Error GoTo ErrorHandler
+    
+    Dim puestoUpper As String
+    puestoUpper = UCase(Trim(frm.txtPuesto.Value))
+    
+    ' Lista de puestos que requieren calificaciones
+    RequiereCalificaciones = (puestoUpper = "OPERADOR" Or _
+                             puestoUpper = "AYUDANTE 1" Or _
+                             puestoUpper = "AYUDANTE 2" Or _
+                             puestoUpper = "SANITIZADOR")
+    Exit Function
+    
+ErrorHandler:
+    RequiereCalificaciones = False
+    Call ErrorLogger2.Log("ChecklistValidator.RequiereCalificaciones", Err.Description, Err.Number)
 End Function

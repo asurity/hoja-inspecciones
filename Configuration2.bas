@@ -67,6 +67,21 @@ Public Const AUDIT_BASE_NAME    As String = "Audit trail"
 Public Const AUDIT_TABLE_PREFIX As String = "tblAudit"
 
 ' ============================================================================
+' VALORES ESPECIALES - FASE 1: Estandarización
+' Última actualización: 24/04/2026 - Centralización del valor "No Aplica"
+' ============================================================================
+
+' ----------------------------------------------------------------------
+' Constante: VALOR_NO_APLICA
+' Propósito: Valor estándar para campos opcionales que no tienen dato.
+'            Reemplaza todas las variaciones: "NA", "n/a", "N.A.", "", etc.
+' Uso: Todos los módulos que escriben/leen campos opcionales
+'      InspectionRepository, InspectionCalculator, CertificadoPDFGenerator
+' Nota: Usar función EsValorNoAplica() para verificar si un valor es "N/A"
+' ----------------------------------------------------------------------
+Public Const VALOR_NO_APLICA As String = "N/A"
+
+' ============================================================================
 ' CONFIGURACIÓN DE INTERFAZ Y NAVEGACIÓN
 ' Última actualización: 12/03/2026 - Refactorización para portabilidad
 ' ============================================================================
@@ -264,6 +279,41 @@ Public Function GetOrdenCriticidadPuestos() As Variant
     )
 End Function
 
+' ----------------------------------------------------------------------
+' Función: EsValorNoAplica
+' Propósito: Detectar todas las variaciones de "No Aplica" de manera
+'            consistente en todo el sistema.
+' Parámetros:
+'   valor - Valor a verificar (puede ser String, Variant, Null, Empty)
+' Retorna: True si el valor representa "No Aplica"
+' Última actualización: 24/04/2026 - FASE 1: Estandarización
+' Uso: InspectionRepository, InspectionCalculator, CertificadoPDFGenerator
+' Ejemplos:
+'   EsValorNoAplica("N/A")      → True
+'   EsValorNoAplica("NA")       → True
+'   EsValorNoAplica("n/a")      → True
+'   EsValorNoAplica("")         → True
+'   EsValorNoAplica("Si")       → False
+' ----------------------------------------------------------------------
+Public Function EsValorNoAplica(ByVal valor As Variant) As Boolean
+    ' Manejar valores nulos o vacíos
+    If IsNull(valor) Or IsEmpty(valor) Then
+        EsValorNoAplica = False
+        Exit Function
+    End If
+    
+    ' Convertir a string en mayúsculas para comparación
+    Dim valorStr As String
+    valorStr = Trim(UCase(CStr(valor)))
+    
+    ' Detectar todas las variaciones conocidas
+    EsValorNoAplica = (valorStr = "N/A" Or _
+                       valorStr = "NA" Or _
+                       valorStr = "N.A." Or _
+                       valorStr = "NO APLICA" Or _
+                       valorStr = "")
+End Function
+
 ' ============================================================================
 ' DOCUMENTACIÓN: ESTRUCTURA DE TABLAS VERIFICADAS
 ' Última verificación: 14/04/2026
@@ -277,33 +327,28 @@ End Function
 ' TABLA: tblCronogramaInspecciones
 ' Ubicación: Hoja "Cronograma"
 ' Propósito: Registro maestro de cronogramas de inspección por persona/puesto
-' Total columnas: 24
+' Total columnas: 19
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (14/04/2026):
+' COLUMNAS VERIFICADAS (23/04/2026):
 '   [01] ID Cronograma                  - String (UUID único)
 '   [02] Iniciales personal             - String (FK a tblPersonal)
 '   [03] ID Plantilla                   - String (FK a tblPlantillas)
 '   [04] Puesto                          - String
 '   [05] Planta personal                 - String
 '   [06] Total inspecciones              - Long
-'   [07] Fecha primera inspeccion        - Date
-'   [08] Fecha ultima inspeccion         - Date
-'   [09] ID Ultima inspeccion            - String (FK a tblInspecciones)
-'   [10] RPN ultima inspeccion           - Double
-'   [11] Categoria ultima inspeccion     - String
-'   [12] Fecha proxima inspeccion        - Date (calculada)
-'   [13] Dias para vencimiento           - Long (calculado)
-'   [14] Estado cronograma               - String (ver constantes ESTADO_*)
-'   [15] Dias alerta                     - Long
-'   [16] Puesto activo en personal       - String ("Si"/"No")
-'   [17] Personal activo                 - String ("Si"/"No")
-'   [18] Plantilla tiene preguntas       - String ("Si"/"No")
-'   [19] Fecha ultima actualizacion      - Date
-'   [20] Requiere recalculo              - String ("Si"/"No")
-'   [21] Nombre plantilla                - String
-'   [22] Frecuencia meses                - Long (1, 3, 6, 12)
-'   [23] Activo                          - String ("Si"/"No")
-'   [24] Fecha de creacion               - Date
+'   [07] Fecha ultima inspeccion         - Date
+'   [08] ID Ultima inspeccion            - String (FK a tblInspecciones)
+'   [09] RPN ultima inspeccion           - Double
+'   [10] Categoria ultima inspeccion     - String
+'   [11] Fecha proxima inspeccion        - Date (calculada)
+'   [12] Dias para vencimiento           - Long (calculado)
+'   [13] Estado cronograma               - String (ver constantes ESTADO_*)
+'   [14] Puesto activo en personal       - String ("Si"/"No")
+'   [15] Personal activo                 - String ("Si"/"No")
+'   [16] Fecha ultima actualizacion      - Date
+'   [17] Requiere recalculo              - String ("Si"/"No")
+'   [18] Nombre plantilla                - String
+'   [19] Frecuencia meses                - Long (1, 3, 6, 12)
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - InspectionScheduler.bas (InicializarCronograma, RecalcularCronograma)
@@ -537,8 +582,8 @@ End Function
 ' Propósito: Registro de inspecciones completadas con resultados de scoring,
 '            RPN y categorización. Cada inspección está vinculada a un
 '            personal, plantilla y tiene múltiples respuestas en tblRespuestas.
-' Total columnas: 40
-' Última actualización: 21/04/2026 - Migración inspecciones recurrentes (cols 32-40)
+' Total columnas: 47 (actualizado 23/04/2026 - FASE 7: Calificaciones)
+' Última actualización: 23/04/2026 - Agregadas calificaciones vestuario/operador (cols 44-47)
 ' ----------------------------------------------------------------------
 ' COLUMNAS VERIFICADAS (21/04/2026):
 '   [01] ID Inspeccion               - String (UUID único, PK)
@@ -583,15 +628,27 @@ End Function
 '   [38] Porcentaje Recuperacion     - Double (futuro: datos microbiología - Default=0)
 '   [39] Porcentaje OOL              - Double (futuro: Out Of Limits micro - Default=0)
 '   [40] RPN Total                   - Double (RPN Prom + %Rec + %OOL - Nullable)
+'   
+'   COLUMNAS - AUDITORÍA DE PROCESOS (escritas por InspectionCalculator):
+'   [41] AP Critica No Cumple        - Long (conteo de preguntas críticas no cumplidas)
+'   [42] AP Mayor No Cumple          - Long (conteo de preguntas mayores no cumplidas)
+'   [43] AP Menor No Cumple          - Long (conteo de preguntas menores no cumplidas)
+'   
+'   NUEVAS COLUMNAS - CALIFICACIONES VESTUARIO/OPERADOR (23/04/2026 - FASE 7):
+'   [44] Calificacion Vestuario      - String ("Si"/"No" - Default="Si")
+'   [45] Fecha Venc Vestuario        - String (dd/mm/yyyy - Opcional, puede estar vacío)
+'   [46] Calificacion Operador       - String ("Si"/"No" - Default="Si")
+'   [47] Fecha Venc Operador         - String (dd/mm/yyyy - Opcional, puede estar vacío)
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - InspectionRepository.bas (CrearInspeccion, ActualizarCalculosInspeccion - ESCRITURA)
 '   - InspectionScheduler.bas (ObtenerUltimaInspeccion - LECTURA)
-'   - ChecklistOrchestrator.bas (GuardarInspeccionCompleta vía Repository)
-'   - CertificadoPDFGenerator.bas (ObtenerDatosInspeccion - LECTURA col 20-22, 27)
+'   - ChecklistOrchestrator.bas (GuardarInspeccionCompleta vía Repository - ESCRITURA cols 44-47)
+'   - CertificadoPDFGenerator.bas (ObtenerDatosInspeccion - LECTURA col 20-22, 27, 41-43)
 '   - InspectionHistoryService.bas (BuscarInspeccionesPrevias - LECTURA cols 32-40)
 '   - RecurrentInspectionCalculator.bas (CalcularRPNPromedio - LECTURA/ESCRITURA cols 35-40)
-'   - frmChecklistVirtual.frm (Captura datos recurrentes - ESCRITURA cols 32-36)
+'   - InspectionCalculator.bas (CalcularResultadoAuditoriaProcesos - ESCRITURA cols 41-43)
+'   - frmChecklistVirtual.frm (Captura datos recurrentes y calificaciones - ESCRITURA cols 32-36, 44-47)
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------

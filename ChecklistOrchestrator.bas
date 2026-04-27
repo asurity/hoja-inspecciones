@@ -206,6 +206,13 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     datos("OP") = frm.OP
     datos("LugarAuditoria") = frm.LugarAuditoria
     datos("ObservacionGeneral") = frm.ObservacionGeneral
+    
+    ' NUEVOS CAMPOS - FASE 7 (23/04/2026): Calificaciones y Vencimientos
+    datos("CalificacionVestuario") = frm.CalificacionVestuario
+    datos("FechaVencVestuario") = frm.FechaVencVestuario
+    datos("CalificacionOperador") = frm.CalificacionOperador
+    datos("FechaVencOperador") = frm.FechaVencOperador
+    
     Debug.Print "[PASO 5] Datos preparados OK"
     
     ' ===================================================================
@@ -259,6 +266,8 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     Dim taData As Object
     Set taData = InspectionCalculator.CalcularScoringTA(respuestasConSeccion, idSeccionTA, frm.IDPlantilla)
     Debug.Print "  TA Puntaje: " & taData("puntaje") & "/" & taData("maximos")
+    Debug.Print "  TA No Aplica: " & taData("noaplica")
+    Debug.Print "  TA Denominador (maximos - noaplica): " & (taData("maximos") - taData("noaplica"))
     Debug.Print "  TA Porcentaje: " & Format(taData("porcentaje"), "0.00") & "%"
     Debug.Print "[PASO 8] Scoring TA calculado OK"
     
@@ -346,8 +355,16 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     End If
     
     ' Calcular métricas usando nuevo pipeline
+    ' FASE 6 (23/04/2026): Agregar factores adicionales (% Recuperación y % OOL)
+    Dim porcRecuperacion As Double
+    Dim porcOOL As Double
+    porcRecuperacion = frm.PorcRecuperacion
+    porcOOL = frm.PorcOOL
+    
+    Debug.Print "  Factores adicionales - % Recuperación: " & porcRecuperacion & ", % OOL: " & porcOOL
+    
     Dim metricas As Object
-    Set metricas = CalcularMetricasInspeccion(taData, esRecurrente, numeroInspeccion, rpnAnterior, idInspeccionAnterior, frm.Puesto)
+    Set metricas = CalcularMetricasInspeccion(taData, esRecurrente, numeroInspeccion, rpnAnterior, idInspeccionAnterior, frm.Puesto, porcRecuperacion, porcOOL)
     
     ' Extraer valores calculados
     Dim rpn As Double
@@ -400,6 +417,14 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     calculos("AP_Critica_NoCumple") = apCriticaNoCumple
     calculos("AP_Mayor_NoCumple") = apMayorNoCumple
     calculos("AP_Menor_NoCumple") = apMenorNoCumple
+    
+    ' IMPORTANTE (23/04/2026): calculos("RPN") SIEMPRE contiene el % TA puro (sin factores)
+    ' - Primera inspección: RPN = % TA
+    ' - Inspecciones recurrentes: RPN = % TA actual (NO el promedio, NO el total)
+    ' Esto es correcto porque:
+    '   - Se guarda en columna "RPN calculado" de tblInspecciones
+    '   - Se usa para calcular promedios en futuras inspecciones
+    '   - El RPN Total (con factores) se guarda por separado en columna "RPN Total"
     calculos("RPN") = rpn
     calculos("Categoria") = "Categoría " & categoria
     calculos("RequiereAccion") = InspectionCalculator.DeterminarRequiereAccion(categoria)
@@ -412,11 +437,22 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     calculos("EsInspeccionRecurrente") = metricas("EsInspeccionRecurrente")
     calculos("PuestoEvaluado") = metricas("PuestoEvaluado")
     
+    ' NUEVO: SIEMPRE guardar RPN Total (tanto en primera como recurrente)
+    ' - Primera inspección: RPN Total = RPN TA
+    ' - Inspección recurrente: RPN Total = Promedio + factores adicionales
+    calculos("RPNTotal") = metricas("RPN_Total")
+    
+    ' Guardar campos adicionales solo si es recurrente
     If metricas("EsInspeccionRecurrente") Then
         calculos("RPNAnterior") = metricas("RPN_Anterior")
         calculos("RPNPromedio") = metricas("RPN_Promedio")
-        calculos("RPNTotal") = metricas("RPN_Total")
         calculos("IDInspeccionAnterior") = metricas("IDInspeccionAnterior")
+        
+        ' Factores adicionales (FASE 6 - 23/04/2026)
+        ' IMPORTANTE: SIEMPRE guardar, incluso con valor 0 para Técnico C/D y Sanitizador
+        ' Esto evita columnas vacías en la base de datos y facilita reportes
+        calculos("PorcRecuperacion") = metricas("PorcRecuperacion")
+        calculos("PorcOOL") = metricas("PorcOOL")
     End If
     
     Call InspectionRepository.ActualizarCalculosInspeccion(idInspeccion, calculos)
@@ -507,6 +543,11 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     Call CronogramaResumen.RefrescarResumenCronograma
     Debug.Print "[PASO 18] Cronograma resumen refrescado OK"
     
+    ' ===================================================================
+    ' ÉXITO COMPLETO - Desactivar rollback
+    ' ===================================================================
+    rollbackNecesario = False  ' Ya no necesitamos rollback (todo se guardó exitosamente)
+    
     Debug.Print "===== FIN GuardarInspeccionCompleta - ÉXITO ====="
     Exit Sub
     
@@ -516,12 +557,24 @@ ErrorHandler:
     Debug.Print "Error Description: " & Err.Description
     Debug.Print "Error Source: " & Err.Source
     
-    ' --- ROLLBACK ---
+    ' ====================================================================================
+    ' FASE 3: ROLLBACK TRANSACCIONAL - Eliminar inspección si se creó parcialmente
+    ' Fecha: 25/04/2026
+    ' Propósito: Mantener integridad de datos - no dejar registros huérfanos si falla
+    '            algún paso después de crear la inspección
+    ' ====================================================================================
     If rollbackNecesario And Len(idInspeccion) > 0 Then
-        Debug.Print "Ejecutando ROLLBACK para inspección: " & idInspeccion
-        On Error Resume Next
+        Debug.Print "⚠️ Ejecutando ROLLBACK para inspección: " & idInspeccion
+        
+        On Error Resume Next  ' No fallar durante rollback
         Call InspectionRepository.EliminarInspeccion(idInspeccion)
-        Debug.Print "ROLLBACK completado"
+        
+        ' Registrar rollback en auditoría para trazabilidad
+        Call ErrorLogger2.Log("GuardarInspeccionCompleta.Rollback", _
+                              "Inspección " & idInspeccion & " eliminada por error en guardado. " & _
+                              "Error original: " & Err.Description, 0)
+        
+        Debug.Print "✓ ROLLBACK completado - Inspección " & idInspeccion & " eliminada"
         On Error GoTo 0
     End If
     
@@ -531,13 +584,44 @@ ErrorHandler:
     Application.EnableEvents = True
     Application.ScreenUpdating = True
     
+    ' Registrar error original en auditoría
     Debug.Print "Registrando error en ErrorLogger..."
     Call ErrorLogger2.Log("ChecklistOrchestrator.GuardarInspeccionCompleta", Err.Description, Err.Number)
     
+    ' ====================================================================================
+    ' FASE 3: MENSAJES DE ERROR INTELIGENTES
+    ' Propósito: Dar soluciones específicas según el tipo de error
+    ' ====================================================================================
+    Debug.Print "Construyendo mensaje de error al usuario..."
+    Dim mensajeError As String
+    mensajeError = "ERROR: La inspección NO fue guardada." & vbCrLf & vbCrLf & _
+                   "Detalle técnico:" & vbCrLf & _
+                   Err.Description & vbCrLf & vbCrLf
+    
+    ' Detectar tipo de error y agregar instrucciones específicas
+    If InStr(Err.Description, "ID Criticidad") > 0 Then
+        ' Error relacionado con ID Criticidad (columna faltante o dato vacío)
+        mensajeError = mensajeError & _
+                      "SOLUCIÓN:" & vbCrLf & _
+                      "1. Verifique que la plantilla tiene la columna 'ID Criticidad'" & vbCrLf & _
+                      "2. Todas las preguntas deben tener un valor (Crítica, Mayor, Menor, Ninguna)" & vbCrLf & _
+                      "3. Consulte docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md" & vbCrLf & _
+                      "4. Contacte al administrador si el problema persiste"
+    ElseIf InStr(Err.Description, "columna") > 0 Or InStr(Err.Description, "column") > 0 Then
+        ' Error relacionado con estructura de tabla
+        mensajeError = mensajeError & _
+                      "SOLUCIÓN:" & vbCrLf & _
+                      "1. La estructura de las tablas puede estar corrupta" & vbCrLf & _
+                      "2. Ejecute: PlantillaCertificadoSetup.InicializarTablasRequeridas()" & vbCrLf & _
+                      "3. Contacte al administrador si el problema persiste"
+    Else
+        ' Error genérico
+        mensajeError = mensajeError & _
+                      "Por favor, intente nuevamente o contacte al administrador."
+    End If
+    
     Debug.Print "Mostrando mensaje de error al usuario..."
-    MsgBox "Error al guardar la inspección: " & Err.Description & vbCrLf & _
-           "Se ha realizado rollback de los datos parciales.", _
-           vbCritical, "Error"
+    MsgBox mensajeError, vbCritical, "Error al Guardar Inspección"
     
     Debug.Print "===== FIN GuardarInspeccionCompleta - ERROR ====="
 End Sub
@@ -578,7 +662,9 @@ Private Function CalcularMetricasInspeccion( _
     ByVal numeroInspeccion As Long, _
     ByVal rpnAnterior As Double, _
     ByVal idInspeccionAnterior As String, _
-    ByVal puestoEvaluado As String _
+    ByVal puestoEvaluado As String, _
+    Optional ByVal porcRecuperacion As Double = 0, _
+    Optional ByVal porcOOL As Double = 0 _
 ) As Object
     
     On Error GoTo ErrorHandler
@@ -608,9 +694,11 @@ Private Function CalcularMetricasInspeccion( _
         metricas("EsInspeccionRecurrente") = False
         metricas("PuestoEvaluado") = puestoEvaluado
         metricas("RPN_Final") = rpnTA
+        metricas("RPN_Total") = rpnTA  ' NUEVO: En primera inspección, RPN Total = RPN TA
         metricas("Categoria") = InspectionCalculator.DeterminarCategoria(rpnTA, "", "")
         
         Debug.Print "[CalcularMetricas] RPN Final: " & Format(rpnTA, "0.00")
+        Debug.Print "[CalcularMetricas] RPN Total: " & Format(rpnTA, "0.00") & " (= RPN TA en primera inspección)"
         Debug.Print "[CalcularMetricas] Categoría: " & metricas("Categoria")
         
     Else
@@ -655,7 +743,14 @@ Private Function CalcularMetricasInspeccion( _
         metricas("RPN_Anterior") = rpnAnterior
         metricas("IDInspeccionAnterior") = idInspeccionAnterior
         
+        ' ─────────────────────────────────────────────────────────────
         ' Calcular RPN Promedio
+        ' IMPORTANTE (23/04/2026): rpnAnterior es el % TA puro de la
+        ' inspección anterior (SIN factores adicionales).
+        ' - Inspección 2: Promedio = (TA1 + TA2) / 2
+        ' - Inspección 3: Promedio = (TA2 + TA3) / 2
+        ' - Inspección 4: Promedio = (TA3 + TA4) / 2
+        ' ─────────────────────────────────────────────────────────────
         Dim rpnPromedio As Double
         Debug.Print "[CalcularMetricas] Llamando a CalcularRPNPromedio(" & rpnAnterior & ", " & rpnTA & ")"
         rpnPromedio = RecurrentInspectionCalculator.CalcularRPNPromedio(rpnAnterior, rpnTA)
@@ -664,11 +759,16 @@ Private Function CalcularMetricasInspeccion( _
         Debug.Print "[CalcularMetricas] RPN Anterior: " & Format(rpnAnterior, "0.00")
         Debug.Print "[CalcularMetricas] RPN Promedio: " & Format(rpnPromedio, "0.00")
         
-        ' Calcular RPN Total (por ahora = RPN Promedio, futuro +microbiología)
+        ' Calcular RPN Total con factores adicionales (% Recuperación + % OOL)
+        ' FASE 6 (23/04/2026): Ahora incluye microbiología
+        Debug.Print "[CalcularMetricas] Factores adicionales - % Recuperación: " & porcRecuperacion & ", % OOL: " & porcOOL
+        
         Dim rpnTotal As Double
-        rpnTotal = RecurrentInspectionCalculator.CalcularRPNTotal(rpnPromedio, 0, 0)
+        rpnTotal = RecurrentInspectionCalculator.CalcularRPNTotal(rpnPromedio, porcRecuperacion, porcOOL)
         metricas("RPN_Total") = rpnTotal
         metricas("RPN_Final") = rpnTotal
+        metricas("PorcRecuperacion") = porcRecuperacion
+        metricas("PorcOOL") = porcOOL
         
         Debug.Print "[CalcularMetricas] RPN Total: " & Format(rpnTotal, "0.00")
         

@@ -152,20 +152,20 @@ Public Function BuscarInspeccionesPrevias( _
                     inspeccion("PuestoEvaluado") = "[No disponible]"
                 End If
                 
-                ' RPN Total si existe y tiene valor, sino RPN calculado
-                Dim rpnValue As Double
-                If colRPNTotal > 0 Then
-                    Dim cellValue As Variant
-                    cellValue = fila.Range.Cells(1, colRPNTotal).Value
-                    If Not IsEmpty(cellValue) And IsNumeric(cellValue) Then
-                        rpnValue = CDbl(cellValue)
-                    Else
-                        rpnValue = CDbl(fila.Range.Cells(1, colRPN).Value)
-                    End If
-                Else
-                    rpnValue = CDbl(fila.Range.Cells(1, colRPN).Value)
-                End If
-                inspeccion("RPN") = rpnValue
+                ' IMPORTANTE (23/04/2026): SIEMPRE usar RPN calculado (% TA puro)
+                ' para el promedio en inspecciones recurrentes. NO usar RPN Total
+                ' porque incluye factores adicionales (% Recuperación + % OOL) que
+                ' NO deben sumarse dos veces.
+                '
+                ' Ejemplo correcto:
+                '   Inspección 2: Promedio = (TA1 + TA2) / 2 + Factores2
+                '   Inspección 3: Promedio = (TA2 + TA3) / 2 + Factores3
+                '
+                ' Ejemplo incorrecto (lo que hacía antes):
+                '   Inspección 3: Promedio = (RPNTotal2 + TA3) / 2 + Factores3
+                '                          = ((TA1+TA2)/2 + Factores2 + TA3) / 2 + Factores3
+                '
+                inspeccion("RPN") = CDbl(fila.Range.Cells(1, colRPN).Value)
                 
                 inspeccion("Categoria") = CStr(fila.Range.Cells(1, colCategoria).Value)
                 

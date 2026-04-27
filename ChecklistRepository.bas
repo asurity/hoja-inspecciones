@@ -161,6 +161,54 @@ SiguientePregunta:
     Next item
     
     Debug.Print "Total preguntas encontradas y ordenadas: " & sorted.Count
+    
+    ' ====================================================================================
+    ' FASE 2: VALIDACIÓN PREVENTIVA - Verificar que TODAS las preguntas tienen ID Criticidad
+    ' Fecha: 25/04/2026
+    ' Propósito: Detectar problemas en la plantilla ANTES de que el usuario complete
+    '            la inspección, evitando pérdida de trabajo
+    ' ====================================================================================
+    Dim numPregunta As Long
+    For numPregunta = 1 To sorted.Count
+        Dim pregValidar As Variant
+        pregValidar = sorted(numPregunta)
+        
+        ' pregValidar(0) = ID Pregunta
+        ' pregValidar(1) = Numero
+        ' pregValidar(2) = Texto
+        ' pregValidar(3) = ID Seccion
+        ' pregValidar(4) = ID Criticidad  ← VALIDAR ESTE CAMPO
+        ' pregValidar(5) = Orden
+        
+        ' Validar que el campo ID Criticidad no sea vacío/nulo/N/A
+        Dim critValue As String
+        critValue = Trim(CStr(pregValidar(4)))
+        
+        If Configuration2.EsValorNoAplica(critValue) Or Len(critValue) = 0 Then
+            ' FALLAR con error claro indicando qué pregunta tiene el problema
+            Err.Raise vbObjectError + 2001, "ChecklistRepository.ObtenerPreguntasPorPlantillaYSeccion", _
+                      "ERROR EN PLANTILLA: Una pregunta no tiene ID Criticidad asignado." & vbCrLf & vbCrLf & _
+                      "Pregunta #" & numPregunta & ": " & pregValidar(2) & vbCrLf & _
+                      "ID Pregunta: " & pregValidar(0) & vbCrLf & _
+                      "ID Sección: " & pregValidar(3) & vbCrLf & _
+                      "Valor actual ID Criticidad: '" & critValue & "'" & vbCrLf & vbCrLf & _
+                      "El sistema requiere que TODAS las preguntas tengan un nivel de criticidad:" & vbCrLf & _
+                      "  • Crítica - No cumplimientos graves que requieren acción inmediata" & vbCrLf & _
+                      "  • Mayor - No cumplimientos importantes" & vbCrLf & _
+                      "  • Menor - No cumplimientos de baja prioridad" & vbCrLf & _
+                      "  • Ninguna - Preguntas informativas sin impacto" & vbCrLf & vbCrLf & _
+                      "SOLUCIÓN:" & vbCrLf & _
+                      "  1. Vaya a la hoja '" & Configuration2.SHEET_CHECKLIST & "'" & vbCrLf & _
+                      "  2. Busque la tabla '" & Configuration2.TABLE_PREGUNTAS & "'" & vbCrLf & _
+                      "  3. Localice la pregunta con ID '" & pregValidar(0) & "'" & vbCrLf & _
+                      "  4. Asigne un valor válido en la columna 'ID Criticidad'" & vbCrLf & vbCrLf & _
+                      "Nota: Si esta pregunta NO requiere nivel de criticidad, asigne 'Ninguna'."
+        End If
+    Next numPregunta
+    
+    Debug.Print "✓ Validación OK: Todas las preguntas tienen ID Criticidad válido"
+    ' ====================================================================================
+    
     Set ObtenerPreguntasPorPlantillaYSeccion = sorted
     Exit Function
     

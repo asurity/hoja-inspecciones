@@ -203,3 +203,35 @@ End Sub
 Public Sub NavigateToConfiguracionChecklist()
     Call NavigateToSheet("Checklist")
 End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: NavigateToCronograma
+' Propósito: Navega a la hoja "Cronograma" que contiene el cronograma
+'            de inspecciones programadas por persona y puesto.
+' Características:
+'   - Tabla tblCronogramaInspecciones con todas las inspecciones programadas
+'   - Información de frecuencias de inspección por puesto
+'   - Estado de cumplimiento del cronograma
+'   - Próximas inspecciones pendientes
+'   - Inspecciones vencidas o atrasadas
+' ----------------------------------------------------------------------
+Public Sub NavigateToCronograma()
+    Call NavigateToSheet(Configuration2.SHEET_CRONOGRAMA)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina: NavigateToPlantillaCertificado
+' Propósito: Navega a la hoja "Plantilla Certificado" que contiene
+'            la plantilla base para la generación de certificados PDF.
+' Características:
+'   - Plantilla de diseño del certificado
+'   - Estructura de 4 columnas (A-D)
+'   - Secciones: Categoría, Datos, AP, Resultados, Preguntas, Feedback, Observaciones
+'   - Hoja normalmente oculta (xlSheetVeryHidden)
+'   - Uso exclusivo para generación automática de PDFs
+' Advertencia: Esta hoja se puebla dinámicamente durante la generación de PDFs.
+'              No se recomienda modificar manualmente sin consultar la documentación.
+' ----------------------------------------------------------------------
+Public Sub NavigateToPlantillaCertificado()
+    Call NavigateToSheet(Configuration2.SHEET_PLANTILLA_CERTIFICADO)
+End Sub

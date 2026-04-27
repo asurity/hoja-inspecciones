@@ -327,8 +327,6 @@ Private Sub InicializarCronogramaSilencioso(ByRef tblCronograma As ListObject)
                                     .Cells(1, tblCronograma.ListColumns("Frecuencia meses").Index).Value = plantillaRow.Range.Cells(1, tblPlantillas.ListColumns("Frecuencia meses").Index).Value
                                     .Cells(1, tblCronograma.ListColumns("Estado cronograma").Index).Value = Configuration2.ESTADO_NUNCA_INSPECCIONADO
                                     .Cells(1, tblCronograma.ListColumns("Planta personal").Index).Value = planta
-                                    .Cells(1, tblCronograma.ListColumns("Activo").Index).Value = "Si"
-                                    .Cells(1, tblCronograma.ListColumns("Fecha de creacion").Index).Value = Now
                                 End With
                             End If
                         Next plantillaRow

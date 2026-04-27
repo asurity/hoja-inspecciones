@@ -79,11 +79,13 @@ Public Sub InicializarPlantillaCertificado()
     ' PASO 5: Diseñar sección Resultados Generales
     Call DisenarSeccionResultados(ws)
     
-    ' PASO 6: Diseñar encabezado de tabla de preguntas
-    Call DisenarEncabezadoTabla(ws)
+    ' PASO 6: DISEÑAR ENCABEZADO DE TABLA DE PREGUNTAS
+    ' NOTA: Ya NO se crea aquí - se crea dinámicamente en CertificadoPDFGenerator
+    ' Call DisenarEncabezadoTabla(ws)
     
-    ' PASO 7: Diseñar placeholders para observaciones y firmas
-    Call DisenarSeccionObservacionesFirmas(ws)
+    ' PASO 7: DISEÑAR PLACEHOLDERS OBSERVACIONES Y FIRMAS
+    ' NOTA: Ya NO se crean aquí - se crean dinámicamente en CertificadoPDFGenerator
+    ' Call DisenarSeccionObservacionesFirmas(ws)
     
     ' PASO 8: Definir rangos nombrados
     Call DefinirRangosNombrados(ws)
@@ -201,18 +203,18 @@ Private Sub DisenarEncabezado(ws As Worksheet)
         ' ═══════════════════════════════════════════════════════════
         ' NUEVO: BLOQUE CATEGORÍA (Filas 6-8)
         ' ═══════════════════════════════════════════════════════════
-        ' Combinar celdas A6:G8 para bloque categoría
-        .Range("A6:G8").Merge
-        .Range("A6").Value = "[CATEGORÍA SE LLENARÁ DINÁMICAMENTE]"
+        ' Combinar celdas A6:D8 para bloque categoría (4 columnas según requisito)
+        .Range("A6:D8").Merge
+        .Range("A6").Value = ""  ' Dejar vacío, se llenará al generar el certificado
         .Range("A6").Font.Name = "Arial"
         .Range("A6").Font.Size = 18
         .Range("A6").Font.Bold = True
         .Range("A6").Font.Color = RGB(0, 0, 0)
         .Range("A6").HorizontalAlignment = xlCenter
         .Range("A6").VerticalAlignment = xlCenter
-        .Range("A6:G8").BorderAround LineStyle:=xlContinuous, Weight:=xlMedium
+        .Range("A6:D8").BorderAround LineStyle:=xlContinuous, Weight:=xlMedium
         ' Color por defecto (se cambiará dinámicamente)
-        .Range("A6:G8").Interior.Color = RGB(255, 255, 255)  ' Blanco por defecto
+        .Range("A6:D8").Interior.Color = RGB(255, 255, 255)  ' Blanco por defecto
     End With
 End Sub
 
@@ -402,24 +404,6 @@ Private Sub DisenarSeccionObservacionesFirmas(ws As Worksheet)
     With ws
         ' Estas secciones se crearán dinámicamente después de las preguntas
         ' Aquí solo creamos un comentario para referencia
-        
-        ' Fila 50: Placeholder para pie de validez (PASO 4 MVP)
-        .Range("A50:G50").Merge
-        .Range("A50").Value = "Este certificado es válido hasta: [SE CALCULARÁ DINÁMICAMENTE]"
-        .Range("A50").Font.Name = "Arial"
-        .Range("A50").Font.Size = 10
-        .Range("A50").Font.Bold = True
-        .Range("A50").Font.Color = RGB(0, 0, 139)  ' Azul oscuro
-        .Range("A50").HorizontalAlignment = xlCenter
-        .Range("A50").VerticalAlignment = xlCenter
-        .Rows(50).RowHeight = 25
-        
-        ' Borde superior del pie para separarlo
-        With .Range("A50:G50").Borders(xlEdgeTop)
-            .LineStyle = xlContinuous
-            .Weight = xlMedium
-            .Color = RGB(0, 0, 139)
-        End With
         
         ' Fila 55: Placeholder para observaciones (se moverá dinámicamente si es necesario)
         .Range("B55").Value = "[SECCIÓN OBSERVACIONES - Se creará dinámicamente si es necesario]"

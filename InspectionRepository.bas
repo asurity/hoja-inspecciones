@@ -57,19 +57,84 @@ Public Function CrearInspeccion(ByVal datos As Object) As String
         .Cells(1, tblInspecciones.ListColumns("Linea Auditada").Index).Value = datos("LineaAuditada")
         .Cells(1, tblInspecciones.ListColumns("Hora inicio").Index).Value = datos("HoraInicio")
         .Cells(1, tblInspecciones.ListColumns("Hora termino").Index).Value = datos("HoraTermino")
-        .Cells(1, tblInspecciones.ListColumns("Iniciales AY1").Index).Value = datos("AY1")
-        .Cells(1, tblInspecciones.ListColumns("Iniciales AY2").Index).Value = datos("AY2")
-        .Cells(1, tblInspecciones.ListColumns("Iniciales OP").Index).Value = datos("OP")
+        
+        ' Campos opcionales: AY1, AY2, OP - usar Configuration2.VALOR_NO_APLICA si están vacíos
+        Dim ay1Value As String, ay2Value As String, opValue As String
+        ay1Value = Trim(CStr(datos("AY1")))
+        ay2Value = Trim(CStr(datos("AY2")))
+        opValue = Trim(CStr(datos("OP")))
+        
+        .Cells(1, tblInspecciones.ListColumns("Iniciales AY1").Index).Value = IIf(Len(ay1Value) > 0, ay1Value, Configuration2.VALOR_NO_APLICA)
+        .Cells(1, tblInspecciones.ListColumns("Iniciales AY2").Index).Value = IIf(Len(ay2Value) > 0, ay2Value, Configuration2.VALOR_NO_APLICA)
+        .Cells(1, tblInspecciones.ListColumns("Iniciales OP").Index).Value = IIf(Len(opValue) > 0, opValue, Configuration2.VALOR_NO_APLICA)
+        
         .Cells(1, tblInspecciones.ListColumns("Lugar Auditoria").Index).Value = datos("LugarAuditoria")
         
-        ' Observaciones generales: guardar "N/A" si está vacía
+        ' Observaciones generales: guardar Configuration2.VALOR_NO_APLICA si está vacía
         Dim obsGeneral As String
         obsGeneral = Trim(CStr(datos("ObservacionGeneral")))
         If Len(obsGeneral) = 0 Then
-            .Cells(1, tblInspecciones.ListColumns("Observaciones generales").Index).Value = "N/A"
+            .Cells(1, tblInspecciones.ListColumns("Observaciones generales").Index).Value = Configuration2.VALOR_NO_APLICA
         Else
             .Cells(1, tblInspecciones.ListColumns("Observaciones generales").Index).Value = obsGeneral
         End If
+        
+        ' === NUEVOS CAMPOS - FASE 7 (23/04/2026): Calificaciones y Vencimientos ===
+        ' Guardar con validación de existencia de columna y valores predeterminados
+        On Error Resume Next
+        Dim colIdx As Long
+        
+        ' Calificación Vestuario (Si/No, default "Si")
+        colIdx = Application.Match("Calificacion Vestuario", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            Dim califVest As String
+            califVest = Trim(CStr(datos("CalificacionVestuario")))
+            .Cells(1, colIdx).Value = IIf(Len(califVest) > 0, califVest, "Si")
+        End If
+        
+        ' Fecha Venc Vestuario (opcional, usar Configuration2.VALOR_NO_APLICA si está vacío)
+        colIdx = Application.Match("Fecha Venc Vestuario", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            Dim fechaVencVest As String
+            fechaVencVest = Trim(CStr(datos("FechaVencVestuario")))
+            .Cells(1, colIdx).Value = IIf(Len(fechaVencVest) > 0, fechaVencVest, Configuration2.VALOR_NO_APLICA)
+        End If
+        
+        ' Calificación Operador (Si/No, default "Si")
+        colIdx = Application.Match("Calificacion Operador", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            Dim califOper As String
+            califOper = Trim(CStr(datos("CalificacionOperador")))
+            .Cells(1, colIdx).Value = IIf(Len(califOper) > 0, califOper, "Si")
+        End If
+        
+        ' Fecha Venc Operador (opcional, usar Configuration2.VALOR_NO_APLICA si está vacío)
+        colIdx = Application.Match("Fecha Venc Operador", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            Dim fechaVencOper As String
+            fechaVencOper = Trim(CStr(datos("FechaVencOperador")))
+            .Cells(1, colIdx).Value = IIf(Len(fechaVencOper) > 0, fechaVencOper, Configuration2.VALOR_NO_APLICA)
+        End If
+        
+        On Error GoTo ErrorHandler
+        ' === FIN NUEVOS CAMPOS FASE 7 ===
+        
+        ' Columnas no usadas actualmente: completar con Configuration2.VALOR_NO_APLICA para evitar vacíos
+        On Error Resume Next
+        
+        ' Fecha completado (no se usa actualmente)
+        colIdx = Application.Match("Fecha completado", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+        End If
+        
+        ' Usuario completado (no se usa actualmente)
+        colIdx = Application.Match("Usuario completado", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+        End If
+        
+        On Error GoTo ErrorHandler
     End With
     
     CrearInspeccion = idInspeccion
@@ -96,18 +161,18 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
     Dim newRow As ListRow
     Dim resp As Variant
     
-    Debug.Print "[GuardarRespuestas] Inicio. ID Inspeccion: " & idInspeccion
+    ' Debug.Print "[GuardarRespuestas] Inicio. ID Inspeccion: " & idInspeccion
     
     Set wsHistorico = ThisWorkbook.Sheets(Configuration2.SHEET_HISTORICO)
-    Debug.Print "[GuardarRespuestas] Hoja Histórico obtenida: " & wsHistorico.Name
+    ' Debug.Print "[GuardarRespuestas] Hoja Histórico obtenida: " & wsHistorico.Name
     
     Set tblRespuestas = wsHistorico.ListObjects(Configuration2.TABLE_RESPUESTAS)
-    Debug.Print "[GuardarRespuestas] Tabla tblRespuestas obtenida con " & tblRespuestas.ListColumns.Count & " columnas"
+    ' Debug.Print "[GuardarRespuestas] Tabla tblRespuestas obtenida con " & tblRespuestas.ListColumns.Count & " columnas"
     
     ' Leer nombres de columnas para verificar estructura
     Dim colIdx As Long
     For colIdx = 1 To tblRespuestas.ListColumns.Count
-        Debug.Print "  Columna " & colIdx & ": " & tblRespuestas.ListColumns(colIdx).Name
+        ' Debug.Print "  Columna " & colIdx & ": " & tblRespuestas.ListColumns(colIdx).Name
     Next colIdx
     
     Application.ScreenUpdating = False
@@ -116,48 +181,58 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
     Dim contador As Long
     contador = 0
     
-    ' Verificar si existe columna ID Criticidad (columna 8)
+    ' ====================================================================================
+    ' FASE 2: VALIDACIÓN ESTRICTA - Verificar que columna ID Criticidad existe
+    ' Fecha: 25/04/2026
+    ' Propósito: Prevenir pérdida silenciosa de datos críticos
+    ' Si la columna no existe, FALLAR INMEDIATAMENTE con mensaje claro
+    ' ====================================================================================
     Dim tieneColumnaCriticidad As Boolean
     tieneColumnaCriticidad = False
     
-    Debug.Print "[GuardarRespuestas] Total columnas en tblRespuestas: " & tblRespuestas.ListColumns.Count
-    
-    If tblRespuestas.ListColumns.Count >= 8 Then
-        Dim nombreCol8 As String
-        nombreCol8 = tblRespuestas.ListColumns(8).Name
-        Debug.Print "[GuardarRespuestas] Nombre columna 8: '" & nombreCol8 & "'"
-        
-        If InStr(1, nombreCol8, "Criticidad", vbTextCompare) > 0 Then
-            tieneColumnaCriticidad = True
-            Debug.Print "[GuardarRespuestas] ✓ Columna ID Criticidad encontrada: " & nombreCol8
-        Else
-            Debug.Print "[GuardarRespuestas] ✗ ADVERTENCIA: Columna 8 existe pero no es ID Criticidad: " & nombreCol8
-            Debug.Print "[GuardarRespuestas] ✗ Ver: docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md"
-        End If
-    Else
-        Debug.Print "[GuardarRespuestas] ✗ ADVERTENCIA: No hay columna 8 (ID Criticidad)."
-        Debug.Print "[GuardarRespuestas] ✗ ACCIÓN REQUERIDA: Agregar columna 'ID Criticidad' como columna 8"
-        Debug.Print "[GuardarRespuestas] ✗ Ver: docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md"
+    ' Buscar columna "ID Criticidad" en la tabla
+    On Error Resume Next
+    Dim colIdxCriticidad As Variant
+    colIdxCriticidad = Application.Match("ID Criticidad", tblRespuestas.HeaderRowRange, 0)
+    If Not IsError(colIdxCriticidad) Then
+        tieneColumnaCriticidad = True
     End If
+    On Error GoTo ErrorHandler
+    
+    ' Si la columna NO existe, FALLAR con error claro
+    If Not tieneColumnaCriticidad Then
+        Err.Raise vbObjectError + 1000, "InspectionRepository.GuardarRespuestas", _
+                  "ERROR CRÍTICO: La columna 'ID Criticidad' no existe en tblRespuestas." & vbCrLf & vbCrLf & _
+                  "El sistema no puede guardar respuestas sin esta columna, ya que afecta los cálculos de:" & vbCrLf & _
+                  "  - Auditoría de Procesos (conteos Crítica/Mayor/Menor)" & vbCrLf & _
+                  "  - Certificados PDF (sección de no cumplimientos)" & vbCrLf & vbCrLf & _
+                  "SOLUCIÓN:" & vbCrLf & _
+                  "  1. Abra el archivo Excel" & vbCrLf & _
+                  "  2. Ejecute: PlantillaCertificadoSetup.InicializarTablasRequeridas()" & vbCrLf & _
+                  "  3. Esto agregará la columna 'ID Criticidad' a tblRespuestas" & vbCrLf & vbCrLf & _
+                  "Consulte: docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md para más detalles."
+    End If
+    
+    ' Debug.Print "[GuardarRespuestas] ✓ Validación OK: Columna ID Criticidad existe"
     
     For Each resp In respuestas
         contador = contador + 1
-        Debug.Print "[GuardarRespuestas] Procesando respuesta " & contador
+        ' Debug.Print "[GuardarRespuestas] Procesando respuesta " & contador
         
         Dim dictResp As Object
         Set dictResp = resp
         
-        Debug.Print "  IDPregunta: " & dictResp("IDPregunta")
-        Debug.Print "  IDOpcion: " & dictResp("IDOpcion")
-        Debug.Print "  ValorNumerico: " & dictResp("ValorNumerico")
+        ' Debug.Print "  IDPregunta: " & dictResp("IDPregunta")
+        ' Debug.Print "  IDOpcion: " & dictResp("IDOpcion")
+        ' Debug.Print "  ValorNumerico: " & dictResp("ValorNumerico")
         If dictResp.Exists("IDCriticidad") Then
-            Debug.Print "  IDCriticidad: " & dictResp("IDCriticidad")
+            ' Debug.Print "  IDCriticidad: " & dictResp("IDCriticidad")
         Else
-            Debug.Print "  IDCriticidad: (no presente en Dictionary)"
+            ' Debug.Print "  IDCriticidad: (no presente en Dictionary)"
         End If
         
         Set newRow = tblRespuestas.ListRows.Add
-        Debug.Print "  Nueva fila agregada"
+        ' Debug.Print "  Nueva fila agregada"
         
         ' Usar índices de columna en lugar de nombres para evitar problemas de acentos
         ' Estructura de tblRespuestas:
@@ -166,46 +241,100 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
         ' [8] ID Criticidad (NUEVA - ver docs/INSTRUCCIONES_COLUMNA_ID_CRITICIDAD.md)
         
         With newRow.Range
-            Debug.Print "  Estableciendo Columna 1 (ID Respuesta)..."
+            ' Debug.Print "  Estableciendo Columna 1 (ID Respuesta)..."
             .Cells(1, 1).Value = GenerarUUID()
             
-            Debug.Print "  Estableciendo Columna 2 (ID Inspeccion)..."
+            ' Debug.Print "  Estableciendo Columna 2 (ID Inspeccion)..."
             .Cells(1, 2).Value = idInspeccion
             
-            Debug.Print "  Estableciendo Columna 3 (ID Pregunta)..."
+            ' Debug.Print "  Estableciendo Columna 3 (ID Pregunta)..."
             .Cells(1, 3).Value = dictResp("IDPregunta")
             
-            Debug.Print "  Estableciendo Columna 4 (ID Opcion)..."
+            ' Debug.Print "  Estableciendo Columna 4 (ID Opcion)..."
             .Cells(1, 4).Value = dictResp("IDOpcion")
             
-            Debug.Print "  Estableciendo Columna 5 (Valor numerico)..."
+            ' Debug.Print "  Estableciendo Columna 5 (Valor numerico)..."
             .Cells(1, 5).Value = dictResp("ValorNumerico")
             
-            Debug.Print "  Estableciendo Columna 6 (Observacion)..."
+            ' Debug.Print "  Estableciendo Columna 6 (Observacion)..."
             Dim obsValue As String
             obsValue = Trim(CStr(dictResp("Observacion")))
             If Len(obsValue) = 0 Then
-                .Cells(1, 6).Value = "N/A"
+                .Cells(1, 6).Value = Configuration2.VALOR_NO_APLICA
             Else
                 .Cells(1, 6).Value = obsValue
             End If
             
-            Debug.Print "  Estableciendo Columna 7 (Fecha respuesta)..."
+            ' Debug.Print "  Estableciendo Columna 7 (Fecha respuesta)..."
             .Cells(1, 7).Value = Now
             
-            ' Guardar ID Criticidad si la columna existe y el dato está presente
-            If tieneColumnaCriticidad Then
-                If dictResp.Exists("IDCriticidad") Then
-                    Debug.Print "  Estableciendo Columna 8 (ID Criticidad)..."
-                    .Cells(1, 8).Value = dictResp("IDCriticidad")
-                Else
-                    Debug.Print "  Columna 8 dejada vacía (IDCriticidad no presente en respuesta)"
-                    .Cells(1, 8).Value = ""
+            ' ====================================================================================
+            ' FASE 2: VALIDACIÓN ESTRICTA - ID Criticidad es OBLIGATORIO
+            ' Fecha: 25/04/2026
+            ' No se permite guardar respuestas sin ID Criticidad
+            ' Si falta, FALLAR con error claro indicando qué pregunta tiene el problema
+            ' ====================================================================================
+            
+            ' Validar que el dato existe en el Dictionary
+            If Not dictResp.Exists("IDCriticidad") Then
+                ' FALLAR: La pregunta no tiene ID Criticidad asignado
+                Dim textoPregunta As String
+                textoPregunta = "(Pregunta sin texto)"
+                If dictResp.Exists("TextoPregunta") Then
+                    textoPregunta = dictResp("TextoPregunta")
+                ElseIf dictResp.Exists("IDPregunta") Then
+                    textoPregunta = "ID: " & dictResp("IDPregunta")
                 End If
+                
+                Err.Raise vbObjectError + 1001, "InspectionRepository.GuardarRespuestas", _
+                          "ERROR: Una pregunta no tiene ID Criticidad asignado." & vbCrLf & vbCrLf & _
+                          "Pregunta: " & textoPregunta & vbCrLf & vbCrLf & _
+                          "El sistema requiere que TODAS las preguntas tengan un nivel de criticidad asignado:" & vbCrLf & _
+                          "  • Crítica: No cumplimientos graves que requieren acción inmediata" & vbCrLf & _
+                          "  • Mayor: No cumplimientos importantes" & vbCrLf & _
+                          "  • Menor: No cumplimientos de baja prioridad" & vbCrLf & _
+                          "  • Ninguna: Preguntas informativas sin impacto" & vbCrLf & vbCrLf & _
+                          "SOLUCIÓN:" & vbCrLf & _
+                          "  1. Verifique que la plantilla tiene la columna 'ID Criticidad'" & vbCrLf & _
+                          "  2. Asegúrese de que TODAS las preguntas tienen un valor en esta columna" & vbCrLf & _
+                          "  3. Revise el módulo ChecklistRepository que carga las preguntas"
             End If
+            
+            ' Validar que el valor NO sea vacío o "N/A"
+            Dim idCrit As String
+            idCrit = Trim(CStr(dictResp("IDCriticidad")))
+            
+            If Configuration2.EsValorNoAplica(idCrit) Or Len(idCrit) = 0 Then
+                ' FALLAR: El ID Criticidad está vacío
+                Dim textoPregunta2 As String
+                textoPregunta2 = "(Pregunta sin texto)"
+                If dictResp.Exists("TextoPregunta") Then
+                    textoPregunta2 = dictResp("TextoPregunta")
+                ElseIf dictResp.Exists("IDPregunta") Then
+                    textoPregunta2 = "ID: " & dictResp("IDPregunta")
+                End If
+                
+                Err.Raise vbObjectError + 1002, "InspectionRepository.GuardarRespuestas", _
+                          "ERROR: Una pregunta tiene ID Criticidad vacío o 'N/A'." & vbCrLf & vbCrLf & _
+                          "Pregunta: " & textoPregunta2 & vbCrLf & _
+                          "Valor actual: '" & idCrit & "'" & vbCrLf & vbCrLf & _
+                          "Valores válidos:" & vbCrLf & _
+                          "  • Crítica" & vbCrLf & _
+                          "  • Mayor" & vbCrLf & _
+                          "  • Menor" & vbCrLf & _
+                          "  • Ninguna" & vbCrLf & vbCrLf & _
+                          "SOLUCIÓN:" & vbCrLf & _
+                          "  1. Abra la hoja 'Checklist' y vaya a la tabla de preguntas" & vbCrLf & _
+                          "  2. Busque la pregunta indicada arriba" & vbCrLf & _
+                          "  3. Asigne un valor válido en la columna 'ID Criticidad'"
+            End If
+            
+            ' Guardar el valor validado (columna 8)
+            .Cells(1, 8).Value = idCrit
+            ' Debug.Print "  Estableciendo Columna 8 (ID Criticidad): " & idCrit
         End With
         
-        Debug.Print "  Respuesta " & contador & " completada"
+        ' Debug.Print "  Respuesta " & contador & " completada"
     Next resp
     
     Application.Calculation = xlCalculationAutomatic
@@ -215,7 +344,7 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
 ErrorHandler:
     Application.Calculation = xlCalculationAutomatic
     Application.ScreenUpdating = True
-    Debug.Print "[GuardarRespuestas] ERROR en respuesta " & contador & ": " & Err.Description
+    ' Debug.Print "[GuardarRespuestas] ERROR en respuesta " & contador & ": " & Err.Description
     Call ErrorLogger2.Log("InspectionRepository.GuardarRespuestas", Err.Description, Err.Number)
     Err.Raise Err.Number, "InspectionRepository.GuardarRespuestas", Err.Description
 End Sub
@@ -271,14 +400,14 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                         colIndexProcesos = Application.Match(CStr(nombreCol), tblInspecciones.HeaderRowRange, 0)
                         If Not IsError(colIndexProcesos) Then
                             .Cells(1, CLng(colIndexProcesos)).Value = calculos("Auditoria_Procesos_Resultado")
-                            Debug.Print "[ActualizarCalculos] Auditoría Procesos guardada en columna '" & nombreCol & "' (" & colIndexProcesos & "): " & calculos("Auditoria_Procesos_Resultado")
+                            ' Debug.Print "[ActualizarCalculos] Auditoría Procesos guardada en columna '" & nombreCol & "' (" & colIndexProcesos & "): " & calculos("Auditoria_Procesos_Resultado")
                             Exit For
                         End If
                     Next nombreCol
                     
                     If IsError(colIndexProcesos) Or IsEmpty(colIndexProcesos) Then
-                        Debug.Print "[ActualizarCalculos] ADVERTENCIA: No se encontró columna para Auditoría de Procesos. Dato: " & calculos("Auditoria_Procesos_Resultado")
-                        Debug.Print "[ActualizarCalculos] Columnas existentes: " & tblInspecciones.ListColumns.Count
+                        ' Debug.Print "[ActualizarCalculos] ADVERTENCIA: No se encontró columna para Auditoría de Procesos. Dato: " & calculos("Auditoria_Procesos_Resultado")
+                        ' Debug.Print "[ActualizarCalculos] Columnas existentes: " & tblInspecciones.ListColumns.Count
                     End If
                     On Error GoTo ErrorHandler
                 End If
@@ -290,7 +419,7 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                     colAPCritica = Application.Match("AP Critica No Cumple", tblInspecciones.HeaderRowRange, 0)
                     If Not IsError(colAPCritica) Then
                         .Cells(1, CLng(colAPCritica)).Value = calculos("AP_Critica_NoCumple")
-                        Debug.Print "[ActualizarCalculos] AP Crítica No Cumple: " & calculos("AP_Critica_NoCumple")
+                        ' Debug.Print "[ActualizarCalculos] AP Crítica No Cumple: " & calculos("AP_Critica_NoCumple")
                     End If
                     On Error GoTo ErrorHandler
                 End If
@@ -301,7 +430,7 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                     colAPMayor = Application.Match("AP Mayor No Cumple", tblInspecciones.HeaderRowRange, 0)
                     If Not IsError(colAPMayor) Then
                         .Cells(1, CLng(colAPMayor)).Value = calculos("AP_Mayor_NoCumple")
-                        Debug.Print "[ActualizarCalculos] AP Mayor No Cumple: " & calculos("AP_Mayor_NoCumple")
+                        ' Debug.Print "[ActualizarCalculos] AP Mayor No Cumple: " & calculos("AP_Mayor_NoCumple")
                     End If
                     On Error GoTo ErrorHandler
                 End If
@@ -312,7 +441,7 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                     colAPMenor = Application.Match("AP Menor No Cumple", tblInspecciones.HeaderRowRange, 0)
                     If Not IsError(colAPMenor) Then
                         .Cells(1, CLng(colAPMenor)).Value = calculos("AP_Menor_NoCumple")
-                        Debug.Print "[ActualizarCalculos] AP Menor No Cumple: " & calculos("AP_Menor_NoCumple")
+                        ' Debug.Print "[ActualizarCalculos] AP Menor No Cumple: " & calculos("AP_Menor_NoCumple")
                     End If
                     On Error GoTo ErrorHandler
                 End If
@@ -340,7 +469,7 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                     colIdx = Application.Match("Numero Inspeccion", tblInspecciones.HeaderRowRange, 0)
                     If colIdx > 0 Then
                         .Cells(1, colIdx).Value = calculos("NumeroInspeccion")
-                        Debug.Print "[ActualizarCalculos] Numero Inspeccion: " & calculos("NumeroInspeccion")
+                        ' Debug.Print "[ActualizarCalculos] Numero Inspeccion: " & calculos("NumeroInspeccion")
                     End If
                     
                     ' Es Inspeccion Recurrente (columna 33)
@@ -350,7 +479,7 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                         Dim valorRecurrente As String
                         valorRecurrente = IIf(calculos("EsInspeccionRecurrente"), "Si", "No")
                         .Cells(1, colIdx).Value = valorRecurrente
-                        Debug.Print "[ActualizarCalculos] Es Recurrente: " & valorRecurrente
+                        ' Debug.Print "[ActualizarCalculos] Es Recurrente: " & valorRecurrente
                     End If
                     
                     ' Puesto Evaluado (columna 34)
@@ -358,12 +487,24 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                     colIdx = Application.Match("Puesto Evaluado", tblInspecciones.HeaderRowRange, 0)
                     If colIdx > 0 Then
                         .Cells(1, colIdx).Value = calculos("PuestoEvaluado")
-                        Debug.Print "[ActualizarCalculos] Puesto Evaluado: " & calculos("PuestoEvaluado")
+                        ' Debug.Print "[ActualizarCalculos] Puesto Evaluado: " & calculos("PuestoEvaluado")
+                    End If
+                    
+                    ' RPN Total (columna 40) - SIEMPRE guardar (1ra y recurrentes)
+                    ' - Primera inspección: RPN Total = % TA
+                    ' - Inspección recurrente: RPN Total = Promedio + factores
+                    If calculos.Exists("RPNTotal") Then
+                        colIdx = 0
+                        colIdx = Application.Match("RPN Total", tblInspecciones.HeaderRowRange, 0)
+                        If colIdx > 0 Then
+                            .Cells(1, colIdx).Value = calculos("RPNTotal")
+                            ' Debug.Print "[ActualizarCalculos] RPN Total: " & Format(calculos("RPNTotal"), "0.00")
+                        End If
                     End If
                     
                     ' Campos especificos de inspecciones recurrentes (2da+)
                     If calculos("EsInspeccionRecurrente") Then
-                        Debug.Print "[ActualizarCalculos] Guardando datos recurrentes..."
+                        ' Debug.Print "[ActualizarCalculos] Guardando datos recurrentes..."
                         
                         ' RPN Anterior (columna 35) - SIEMPRE guardar, sea manual o automático
                         If calculos.Exists("RPNAnterior") Then
@@ -371,17 +512,22 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                             colIdx = Application.Match("RPN Anterior Manual", tblInspecciones.HeaderRowRange, 0)
                             If colIdx > 0 Then
                                 .Cells(1, colIdx).Value = calculos("RPNAnterior")
-                                Debug.Print "[ActualizarCalculos] RPN Anterior: " & Format(calculos("RPNAnterior"), "0.00")
+                                ' Debug.Print "[ActualizarCalculos] RPN Anterior: " & Format(calculos("RPNAnterior"), "0.00")
                             End If
                         End If
                         
-                        ' ID Inspeccion Anterior (columna 36) - Solo si es automático
-                        If calculos.Exists("IDInspeccionAnterior") And Len(calculos("IDInspeccionAnterior")) > 0 Then
-                            colIdx = 0
-                            colIdx = Application.Match("ID Inspeccion Anterior", tblInspecciones.HeaderRowRange, 0)
-                            If colIdx > 0 Then
+                        ' ID Inspeccion Anterior (columna 36)
+                        ' - Si existe y tiene valor: guardar el ID (modo automático)
+                        ' - Si no existe o está vacío: guardar Configuration2.VALOR_NO_APLICA (modo manual)
+                        colIdx = 0
+                        colIdx = Application.Match("ID Inspeccion Anterior", tblInspecciones.HeaderRowRange, 0)
+                        If colIdx > 0 Then
+                            If calculos.Exists("IDInspeccionAnterior") And Len(calculos("IDInspeccionAnterior")) > 0 Then
                                 .Cells(1, colIdx).Value = calculos("IDInspeccionAnterior")
-                                Debug.Print "[ActualizarCalculos] ID Inspeccion Anterior: " & calculos("IDInspeccionAnterior")
+                                ' Debug.Print "[ActualizarCalculos] ID Inspeccion Anterior: " & calculos("IDInspeccionAnterior")
+                            Else
+                                .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                                ' Debug.Print "[ActualizarCalculos] ID Inspeccion Anterior: N/A (modo manual)"
                             End If
                         End If
                         
@@ -391,32 +537,71 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                             colIdx = Application.Match("RPN Promedio", tblInspecciones.HeaderRowRange, 0)
                             If colIdx > 0 Then
                                 .Cells(1, colIdx).Value = calculos("RPNPromedio")
-                                Debug.Print "[ActualizarCalculos] RPN Promedio: " & Format(calculos("RPNPromedio"), "0.00")
+                                ' Debug.Print "[ActualizarCalculos] RPN Promedio: " & Format(calculos("RPNPromedio"), "0.00")
                             End If
                         End If
                         
-                        ' RPN Total (columna 40)
-                        If calculos.Exists("RPNTotal") Then
-                            colIdx = 0
-                            colIdx = Application.Match("RPN Total", tblInspecciones.HeaderRowRange, 0)
-                            If colIdx > 0 Then
-                                .Cells(1, colIdx).Value = calculos("RPNTotal")
-                                Debug.Print "[ActualizarCalculos] RPN Total: " & Format(calculos("RPNTotal"), "0.00")
-                            End If
+                        ' Factores adicionales (FASE 6 - 23/04/2026)
+                        ' IMPORTANTE: Siempre se guardan en inspecciones recurrentes
+                        ' - Operador, Muestreador, Ayudantes → valores reales (Grado A/B)
+                        ' - Técnico C/D, Sanitizador → 0 (no requieren factores)
+                        ' Esto evita columnas vacías y facilita análisis de datos
+                        
+                        ' Porcentaje Recuperación (columna 38)
+                        colIdx = 0
+                        colIdx = Application.Match("Porcentaje Recuperacion", tblInspecciones.HeaderRowRange, 0)
+                        If colIdx > 0 Then
+                            .Cells(1, colIdx).Value = calculos("PorcRecuperacion")
+                            ' Debug.Print "[ActualizarCalculos] % Recuperación: " & Format(calculos("PorcRecuperacion"), "0.00")
                         End If
                         
-                        Debug.Print "[ActualizarCalculos] Datos recurrentes guardados OK"
+                        ' Porcentaje OOL (columna 39)
+                        colIdx = 0
+                        colIdx = Application.Match("Porcentaje OOL", tblInspecciones.HeaderRowRange, 0)
+                        If colIdx > 0 Then
+                            .Cells(1, colIdx).Value = calculos("PorcOOL")
+                            ' Debug.Print "[ActualizarCalculos] % OOL: " & Format(calculos("PorcOOL"), "0.00")
+                        End If
+                        
+                        ' Debug.Print "[ActualizarCalculos] Datos recurrentes guardados OK"
                     End If
                     
                     On Error GoTo ErrorHandler
                 Else
-                    ' No hay datos recurrentes, asumir 1ra inspeccion
+                    ' ═══════════════════════════════════════════════════════════════
+                    ' PRIMERA INSPECCIÓN (NO RECURRENTE)
+                    ' Completar columnas recurrentes con Configuration2.VALOR_NO_APLICA para evitar vacíos
+                    ' ═══════════════════════════════════════════════════════════════
+                    ' Debug.Print "[ActualizarCalculos] Primera inspección detectada - completando campos recurrentes con 'N/A'"
+                    
                     On Error Resume Next
                     colIdx = Application.Match("Numero Inspeccion", tblInspecciones.HeaderRowRange, 0)
                     If colIdx > 0 Then .Cells(1, colIdx).Value = 1
                     
                     colIdx = Application.Match("Es Inspeccion Recurrente", tblInspecciones.HeaderRowRange, 0)
                     If colIdx > 0 Then .Cells(1, colIdx).Value = "No"
+                    
+                    ' RPN Anterior Manual (columna 35)
+                    colIdx = Application.Match("RPN Anterior Manual", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                    
+                    ' ID Inspeccion Anterior (columna 36)
+                    colIdx = Application.Match("ID Inspeccion Anterior", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                    
+                    ' RPN Promedio (columna 37)
+                    colIdx = Application.Match("RPN Promedio", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                    
+                    ' Porcentaje Recuperacion (columna 38)
+                    colIdx = Application.Match("Porcentaje Recuperacion", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                    
+                    ' Porcentaje OOL (columna 39)
+                    colIdx = Application.Match("Porcentaje OOL", tblInspecciones.HeaderRowRange, 0)
+                    If colIdx > 0 Then .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                    
+                    ' Debug.Print "[ActualizarCalculos] Campos recurrentes completados con 'N/A'"
                     On Error GoTo ErrorHandler
                 End If
                 
@@ -426,6 +611,15 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                 ' Auditoría
                 .Cells(1, tblInspecciones.ListColumns("Fecha calculo").Index).Value = Now
                 .Cells(1, tblInspecciones.ListColumns("Usuario calculo").Index).Value = Environ("Username")
+                
+                ' Columnas no usadas actualmente: completar con Configuration2.VALOR_NO_APLICA para evitar vacíos
+                On Error Resume Next
+                colIdx = Application.Match("Fecha completado", tblInspecciones.HeaderRowRange, 0)
+                If colIdx > 0 Then .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                
+                colIdx = Application.Match("Usuario completado", tblInspecciones.HeaderRowRange, 0)
+                If colIdx > 0 Then .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
+                On Error GoTo ErrorHandler
             End With
             
             Exit For
