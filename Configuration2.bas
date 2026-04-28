@@ -38,6 +38,15 @@ Public Const ADMIN_PASSWORD As String = "1234"
 Public Const AUDIT_PASSWORD As String = "1234"
 
 ' ----------------------------------------------------------------------
+' Constante: CRONOGRAMA_ADMIN_PASSWORD
+' Propósito: Contraseña para autenticación del Gestor de Cronograma.
+'            Requerida para pausar/reactivar inspecciones desde frmGestorCronograma.
+'            Separada de ADMIN_PASSWORD para control de acceso granular.
+' Actualizada: 28/04/2026 - Fase 1: Gestor de Cronograma
+' ----------------------------------------------------------------------
+Public Const CRONOGRAMA_ADMIN_PASSWORD As String = "CronoAdmin2026*"
+
+' ----------------------------------------------------------------------
 ' Constantes: Sistema de rotación de hojas Audit Trail
 ' Propósito: Controlan el comportamiento del sistema de múltiples hojas
 '            de auditoría (AuditRotation2 + AuditLogger2).
@@ -327,9 +336,9 @@ End Function
 ' TABLA: tblCronogramaInspecciones
 ' Ubicación: Hoja "Cronograma"
 ' Propósito: Registro maestro de cronogramas de inspección por persona/puesto
-' Total columnas: 19
+' Total columnas: 20
 ' ----------------------------------------------------------------------
-' COLUMNAS VERIFICADAS (23/04/2026):
+' COLUMNAS VERIFICADAS (28/04/2026):
 '   [01] ID Cronograma                  - String (UUID único)
 '   [02] Iniciales personal             - String (FK a tblPersonal)
 '   [03] ID Plantilla                   - String (FK a tblPlantillas)
@@ -349,12 +358,16 @@ End Function
 '   [17] Requiere recalculo              - String ("Si"/"No")
 '   [18] Nombre plantilla                - String
 '   [19] Frecuencia meses                - Long (1, 3, 6, 12)
+'   [20] Activo en cronograma            - String ("Si"/"No") - Gestión de pausa/reactivación
 '
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - InspectionScheduler.bas (InicializarCronograma, RecalcularCronograma)
 '   - CronogramaResumen.bas (RefrescarResumenCronograma)
 '   - SystemInitializer.bas (InicializarCronogramaSilencioso)
 '   - TestDataGenerator.bas (GenerarDatosPrueba)
+'   - CronogramaGestorService.bas (PausarInspecciones, ReactivarInspecciones)
+' NOTA col 20: Valor "No" oculta la inspección del resumen pero NO del historial.
+'              InspectionHistoryService NO filtra por esta columna (intencional).
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------
