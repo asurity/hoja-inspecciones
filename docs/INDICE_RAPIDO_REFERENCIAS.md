@@ -122,6 +122,10 @@ Esta guía te ayuda a encontrar rápidamente información específica en la docu
 → [SISTEMA_INSPECCIONES_ARQUITECTURA.md](SISTEMA_INSPECCIONES_ARQUITECTURA.md)
 → [GUIA_MAESTRA_SISTEMA_INSPECCIONES.md](GUIA_MAESTRA_SISTEMA_INSPECCIONES.md) - Sección 10
 
+### ⏸️ **Gestor de Cronograma (pausar/reactivar inspecciones)**
+→ [PLAN_GESTOR_CRONOGRAMA.md](PLAN_GESTOR_CRONOGRAMA.md) - Plan completo de implementación
+→ Acceso: Menú principal → botón "Gestor de Cronograma" (requiere contraseña admin)
+
 ---
 
 ## Por Módulo VBA
@@ -141,6 +145,8 @@ Esta guía te ayuda a encontrar rápidamente información específica en la docu
 | TableManager.bas | GESTOR_TABLAS_MANUAL |
 | InspectionHistoryService.bas | TODO_RPN_AJUSTADO - Fase 3 |
 | RecurrentInspectionCalculator.bas | TODO_RPN_AJUSTADO - Fase 4 |
+| CronogramaGestorService.bas | PLAN_GESTOR_CRONOGRAMA - Fase 2 |
+| frmGestorCronograma.frm | PLAN_GESTOR_CRONOGRAMA - Fase 3 |
 
 ---
 
@@ -150,7 +156,7 @@ Esta guía te ayuda a encontrar rápidamente información específica en la docu
 |-------|--------------|
 | tblInspecciones | SISTEMA_ARQUITECTURA - Sección 3.10 |
 | tblRespuestas | SISTEMA_ARQUITECTURA - Sección 3.11 |
-| tblCronogramaInspecciones | SISTEMA_ARQUITECTURA - Sección 3.9 |
+| tblCronogramaInspecciones | SISTEMA_ARQUITECTURA - Sección 3.9 (20 cols desde 28/04/2026) |
 | tblPersonal | SISTEMA_ARQUITECTURA - Sección 3.7 |
 | tblPlantillas | SISTEMA_ARQUITECTURA - Sección 3.5 |
 | tblPreguntas | SISTEMA_ARQUITECTURA - Sección 3.6 |
