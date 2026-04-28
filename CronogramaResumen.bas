@@ -88,6 +88,22 @@ Public Sub RefrescarResumenCronograma()
         If UCase(personalActivo) <> "SI" Then GoTo SiguienteRegistro
         If UCase(puestoActivo) <> "SI" Then GoTo SiguienteRegistro
         
+        ' Filtrar: solo inspecciones activas en cronograma ("Activo en cronograma" = "Si")
+        ' Backward compatible: si la columna no existe o está vacía, se trata como "Si"
+        Dim activoCrono As String
+        activoCrono = "Si"  ' Valor por defecto (backward compatible)
+        On Error Resume Next
+        Dim colActivo As Long
+        colActivo = tblCronograma.ListColumns("Activo en cronograma").Index
+        If Err.Number = 0 And colActivo > 0 Then
+            Dim rawActivo As String
+            rawActivo = Trim(CStr(cronogramaRow.Range.Cells(1, colActivo).Value))
+            If Len(rawActivo) > 0 Then activoCrono = rawActivo
+        End If
+        Err.Clear
+        On Error GoTo ErrorHandler
+        If UCase(activoCrono) <> "SI" Then GoTo SiguienteRegistro
+        
         ' Filtrar por planta (si no es "Todas")
         If filtroPlanta <> "Todas" Then
             If plantaPersonal <> filtroPlanta Then GoTo SiguienteRegistro

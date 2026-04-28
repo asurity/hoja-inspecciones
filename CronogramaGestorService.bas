@@ -1,4 +1,3 @@
-Attribute VB_Name = "CronogramaGestorService"
 ' ----------------------------------------------------------------------
 ' Módulo: CronogramaGestorService
 ' Descripción: Servicio de negocio para la gestión de cronogramas.

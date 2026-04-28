@@ -122,9 +122,16 @@ Public Sub InicializarCronograma()
                                     .Cells(1, tblCronograma.ListColumns("Puesto activo en personal").Index).Value = "Si"
                                     .Cells(1, tblCronograma.ListColumns("Personal activo").Index).Value = activo
                                     
-                                    ' Auditor\u00eda
+                                    ' Auditoría
                                     .Cells(1, tblCronograma.ListColumns("Fecha ultima actualizacion").Index).Value = Now
                                     .Cells(1, tblCronograma.ListColumns("Requiere recalculo").Index).Value = "No"
+                                    
+                                    ' Gestión de cronograma: activa por defecto al inicializar
+                                    ' (backward compatible: si la columna no existe, On Error Resume Next lo ignora)
+                                    On Error Resume Next
+                                    .Cells(1, tblCronograma.ListColumns("Activo en cronograma").Index).Value = "Si"
+                                    Err.Clear
+                                    On Error GoTo ErrorHandler
                                 End With
                                 
                                 registrosCreados = registrosCreados + 1
