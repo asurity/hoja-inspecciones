@@ -4,6 +4,10 @@
 ' Descripción: Controla el comportamiento de la hoja principal del menú.
 '              Incluye eventos para la activación y desactivación de la hoja,
 '              y la gestión de la protección de la misma.
+' Procedimientos públicos:
+'   - AbrirGestorCronograma: Punto de entrada para gestión de cronograma.
+'                            Requiere contraseña CRONOGRAMA_ADMIN_PASSWORD.
+'                            Asignado al botón "Gestor de Cronograma" en la hoja.
 ' ----------------------------------------------------------------------
 Option Explicit
 
@@ -179,4 +183,46 @@ Private Sub Worksheet_Change(ByVal Target As Range)
 ErrorHandler:
     Application.EnableEvents = True
     Call ErrorLogger2.Log("Menú principal.Worksheet_Change", VBA.Err.Description, VBA.Err.Number)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Subrutina pública: AbrirGestorCronograma
+' Propósito: Punto de entrada para el Gestor de Cronograma.
+'            Solicita contraseña, valida con CronogramaGestorService y,
+'            si es correcta, abre frmGestorCronograma en modo modal.
+'            Al cerrar el form, refresca tblResumenCronograma automáticamente.
+' Seguridad: Validación de contraseña antes de mostrar UI (seguridad en capas).
+' Asignación: Botón "Gestor de Cronograma" en hoja "Menú principal".
+' Fecha creación: 28/04/2026
+' ----------------------------------------------------------------------
+Public Sub AbrirGestorCronograma()
+    On Error GoTo ErrorHandler
+
+    Dim contrasena As String
+    contrasena = InputBox("Ingrese la contraseña de administrador:", "Gestor de Cronograma")
+
+    ' Si el usuario cancela el InputBox, contrasena = "" → no continuar
+    If contrasena = "" Then Exit Sub
+
+    ' Validar contraseña contra CRONOGRAMA_ADMIN_PASSWORD (incluye auditoría interna)
+    If Not CronogramaGestorService.ValidarContrasenaGestor(contrasena) Then
+        MsgBox "Contraseña incorrecta. Acceso denegado.", vbCritical, "Acceso denegado"
+        Exit Sub
+    End If
+
+    ' Abrir gestor en modo modal
+    Dim frm As frmGestorCronograma
+    Set frm = New frmGestorCronograma
+    frm.Show vbModal
+
+    Set frm = Nothing
+
+    ' Refrescar resumen al cerrar el gestor (puede haber pausas/reactivaciones)
+    Call CronogramaResumen.RefrescarResumenCronograma
+
+    Exit Sub
+
+ErrorHandler:
+    Call ErrorLogger2.Log("Menú principal.AbrirGestorCronograma", VBA.Err.Description, VBA.Err.Number)
+    MsgBox "Error al abrir el Gestor de Cronograma: " & VBA.Err.Description, vbCritical, "Error"
 End Sub
