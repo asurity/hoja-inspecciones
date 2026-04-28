@@ -247,7 +247,7 @@ End Function
 ' Retorna: Número de registros modificados (excluye los ya pausados y no encontrados)
 ' Pipeline: UI → PausarInspecciones → LeerActivoConFallback → AuditLogger2
 ' ----------------------------------------------------------------------
-Public Function PausarInspecciones(ByVal idsInspecciones() As String) As Long
+Public Function PausarInspecciones(ByRef idsInspecciones() As String) As Long
     On Error GoTo ErrorHandler
 
     Dim actualizados As Long
@@ -317,7 +317,7 @@ End Function
 ' Retorna: Número de registros modificados (excluye los ya activos y no encontrados)
 ' Pipeline: UI → ReactivarInspecciones → LeerActivoConFallback → AuditLogger2
 ' ----------------------------------------------------------------------
-Public Function ReactivarInspecciones(ByVal idsInspecciones() As String) As Long
+Public Function ReactivarInspecciones(ByRef idsInspecciones() As String) As Long
     On Error GoTo ErrorHandler
 
     Dim actualizados As Long
