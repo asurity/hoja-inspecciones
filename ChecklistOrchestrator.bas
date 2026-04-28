@@ -707,32 +707,48 @@ Private Function CalcularMetricasInspeccion( _
         ' ═══════════════════════════════════════════════════════════
         Debug.Print "[CalcularMetricas] FLUJO: Inspección recurrente #" & numeroInspeccion
         
-        ' VALIDACIÓN CRÍTICA: Debe existir ID de inspección anterior
-        ' NOTA: rpnAnterior puede ser 0 (desempeño perfecto), por eso validamos el ID
+        ' ─────────────────────────────────────────────────────────────
+        ' VALIDACIÓN: Verificar que hay datos de inspección anterior
+        ' ─────────────────────────────────────────────────────────────
+        ' Dos escenarios válidos:
+        ' 1. Recurrente automático: IDInspeccionAnterior existe (historial real en BD)
+        ' 2. Recurrente manual: IDInspeccionAnterior vacío PERO rpnAnterior > 0 (entrada manual)
+        ' ─────────────────────────────────────────────────────────────
         Debug.Print "[CalcularMetricas] Validando historial cargado..."
         Debug.Print "[CalcularMetricas]   IDInspeccionAnterior: '" & idInspeccionAnterior & "'"
         Debug.Print "[CalcularMetricas]   rpnAnterior: " & rpnAnterior
         
-        If Len(Trim(idInspeccionAnterior)) = 0 Then
-            Debug.Print "[CalcularMetricas] ERROR: IDInspeccionAnterior vacío en inspección recurrente"
-            Debug.Print "[CalcularMetricas] DIAGNÓSTICO: BuscarHistorialSilencioso() no cargó el historial"
+        Dim tieneHistorialAutomatico As Boolean
+        Dim tieneRPNManual As Boolean
+        
+        tieneHistorialAutomatico = (Len(Trim(idInspeccionAnterior)) > 0)
+        tieneRPNManual = (rpnAnterior > 0 And Len(Trim(idInspeccionAnterior)) = 0)
+        
+        If Not tieneHistorialAutomatico And Not tieneRPNManual Then
+            ' Error: No hay historial automático NI RPN manual
+            Debug.Print "[CalcularMetricas] ERROR: Sin datos de inspección anterior"
+            Debug.Print "[CalcularMetricas] No hay ID de historial ni RPN manual ingresado"
             
-            ' Mensaje claro al usuario
             Call ErrorLogger2.Log("ChecklistOrchestrator.CalcularMetricasInspeccion", _
-                "ID Inspección Anterior no cargado para inspección recurrente #" & numeroInspeccion & _
-                ". IDInspeccionAnterior vacío, RPNAnterior=" & rpnAnterior, 1001)
+                "Inspección recurrente #" & numeroInspeccion & " sin datos anteriores. " & _
+                "IDInspeccionAnterior='' y RPNAnterior=0", 1001)
             
-            MsgBox "ERROR: No se pudo cargar el historial de la inspección anterior." & vbCrLf & vbCrLf & _
+            MsgBox "ERROR: Falta información de la inspección anterior." & vbCrLf & vbCrLf & _
                    "Esta es la inspección #" & numeroInspeccion & " del puesto '" & puestoEvaluado & "'." & vbCrLf & _
-                   "El sistema debe cargar automáticamente el historial al abrir el formulario." & vbCrLf & vbCrLf & _
-                   "Posibles causas:" & vbCrLf & _
-                   "1. La inspección anterior no existe en el historial" & vbCrLf & _
-                   "2. El historial no se buscó correctamente" & vbCrLf & _
-                   "3. El formulario no se activó correctamente" & vbCrLf & vbCrLf & _
-                   "Verifique los logs para más detalles.", vbCritical, "Historial Anterior Faltante"
+                   "El sistema requiere uno de los siguientes:" & vbCrLf & vbCrLf & _
+                   "1. Historial automático (si existe inspección anterior en BD), O" & vbCrLf & _
+                   "2. RPN anterior ingresado manualmente (si no hay historial)" & vbCrLf & vbCrLf & _
+                   "Por favor active el modo recurrente e ingrese el RPN anterior manualmente.", _
+                   vbCritical, "Datos Anteriores Faltantes"
             
             Err.Raise 1001, "ChecklistOrchestrator.CalcularMetricasInspeccion", _
-                "ID Inspección Anterior faltante en inspección recurrente"
+                "Inspección recurrente sin datos de inspección anterior"
+        End If
+        
+        If tieneHistorialAutomatico Then
+            Debug.Print "[CalcularMetricas] Modo: RECURRENTE AUTOMÁTICO (historial de BD)"
+        Else
+            Debug.Print "[CalcularMetricas] Modo: RECURRENTE MANUAL (RPN ingresado manualmente)"
         End If
         
         Debug.Print "[CalcularMetricas] Validación OK - historial anterior cargado correctamente"

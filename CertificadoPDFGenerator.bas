@@ -1100,12 +1100,83 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     ' Debug.Print "[POBLACIÓN] Sección de Plan de Trabajo agregada en filas " & filaPlanTrabajo & "-" & filaFinPlan
     
     ' -----------------------------------------------------------
-    ' SECCIÓN DE FIRMAS DE AUTORIZACIÓN (2 filas después de plan de trabajo)
+    ' SECCIÓN DE MUESTREO MICROBIOLÓGICO (2 filas después de plan de trabajo)
+    ' AGREGADO 27/04/2026
+    ' -----------------------------------------------------------
+    ' Debug.Print "[POBLACIÓN] Agregando sección de Muestreo Microbiológico..."
+    
+    Dim filaMuestreoMicro As Long
+    filaMuestreoMicro = filaFinPlan + 2  ' 2 filas después (1 fila en blanco)
+    
+    ' Título de la sección
+    wsPlantilla.Range(wsPlantilla.Cells(filaMuestreoMicro, 1), wsPlantilla.Cells(filaMuestreoMicro, 4)).Merge
+    wsPlantilla.Cells(filaMuestreoMicro, 1).Value = "MUESTREO MICROBIOLÓGICO"
+    
+    With wsPlantilla.Cells(filaMuestreoMicro, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 11
+        .Font.Bold = True
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Interior.Color = RGB(189, 215, 238)  ' Azul claro (mismo que encabezados)
+    End With
+    
+    ' Fila con el texto de verificación
+    Dim filaTextoMuestreo As Long
+    filaTextoMuestreo = filaMuestreoMicro + 1
+    
+    wsPlantilla.Range(wsPlantilla.Cells(filaTextoMuestreo, 1), wsPlantilla.Cells(filaTextoMuestreo, 4)).Merge
+    wsPlantilla.Cells(filaTextoMuestreo, 1).Value = "Muestreo microbiológico: Por incumplimiento del punto 17 se requiere seguimiento (2 verificaciones) / No requiere verificación: SI (  ) / NO (  )"
+    
+    With wsPlantilla.Cells(filaTextoMuestreo, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlCenter
+        .WrapText = True
+    End With
+    
+    wsPlantilla.Rows(filaTextoMuestreo).rowHeight = 30
+    
+    ' Fila para N° desvío
+    Dim filaDesvio As Long
+    filaDesvio = filaTextoMuestreo + 1
+    
+    wsPlantilla.Range(wsPlantilla.Cells(filaDesvio, 1), wsPlantilla.Cells(filaDesvio, 4)).Merge
+    wsPlantilla.Cells(filaDesvio, 1).Value = "N° desvío: _______________________"
+    
+    With wsPlantilla.Cells(filaDesvio, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 10
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlCenter
+    End With
+    
+    wsPlantilla.Rows(filaDesvio).rowHeight = 25
+    
+    ' Aplicar borde grueso alrededor de toda la sección de muestreo microbiológico
+    Dim rangoMuestreoCompleto As Range
+    Set rangoMuestreoCompleto = wsPlantilla.Range(wsPlantilla.Cells(filaMuestreoMicro, 1), wsPlantilla.Cells(filaDesvio, 4))
+    
+    With rangoMuestreoCompleto
+        .BorderAround LineStyle:=xlContinuous, Weight:=xlMedium  ' Borde grueso alrededor
+    End With
+    
+    ' Borde inferior del título
+    With wsPlantilla.Range(wsPlantilla.Cells(filaMuestreoMicro, 1), wsPlantilla.Cells(filaMuestreoMicro, 4)).Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+    End With
+    
+    ' Debug.Print "[POBLACIÓN] Sección de Muestreo Microbiológico agregada en filas " & filaMuestreoMicro & "-" & filaDesvio
+    
+    ' -----------------------------------------------------------
+    ' SECCIÓN DE FIRMAS DE AUTORIZACIÓN (2 filas después de muestreo microbiológico)
     ' -----------------------------------------------------------
     ' Debug.Print "[POBLACIÓN] Agregando sección de Firmas de Autorización..."
     
     Dim filaFirmasAutorizacion As Long
-    filaFirmasAutorizacion = filaFinPlan + 2  ' 2 filas después (1 fila en blanco)
+    filaFirmasAutorizacion = filaDesvio + 2  ' 2 filas después (1 fila en blanco)
     
     ' Fila 1: Líneas de firma (distribuidas en 3 secciones)
     ' Firma 1 (Columna A)
@@ -1769,23 +1840,41 @@ Private Sub LimpiarPlantillaCertificado(wsPlantilla As Worksheet)
     wsPlantilla.Cells(16, 6).ClearContents  ' F16 - AY2
     wsPlantilla.Cells(16, 7).ClearContents  ' G16 - OP
     
-    ' -- Sección 2: Resultados (desplazadas +3) ------------------
+    ' -- Sección 2: Resultados generales ------------------
     wsPlantilla.Cells(20, 3).ClearContents  ' C20 - TA puntaje
     wsPlantilla.Cells(20, 5).ClearContents  ' E20 - TA máximos
     wsPlantilla.Cells(21, 3).ClearContents  ' C21 - TA no aplica
     wsPlantilla.Cells(22, 3).ClearContents  ' C22 - Porcentaje
-    wsPlantilla.Cells(23, 3).ClearContents  ' C23 - RPN
-    wsPlantilla.Cells(24, 3).ClearContents  ' C24 - Categoría
-    wsPlantilla.Cells(25, 3).ClearContents  ' C25 - Estado
-    wsPlantilla.Cells(25, 3).Font.Color = RGB(0, 0, 0)  ' Restaurar color negro
-    wsPlantilla.Cells(25, 3).Font.Bold = True  ' Mantener negrita por diseño
     
-    ' -- Sección 3: Filas de respuestas (fila 27 en adelante, desplazada +3) -----
+    ' -- Sección 3: Calificaciones Vestuario/Operador (Filas 23-24) -----
+    ' IMPORTANTE: NO limpiar C23 ni C24 porque contienen el texto estático "Fecha de vencimiento: "
+    wsPlantilla.Cells(23, 2).ClearContents  ' B23 - Calificación Vestuario
+    wsPlantilla.Cells(23, 4).ClearContents  ' D23 - Fecha Venc Vestuario
+    wsPlantilla.Cells(24, 2).ClearContents  ' B24 - Calificación Operador
+    wsPlantilla.Cells(24, 4).ClearContents  ' D24 - Fecha Venc Operador
+    
+    ' -- Sección 4: Auditoría de Procesos (Filas 26-28) -----
+    wsPlantilla.Cells(26, 2).ClearContents  ' B26 - AP Crítica No Cumple
+    wsPlantilla.Cells(27, 2).ClearContents  ' B27 - AP Mayor No Cumple
+    wsPlantilla.Cells(28, 2).ClearContents  ' B28 - AP Menor No Cumple
+    wsPlantilla.Range("B29:D31").ClearContents  ' Resultado AP
+    
+    ' -- Sección 5: Resultados técnicos (Filas 33-38) -----
+    wsPlantilla.Cells(33, 2).ClearContents  ' B33 - TA Máximos
+    wsPlantilla.Cells(34, 2).ClearContents  ' B34 - TA Puntaje
+    wsPlantilla.Cells(35, 2).ClearContents  ' B35 - TA No Aplica
+    wsPlantilla.Cells(36, 2).ClearContents  ' B36 - % TA
+    wsPlantilla.Cells(37, 2).ClearContents  ' B37 - % TA Anterior
+    wsPlantilla.Cells(38, 2).ClearContents  ' B38 - RPN Total
+    wsPlantilla.Cells(36, 4).ClearContents  ' D36 - % Recuperación
+    wsPlantilla.Cells(37, 4).ClearContents  ' D37 - % OOL
+    
+    ' -- Sección 6: Filas de respuestas (fila 40 en adelante) -----
     Dim ultimaFila As Long
     ultimaFila = wsPlantilla.UsedRange.row + wsPlantilla.UsedRange.Rows.Count - 1
-    If ultimaFila >= 27 Then
+    If ultimaFila >= 40 Then
         wsPlantilla.Range( _
-            wsPlantilla.Cells(27, 2), _
+            wsPlantilla.Cells(40, 2), _
             wsPlantilla.Cells(ultimaFila, 7) _
         ).ClearContents
     End If

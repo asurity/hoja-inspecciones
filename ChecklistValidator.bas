@@ -695,10 +695,18 @@ Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
     
     ' ═══════════════════════════════════════════════════════════════════
     ' VALIDAR CALIFICACIONES (FASE 7 - 23/04/2026)
-    ' Solo para puestos: Operador, Ayudante 1, Ayudante 2, Sanitizador
+    ' - Operadores: Vestuario + Operador (ambos)
+    ' - Ayudantes y Sanitizador: Solo Vestuario
+    ' CORREGIDO 27/04/2026: Validación selectiva según tipo de puesto
     ' ═══════════════════════════════════════════════════════════════════
     If RequiereCalificaciones(frm) Then
-        ' --- Calificación Vestuario (obligatorio) ---
+        Dim puestoUpper As String
+        puestoUpper = UCase(Trim(frm.txtPuesto.Value))
+        
+        Dim esOperador As Boolean
+        esOperador = (InStr(1, puestoUpper, "OPERADOR") > 0)
+        
+        ' --- Calificación Vestuario (obligatorio para todos) ---
         If Trim(frm.cboCalificacionVestuario.Value) = "" Then
             errores.Add "Debe seleccionar la Calificación de Vestuario (Si/No)."
         End If
@@ -720,25 +728,27 @@ Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
             End If
         End If
         
-        ' --- Calificación Operador (obligatorio) ---
-        If Trim(frm.cboCalificacionOperador.Value) = "" Then
-            errores.Add "Debe seleccionar la Calificación de Operador (Si/No)."
-        End If
-        
-        ' --- Fecha Vencimiento Operador (opcional, pero si existe debe ser válida) ---
-        Dim fechaVencOperador As String
-        fechaVencOperador = Trim(frm.txtFechaVencOperador.Value)
-        If fechaVencOperador <> "" Then
-            Dim resultFechaVencOperador As Object
-            Set resultFechaVencOperador = CorregirYValidarFechaVencimiento(fechaVencOperador)
+        ' --- Calificación Operador (obligatorio SOLO para Operadores) ---
+        If esOperador Then
+            If Trim(frm.cboCalificacionOperador.Value) = "" Then
+                errores.Add "Debe seleccionar la Calificación de Operador (Si/No)."
+            End If
             
-            If resultFechaVencOperador("valido") Then
-                frm.txtFechaVencOperador.Value = resultFechaVencOperador("valor")
-                If resultFechaVencOperador("mensaje") <> "" Then
-                    correcciones.Add resultFechaVencOperador("mensaje")
+            ' --- Fecha Vencimiento Operador (opcional, pero si existe debe ser válida) ---
+            Dim fechaVencOperador As String
+            fechaVencOperador = Trim(frm.txtFechaVencOperador.Value)
+            If fechaVencOperador <> "" Then
+                Dim resultFechaVencOperador As Object
+                Set resultFechaVencOperador = CorregirYValidarFechaVencimiento(fechaVencOperador)
+                
+                If resultFechaVencOperador("valido") Then
+                    frm.txtFechaVencOperador.Value = resultFechaVencOperador("valor")
+                    If resultFechaVencOperador("mensaje") <> "" Then
+                        correcciones.Add resultFechaVencOperador("mensaje")
+                    End If
+                Else
+                    errores.Add "Fecha Venc. Operador: " & resultFechaVencOperador("mensaje")
                 End If
-            Else
-                errores.Add "Fecha Venc. Operador: " & resultFechaVencOperador("mensaje")
             End If
         End If
     End If
@@ -782,8 +792,9 @@ End Function
 '            calificaciones de vestuario y operador.
 ' Parámetros:
 '   frm: Referencia al formulario frmChecklistVirtual
-' Retorna: True si el puesto es: Operador, Ayudante 1, Ayudante 2, Sanitizador
+' Retorna: True si el puesto contiene: Operador, Ayudante, Sanitizador
 ' FASE 7 - 23/04/2026
+' CORREGIDO 27/04/2026: Usar InStr para detectar puestos con variantes (ej: "Operador Electrolitos")
 ' ----------------------------------------------------------------------
 Private Function RequiereCalificaciones(ByRef frm As Object) As Boolean
     On Error GoTo ErrorHandler
@@ -791,11 +802,10 @@ Private Function RequiereCalificaciones(ByRef frm As Object) As Boolean
     Dim puestoUpper As String
     puestoUpper = UCase(Trim(frm.txtPuesto.Value))
     
-    ' Lista de puestos que requieren calificaciones
-    RequiereCalificaciones = (puestoUpper = "OPERADOR" Or _
-                             puestoUpper = "AYUDANTE 1" Or _
-                             puestoUpper = "AYUDANTE 2" Or _
-                             puestoUpper = "SANITIZADOR")
+    ' Lista de puestos que requieren calificaciones (usando InStr para detectar variantes)
+    RequiereCalificaciones = (InStr(1, puestoUpper, "OPERADOR") > 0 Or _
+                             InStr(1, puestoUpper, "AYUDANTE") > 0 Or _
+                             InStr(1, puestoUpper, "SANITIZADOR") > 0)
     Exit Function
     
 ErrorHandler:

@@ -1839,47 +1839,69 @@ End Sub
 ' Función: RequiereCalificaciones
 ' Propósito: Determina si el puesto actual requiere calificaciones de
 '            vestuario y operador.
-' Retorna: True si el puesto es: Operador, Ayudante 1, Ayudante 2, Sanitizador
+' Retorna: True si el puesto contiene: Operador, Ayudante, Sanitizador
 ' FASE 7 - 23/04/2026
+' CORREGIDO 27/04/2026: Usar InStr para detectar puestos con variantes (ej: "Operador Electrolitos")
 ' ----------------------------------------------------------------------
 Private Function RequiereCalificaciones() As Boolean
     Dim puestoUpper As String
     puestoUpper = UCase(Trim(mPuesto))
     
-    ' Lista de puestos que requieren calificaciones
-    RequiereCalificaciones = (puestoUpper = "OPERADOR" Or _
-                             puestoUpper = "AYUDANTE 1" Or _
-                             puestoUpper = "AYUDANTE 2" Or _
-                             puestoUpper = "SANITIZADOR")
+    ' Lista de puestos que requieren calificaciones (usando InStr para detectar variantes)
+    RequiereCalificaciones = (InStr(1, puestoUpper, "OPERADOR") > 0 Or _
+                             InStr(1, puestoUpper, "AYUDANTE") > 0 Or _
+                             InStr(1, puestoUpper, "SANITIZADOR") > 0)
 End Function
 
 '' ----------------------------------------------------------------------
 ' Subrutina: ConfigurarVisibilidadCalificaciones
 ' Propósito: Muestra u oculta los controles de calificaciones según el puesto.
-'            Solo se muestran para: Operador, Ayudante 1, Ayudante 2, Sanitizador
+'            - Operadores: Vestuario + Operador (ambos)
+'            - Ayudantes: Solo Vestuario
+'            - Sanitizador: Solo Vestuario
 ' FASE 7 - 23/04/2026
+' CORREGIDO 27/04/2026: Diferenciar entre campos de vestuario y operador según tipo de puesto
 ' ----------------------------------------------------------------------
 Private Sub ConfigurarVisibilidadCalificaciones()
     On Error Resume Next
     
-    Dim mostrar As Boolean
-    mostrar = RequiereCalificaciones()
+    Dim puestoUpper As String
+    puestoUpper = UCase(Trim(mPuesto))
     
-    ' Configurar visibilidad de todos los controles de calificación
-    lblCalificacionVestuario.Visible = mostrar
-    cboCalificacionVestuario.Visible = mostrar
-    lblFechaVencVestuario.Visible = mostrar
-    txtFechaVencVestuario.Visible = mostrar
+    Dim esOperador As Boolean
+    Dim esAyudante As Boolean
+    Dim esSanitizador As Boolean
     
-    lblCalificacionOperador.Visible = mostrar
-    cboCalificacionOperador.Visible = mostrar
-    lblFechaVencOperador.Visible = mostrar
-    txtFechaVencOperador.Visible = mostrar
+    ' Detectar tipo de puesto (usando InStr para incluir variantes como "Operador Electrolitos")
+    esOperador = (InStr(1, puestoUpper, "OPERADOR") > 0)
+    esAyudante = (InStr(1, puestoUpper, "AYUDANTE") > 0)
+    esSanitizador = (InStr(1, puestoUpper, "SANITIZADOR") > 0)
     
-    ' Si no se muestran, limpiar valores (para evitar datos residuales)
-    If Not mostrar Then
+    ' Campos de VESTUARIO: Mostrar para Operadores, Ayudantes y Sanitizadores
+    Dim mostrarVestuario As Boolean
+    mostrarVestuario = (esOperador Or esAyudante Or esSanitizador)
+    
+    lblCalificacionVestuario.Visible = mostrarVestuario
+    cboCalificacionVestuario.Visible = mostrarVestuario
+    lblFechaVencVestuario.Visible = mostrarVestuario
+    txtFechaVencVestuario.Visible = mostrarVestuario
+    
+    ' Campos de OPERADOR: Mostrar SOLO para Operadores (NO para Ayudantes ni Sanitizadores)
+    Dim mostrarOperador As Boolean
+    mostrarOperador = esOperador
+    
+    lblCalificacionOperador.Visible = mostrarOperador
+    cboCalificacionOperador.Visible = mostrarOperador
+    lblFechaVencOperador.Visible = mostrarOperador
+    txtFechaVencOperador.Visible = mostrarOperador
+    
+    ' Limpiar valores si no se muestran (para evitar datos residuales)
+    If Not mostrarVestuario Then
         cboCalificacionVestuario.Value = ""
         txtFechaVencVestuario.Value = ""
+    End If
+    
+    If Not mostrarOperador Then
         cboCalificacionOperador.Value = ""
         txtFechaVencOperador.Value = ""
     End If

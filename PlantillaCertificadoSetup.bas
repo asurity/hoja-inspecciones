@@ -302,8 +302,9 @@ Private Sub DisenarSeccionDatos(ws As Worksheet)
 End Sub
 
 ' ══════════════════════════════════════════════════════════════
-' PASO 5: DISEÑAR SECCIÓN RESULTADOS GENERALES (Filas 19-24)
+' PASO 5: DISEÑAR SECCIÓN RESULTADOS GENERALES (Filas 19-22)
 ' NOTA: Filas desplazadas +3 por bloque categoría
+' ACTUALIZADO: Filas 23-24 ahora son calificaciones (FASE 7)
 ' ══════════════════════════════════════════════════════════════
 Private Sub DisenarSeccionResultados(ws As Worksheet)
     With ws
@@ -332,36 +333,29 @@ Private Sub DisenarSeccionResultados(ws As Worksheet)
         .Range("C22").Value = "[XX.XX]"
         .Range("D22").Value = "%"
         
-        ' Fila 23: RPN
-        .Range("B23").Value = "RPN:"
-        .Range("C23").Value = "[XX.XX]"
+        ' --- FASE 7 (23/04/2026): CALIFICACIONES VESTUARIO/OPERADOR ---
+        ' Fila 23: Calificación Vestuario
+        .Range("B23").Value = "Calificación Vestuario:"
+        .Range("C23").Value = "Fecha de vencimiento:"
+        .Range("D23").Value = "[DD-MM-YYYY]"
         
-        ' Fila 24: Categoría
-        .Range("B24").Value = "Categoría resultado:"
-        .Range("C24:G24").Merge
-        .Range("C24").Value = "[N - Descripción]"
-        
-        ' Fila 25: NUEVO - Estado
-        .Range("B25").Value = "Estado:"
-        .Range("C25:G25").Merge
-        .Range("C25").Value = "[SE LLENARÁ DINÁMICAMENTE]"
+        ' Fila 24: Calificación Operador
+        .Range("B24").Value = "Calificación Operador:"
+        .Range("C24").Value = "Fecha de vencimiento:"
+        .Range("D24").Value = "[DD-MM-YYYY]"
         
         ' Aplicar formato de fuente
-        .Range("B20:G25").Font.Name = "Arial"
-        .Range("B20:G25").Font.Size = 9
-        .Range("B20:G25").Font.Color = RGB(0, 0, 0)  ' Negro explícito
+        .Range("B20:G24").Font.Name = "Arial"
+        .Range("B20:G24").Font.Size = 9
+        .Range("B20:G24").Font.Color = RGB(0, 0, 0)  ' Negro explícito
         
         ' Labels en negrita
-        .Range("B20,D20,B21,B22,D22,B23,B24,B25").Font.Bold = True
-        
-        ' Estado también en negrita y tamaño mayor
-        .Range("C25").Font.Bold = True
-        .Range("C25").Font.Size = 11
+        .Range("B20,D20,B21,B22,D22,B23,C23,B24,C24").Font.Bold = True
         
         ' Bordes
-        .Range("A19:G25").BorderAround LineStyle:=xlContinuous, Weight:=xlMedium
-        .Range("A19:G25").Borders(xlInsideHorizontal).LineStyle = xlContinuous
-        .Range("A19:G25").Borders(xlInsideHorizontal).Weight = xlThin
+        .Range("A19:G24").BorderAround LineStyle:=xlContinuous, Weight:=xlMedium
+        .Range("A19:G24").Borders(xlInsideHorizontal).LineStyle = xlContinuous
+        .Range("A19:G24").Borders(xlInsideHorizontal).Weight = xlThin
     End With
 End Sub
 
