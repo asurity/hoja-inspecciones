@@ -17,34 +17,34 @@ Option Explicit
 ' Constante: APP_PASSWORD
 ' Propósito: Contraseña para protección de hojas normales y estructura del libro.
 '            NO se usa para autenticación de usuarios (ver ADMIN_PASSWORD).
-' Actualizada: 10/03/2026 - Segunda migración a contraseñas de proyecto
+' Actualizada: 28/05/2026 - Migración a contraseñas del cliente (supervisor002.)
 ' ----------------------------------------------------------------------
-Public Const APP_PASSWORD As String = "1234"
+Public Const APP_PASSWORD As String = "supervisor002."
 
 ' ----------------------------------------------------------------------
 ' Constante: ADMIN_PASSWORD
 ' Propósito: Contraseña para autenticación de usuarios administradores.
 '            Separada de APP_PASSWORD para mayor seguridad.
-' Actualizada: 10/03/2026 - Segunda migración a contraseñas de proyecto
+' Actualizada: 28/05/2026 - Migración a contraseñas del cliente (validacion002.)
 ' ----------------------------------------------------------------------
-Public Const ADMIN_PASSWORD As String = "1234"
+Public Const ADMIN_PASSWORD As String = "validacion002."
 
 ' ----------------------------------------------------------------------
 ' Constante: AUDIT_PASSWORD
 ' Propósito: Contraseña exclusiva para protección de hojas Audit Trail.
 '            Garantiza inmutabilidad de registros históricos de auditoría.
-' Actualizada: 10/03/2026 - Segunda migración a contraseñas de proyecto
+' Actualizada: 28/05/2026 - Migración a contraseñas del cliente (validacion002.)
 ' ----------------------------------------------------------------------
-Public Const AUDIT_PASSWORD As String = "1234"
+Public Const AUDIT_PASSWORD As String = "validacion002."
 
 ' ----------------------------------------------------------------------
 ' Constante: CRONOGRAMA_ADMIN_PASSWORD
 ' Propósito: Contraseña para autenticación del Gestor de Cronograma.
 '            Requerida para pausar/reactivar inspecciones desde frmGestorCronograma.
 '            Separada de ADMIN_PASSWORD para control de acceso granular.
-' Actualizada: 28/04/2026 - Fase 1: Gestor de Cronograma
+' Actualizada: 28/05/2026 - Migración a contraseñas del cliente (validacion002.)
 ' ----------------------------------------------------------------------
-Public Const CRONOGRAMA_ADMIN_PASSWORD As String = "CronoAdmin2026*"
+Public Const CRONOGRAMA_ADMIN_PASSWORD As String = "validacion002."
 
 ' ----------------------------------------------------------------------
 ' Constantes: Sistema de rotación de hojas Audit Trail
@@ -134,7 +134,7 @@ Public Const INITIAL_USER_ROLE As String = "Usuario"
 ' Última actualización: 14/04/2026 - Agregado para facilitar desarrollo
 ' Nota: Cambiar SOLO este valor para debugging
 ' ----------------------------------------------------------------------
-Public Const ENABLE_WORKBOOK_PROTECTION As Boolean = False  ' DESARROLLO: False | PRODUCCIÓN: True
+Public Const ENABLE_WORKBOOK_PROTECTION As Boolean = True  ' DESARROLLO: False | PRODUCCIÓN: True
 
 ' ----------------------------------------------------------------------
 ' Constante: ENABLE_SHEET_PROTECTION
@@ -145,7 +145,7 @@ Public Const ENABLE_WORKBOOK_PROTECTION As Boolean = False  ' DESARROLLO: False 
 '   ? False = DESARROLLO: Edición libre para testing
 ' Nota: Relacionado con SheetProtector2.ProtectSheet()
 ' ----------------------------------------------------------------------
-Public Const ENABLE_SHEET_PROTECTION As Boolean = False  ' DESARROLLO: False | PRODUCCIÓN: True
+Public Const ENABLE_SHEET_PROTECTION As Boolean = True  ' DESARROLLO: False | PRODUCCIÓN: True
 
 ' ============================================================================
 ' CONFIGURACIÓN DE SISTEMA DE INSPECCIONES
@@ -182,6 +182,20 @@ Public Const TABLE_PUESTOS_INICIALES As String = "tblPuestosIniciales"
 Public Const TABLE_ASEGURAMIENTO As String = "tblAseguramientoCalidad"
 Public Const TABLE_RESUMEN_CRONOGRAMA As String = "tblResumenCronograma"
 Public Const TABLE_PLANTA As String = "tblPlanta"
+
+' ----------------------------------------------------------------------
+' Constantes de tablas legacy (M06: Centralización de nombres)
+' Agregadas: 28/05/2026 - FASE 3: Centralización de nombres de tablas legacy
+' Nota: Estas tablas existen en hojas legacy que no pertenecen al sistema
+'       de inspecciones moderno. Se centralizan aquí para evitar strings
+'       hardcodeados en los módulos legacy.
+' ----------------------------------------------------------------------
+Public Const TABLE_CONTROL_DE_CAMBIOS As String = "tblControlDeCambios"
+Public Const TABLE_REGISTRO_ERRORES As String = "tblRegistroErrores"
+Public Const TABLE_PERSONAL_PRODUCCION As String = "tblPersonalProduccion"
+Public Const TABLE_OBSERVACIONES As String = "tblObservaciones"
+Public Const TABLE_TEC_CONTROL_PROCESO As String = "tblTecControlProceso"
+Public Const TABLE_ANALISIS_DESVIO As String = "tblAnalisisDesvio"
 
 ' ----------------------------------------------------------------------
 ' Constantes de ubicación del cronograma resumen en Menú principal

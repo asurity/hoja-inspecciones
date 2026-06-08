@@ -10,6 +10,35 @@
 Option Explicit
 
 '' ----------------------------------------------------------------------
+' Evento: Worksheet_Activate
+' Propósito: Se ejecuta cuando se activa la hoja Historico.
+'            Aplica protección centralizada según el rol del usuario.
+' ----------------------------------------------------------------------
+Private Sub Worksheet_Activate()
+    On Error GoTo ErrorHandler
+    
+    ' Aplicar protección centralizada según el rol del usuario
+    ' Admin → desprotegido (edición libre)
+    ' Usuario → solo lectura con copiado
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
+    
+    Exit Sub
+ErrorHandler:
+    Call ErrorLogger2.Log("Historico.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
+End Sub
+
+'' ----------------------------------------------------------------------
+' Evento: Worksheet_Deactivate
+' Propósito: Se ejecuta al salir de la hoja Historico.
+'            Aplica protección centralizada según el rol al salir.
+' ----------------------------------------------------------------------
+Private Sub Worksheet_Deactivate()
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
+    On Error GoTo 0
+End Sub
+
+'' ----------------------------------------------------------------------
 ' Evento: Worksheet_BeforeDoubleClick
 ' Propósito: Detecta doble clic en una fila de tblInspecciones y genera
 '            el certificado PDF de esa inspección.
@@ -37,9 +66,9 @@ Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean
     
     ' Obtener la fila donde se hizo clic
     Dim filaNum As Long
-    filaNum = Target.Row - tblInspecciones.HeaderRowRange.Row
+    filaNum = Target.row - tblInspecciones.HeaderRowRange.row
     
-    If filaNum < 1 Or filaNum > tblInspecciones.ListRows.Count Then Exit Sub
+    If filaNum < 1 Or filaNum > tblInspecciones.ListRows.count Then Exit Sub
     
     Set fila = tblInspecciones.ListRows(filaNum)
     

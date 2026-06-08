@@ -1,43 +1,60 @@
+'' ----------------------------------------------------------------------
+' Módulo: Hoja20 ("Análisis Desvío")
+' Descripción: Eventos para la hoja Análisis Desvío (análisis de KPI).
+'              Incluye protección por rol centralizada vía SheetProtector2.
+'              C03: Reemplazado m_userRole por GetUserRole().
+'
+' INSTRUCCIONES DE INSTALACIÓN:
+' 1. Abre el VBA Editor (Alt+F11)
+' 2. Busca en el árbol de la izquierda: Microsoft Excel Objetos → Hoja "Análisis Desvío"
+' 3. Haz doble clic en esa hoja para abrir su módulo
+' 4. Copia TODO el código de este archivo
+' 5. Pégalo en el módulo de la hoja "Análisis Desvío"
+' 6. Guarda el archivo
+' ----------------------------------------------------------------------
+Option Explicit
+
+Private m_oldValues As Variant
 
 '' ----------------------------------------------------------------------
-' Módulo: Resultados (Hoja de Análisis Desvío)
+' Evento: Worksheet_Activate
+' ----------------------------------------------------------------------
+Private Sub Worksheet_Activate()
+    On Error GoTo ErrorHandler
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
+    Exit Sub
+ErrorHandler:
+    Call ErrorLogger2.Log("Análisis Desvío.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
+End Sub
+
 '' ----------------------------------------------------------------------
-Option Explicit
-Private m_oldValues As Variant ' Almacena los valores previos a un cambio para auditoría
+' Evento: Worksheet_Deactivate
+' ----------------------------------------------------------------------
+Private Sub Worksheet_Deactivate()
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
+    On Error GoTo 0
+End Sub
 
 '' ----------------------------------------------------------------------
 ' Evento: Worksheet_Change
-' Propósito: Audita cualquier cambio realizado en la hoja, registrando los valores
-'            anteriores y posteriores en la tabla de auditoría.
-' Lógica:
-'   1. Desactiva el refresco de pantalla para mejorar el rendimiento.
-'   2. Define la tabla a auditar (tblResultados).
-'   3. Llama a TableAuditor.AuditTableChanges con los valores previos.
-'   4. Reactiva el refresco de pantalla y maneja errores.
-'' ----------------------------------------------------------------------
+' ----------------------------------------------------------------------
 Private Sub Worksheet_Change(ByVal Target As Range)
     On Error GoTo ErrorHandler
     Application.ScreenUpdating = False
     Dim tablesToAudit As Variant
-    'tablesToAudit = Array("tblAnalisisDesvio")
-    'Call TableAuditor2.AuditTableChanges(Me, Target, tablesToAudit, m_oldValues)
+    tablesToAudit = Array(Configuration2.TABLE_ANALISIS_DESVIO)
+    Call TableAuditor2.AuditTableChanges(Me, Target, tablesToAudit, m_oldValues)
     Application.ScreenUpdating = True
     Exit Sub
 ErrorHandler:
     Application.ScreenUpdating = True
-    Call ErrorLogger2.Log("Worksheet_Change (" & Me.Name & ")", VBA.Err.Description, VBA.Err.Number)
+    Call ErrorLogger2.Log("Worksheet_Change (Análisis Desvío)", VBA.Err.Description, VBA.Err.Number)
 End Sub
-
 
 '' ----------------------------------------------------------------------
 ' Evento: Worksheet_SelectionChange
-' Propósito: Almacena los valores seleccionados antes de un cambio para
-'            permitir la auditoría precisa de modificaciones.
-' Lógica:
-'   1. Limita la auditoría a selecciones menores a 3000 celdas.
-'   2. Si la selección es válida, almacena los valores; si no, limpia m_oldValues.
-'   3. Maneja errores y registra en el log si ocurre alguno.
-'' ----------------------------------------------------------------------
+' ----------------------------------------------------------------------
 Private Sub Worksheet_SelectionChange(ByVal Target As Range)
     On Error GoTo ErrorHandler
     Const SELECTION_LIMIT As Long = 3000
@@ -48,51 +65,5 @@ Private Sub Worksheet_SelectionChange(ByVal Target As Range)
     End If
     Exit Sub
 ErrorHandler:
-    Call ErrorLogger2.Log("Worksheet_SelectionChange (" & Me.Name & ")", VBA.Err.Description, VBA.Err.Number)
-End Sub
-
-'' ----------------------------------------------------------------------
-' Evento: Worksheet_Activate
-' Propósito: Controla el acceso a la hoja según el rol del usuario.
-'            Solo los administradores pueden editar; los demás solo pueden ver.
-' Lógica:
-'   1. Si el usuario es Admin, desprotege la hoja.
-'   2. Si no, protege la hoja para evitar edición.
-'   3. Maneja errores y registra en el log si ocurre alguno.
-'' ----------------------------------------------------------------------
-Private Sub Worksheet_Activate()
-    On Error GoTo ErrorHandler
-    
-    ' 1. Gestión de protección por rol
-    If m_userRole = "Admin" Then
-        Call SheetProtector2.UnprotectSheet(Me, Configuration2.APP_PASSWORD)
-    Else
-        Call SheetProtector2.ProtectSheet(Me, Configuration2.APP_PASSWORD)
-    End If
-    
-    ' 2. FASE 6 (10/03/2026): Actualización condicional de análisis de KPI
-    '    Solo recalcula si hay cambios pendientes (g_AnalisisPendiente = True).
-    '    Esto garantiza que el usuario siempre vea datos actualizados al navegar
-    '    a esta hoja, sin recalcular innecesariamente si ya está actualizado.
-    If g_AnalisisPendiente Then
-        Application.ScreenUpdating = False
-        Call dataProcessAnalysis.EjecutarAnalisis
-        g_AnalisisPendiente = False
-        Application.ScreenUpdating = True
-    End If
-    
-    Exit Sub
-ErrorHandler:
-    Application.ScreenUpdating = True
-    Call ErrorLogger2.Log("Worksheet_Activate (" & Me.Name & ")", VBA.Err.Description, VBA.Err.Number)
-End Sub
-
-
-'' ----------------------------------------------------------------------
-' Evento: Worksheet_Deactivate
-' Propósito: (Opcional) Puede usarse para proteger la hoja al salir.
-'            Actualmente está comentado para permitir flexibilidad.
-'' ----------------------------------------------------------------------
-Private Sub Worksheet_Deactivate()
-    'Call SheetProtector.ProtectSheet(Me, Configuration.APP_PASSWORD)
+    Call ErrorLogger2.Log("Worksheet_SelectionChange (Análisis Desvío)", VBA.Err.Description, VBA.Err.Number)
 End Sub

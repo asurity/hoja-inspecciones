@@ -5,24 +5,40 @@
 '              con las nuevas contraseñas definidas en Configuration2.bas.
 '
 ' INSTRUCCIONES DE USO:
-'   1. Importar este módulo al proyecto VBA del archivo TH-HC-002 V00.xlsm
-'   2. Importar el módulo Configuration2.bas ACTUALIZADO (con las nuevas contraseñas)
+'   1. Abrir el proyecto VBA del archivo TH-HC-001 INSPECCIONES.xlsm (Alt+F11)
+'   2. Asegurarse de que Configuration2.bas tenga las NUEVAS contraseñas:
+'      - APP_PASSWORD              = "supervisor002."
+'      - ADMIN_PASSWORD            = "validacion002."
+'      - AUDIT_PASSWORD            = "validacion002."
+'      - CRONOGRAMA_ADMIN_PASSWORD = "validacion002."
 '   3. Ejecutar la macro "MigrarContrasenasAlNuevo" UNA SOLA VEZ
-'   4. Verificar que el libro funcione correctamente
+'   4. Verificar con "VerificarContrasenasActuales"
 '   5. Opcional: Eliminar este módulo del proyecto VBA (ya no es necesario)
 '
-' FECHA DE MIGRACIÓN: 10-03-2026 (FASE 1 Mejoras Finales)
+' FECHA DE MIGRACIÓN: 28/05/2026 (Migración a contraseñas del cliente)
+' CONTEXTO: Se migra desde contraseñas anteriores ("Inspecciones2026", "Validacion003", etc.)
+'           a las nuevas contraseñas definidas por el cliente.
+'           Las contraseñas ADMIN, AUDIT y CRONOGRAMA comparten el mismo valor "validacion002."
+'           según solicitud del cliente.
 ' ============================================================================
 
 Option Explicit
 
 ' ============================================================================
 ' CONTRASEÑAS ANTERIORES (hardcodeadas aquí para poder desbloquear)
-' No modificar estos valores — reflejan el estado ACTUAL del sistema
-' Actualizadas: 10/03/2026 - Segunda migración (desde contraseñas FASE 1)
+' No modificar estos valores — reflejan el estado FÍSICO ACTUAL del libro
+' Estado ACTUAL del libro (pre-migración):
+'   - APP_PASSWORD   = "Inspecciones2026"
+'   - AUDIT_PASSWORD = "Validacion003"
+'   - ADMIN_PASSWORD = "Aseguramiento2026" (texto, no lock físico)
+'   - CRONOGRAMA_ADMIN_PASSWORD = "CronoAdmin2026*" (texto, no lock físico)
+' Fecha: 28/05/2026 - Migración a contraseñas del cliente
 ' ============================================================================
-Private Const OLD_APP_PASSWORD   As String = "AppTH-HC-002_Sec2026!"
-Private Const OLD_AUDIT_PASSWORD As String = "AuditTH-HC-002_Immut!"
+Private Const OLD_APP_PASSWORD   As String = "Inspecciones2026"   ' Contraseña ACTUAL de hojas
+Private Const OLD_AUDIT_PASSWORD As String = "Validacion003"      ' Contraseña ACTUAL de Audit Trail
+' NOTA: Si el lock físico del libro aún tiene "1234" (migración previa nunca ejecutada),
+' cambiar OLD_APP_PASSWORD a "1234" y OLD_AUDIT_PASSWORD a "1234" antes de migrar.
+' Usar CorregirHojasAuditSecundarias si hay estado mixto.
 
 ' ============================================================================
 ' Subrutina principal de migración
@@ -42,14 +58,15 @@ Public Sub MigrarContrasenasAlNuevo()
     ' --- Confirmación antes de ejecutar ---
     Dim respuesta As VbMsgBoxResult
     respuesta = MsgBox("Este proceso cambiará las contraseñas de protección de todas las hojas " & _
-                       "y la estructura del libro TH-HC-002." & vbCrLf & vbCrLf & _
-                       "SEGUNDA MIGRACIÓN (FASE 1B):" & vbCrLf & _
-                       "  • APP_PASSWORD:   AppTH-HC-002_Sec2026!  →  Detecciones004." & vbCrLf & _
-                       "  • ADMIN_PASSWORD: AdminTH-HC-002_Auth!   →  AdministradorDetecciones" & vbCrLf & _
-                       "  • AUDIT_PASSWORD: AuditTH-HC-002_Immut!  →  Validaciones003" & vbCrLf & vbCrLf & _
+                       "y la estructura del libro TH-HC-001 INSPECCIONES." & vbCrLf & vbCrLf & _
+                       "MIGRACIÓN A CONTRASEÑAS DEL CLIENTE:" & vbCrLf & _
+                       "  • APP_PASSWORD:              Inspecciones2026  →  supervisor002." & vbCrLf & _
+                       "  • ADMIN_PASSWORD:            Aseguramiento2026 →  validacion002." & vbCrLf & _
+                       "  • AUDIT_PASSWORD:            Validacion003     →  validacion002." & vbCrLf & _
+                       "  • CRONOGRAMA_ADMIN_PASSWORD: CronoAdmin2026*   →  validacion002." & vbCrLf & vbCrLf & _
                        "⚠️ IMPORTANTE: Asegúrate de tener un backup antes de continuar." & vbCrLf & vbCrLf & _
                        "¿Deseas continuar?", _
-                       vbQuestion + vbYesNo, "Segunda Migración de Contraseñas TH-HC-002")
+                       vbQuestion + vbYesNo, "Migración de Contraseñas TH-HC-001")
 
     If respuesta = vbNo Then
         MsgBox "Migración cancelada. No se realizaron cambios.", vbInformation, "Cancelado"
@@ -66,7 +83,7 @@ Public Sub MigrarContrasenasAlNuevo()
     ThisWorkbook.Unprotect Password:=OLD_APP_PASSWORD
     If Err.Number <> 0 Then
         MsgBox "No se pudo desproteger la estructura del libro con la contraseña anterior." & vbCrLf & _
-               "Verifica que la contraseña anterior sea '1234'." & vbCrLf & vbCrLf & _
+               "Verifica que la contraseña anterior sea '" & OLD_APP_PASSWORD & "'." & vbCrLf & vbCrLf & _
                "Error: " & Err.Description, vbCritical, "Error en Migración"
         GoTo Cleanup
     End If
@@ -186,7 +203,7 @@ Public Sub VerificarContrasenasActuales()
 
     reporte = "══════════════════════════════════════" & vbCrLf & _
               "  VERIFICACIÓN DE CONTRASEÑAS" & vbCrLf & _
-              "  TH-HC-002 — " & Format(Now, "dd/mm/yyyy hh:mm") & vbCrLf & _
+              "  TH-HC-001 INSPECCIONES — " & Format(Now, "dd/mm/yyyy hh:mm") & vbCrLf & _
               "══════════════════════════════════════" & vbCrLf & vbCrLf
 
     Application.ScreenUpdating = False
@@ -353,7 +370,7 @@ Public Sub CorregirHojasAuditSecundarias()
     intentos(2) = ""                    ' Sin contraseña
     intentos(3) = "1234"                ' Contraseña original de APP
     intentos(4) = "5678"                ' Contraseña original de AUDIT
-    intentos(5) = "AppTH-HC-002_Sec2026!" ' Por si quedó con esta explícitamente
+    intentos(5) = "Inspecciones2026"       ' Antigua contraseña de APP
     
     hojasAudit = Array("Audit trail 2", "Audit trail 3", "Audit trail 4", "Audit trail 5")
     
@@ -361,7 +378,7 @@ Public Sub CorregirHojasAuditSecundarias()
     countFail = 0
     reporte = "══════════════════════════════════════" & vbCrLf & _
               "  CORRECCIÓN HOJAS AUDIT SECUNDARIAS" & vbCrLf & _
-              "  TH-HC-002 — " & Format(Now, "dd/mm/yyyy hh:mm") & vbCrLf & _
+              "  TH-HC-001 INSPECCIONES — " & Format(Now, "dd/mm/yyyy hh:mm") & vbCrLf & _
               "══════════════════════════════════════" & vbCrLf & vbCrLf
     
     Application.ScreenUpdating = False

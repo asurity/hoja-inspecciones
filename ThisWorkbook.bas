@@ -64,14 +64,21 @@ Private Sub Workbook_Open()
     ' ===========================================================
     Call SystemInitializer.InicializarSistemaCompleto
     
-    ' ========== SISTEMA DE NAVEGACIÓN (desactivado hasta completar diseño UI) ==========
-    ' Descomentar cuando NavigationService2, SheetService2 y UserManager2 estén listos
-    ' ==================================================================================
+    ' ========== SISTEMA DE NAVEGACIÓN ACTIVADO ==========
+    ' SheetService2 maneja visibilidad/ocultación de hojas
+    ' ApplyRoleBasedProtection aplica protección según rol
+    ' ====================================================
     
-    ' Call SheetService2.HideAndProtectAllSheetsExcept(Configuration2.MAIN_MENU_SHEET)
-    ' ThisWorkbook.Sheets(Configuration2.MAIN_MENU_SHEET).Activate
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.DisplayAlerts = False
+    Call SheetService2.HideAndProtectAllSheetsExcept(Configuration2.MAIN_MENU_SHEET)
+    ThisWorkbook.Sheets(Configuration2.MAIN_MENU_SHEET).Activate
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+    Application.DisplayAlerts = True
     Call UserManager2.DisplayUserName
-    ' g_PreviousSheetName = Configuration2.MAIN_MENU_SHEET
+    g_PreviousSheetName = Configuration2.MAIN_MENU_SHEET
     
     ' Registrar apertura del sistema en Audit Trail
     Dim userName As String
@@ -158,32 +165,46 @@ End Sub
 ' Nota (10/03/2026): Las hojas Audit Trail NUNCA se hacen visibles automáticamente.
 '                     Solo se muestran cuando el usuario navega explícitamente mediante
 '                     ShowAuditTrailGroup().
-' ESTADO: TEMPORALMENTE DESACTIVADO PARA DESARROLLO
+' ESTADO: ACTIVO — Reactivado como parte de C06
+' Nota: El comentario anterior decía "TEMPORALMENTE DESACTIVADO PARA DESARROLLO"
+' pero el código NUNCA estuvo comentado. Se actualiza el comentario para reflejar el estado real.
 '' ----------------------------------------------------------------------
 Private Sub Workbook_SheetActivate(ByVal Sh As Object)
-    ' ========== SISTEMA DE NAVEGACIÓN TEMPORALMENTE DESACTIVADO ==========
-    ' Para reactivar, descomentar el bloque de código a continuación
-    ' =====================================================================
+    ' ========== PROTECCIÓN AL ACTIVAR MENÚ PRINCIPAL DIRECTAMENTE ==========
+    ' Si el usuario hace clic en la pestaña "Menú principal" (sin usar botón de navegación),
+    ' este evento asegura que todas las demás hojas se oculten y protejan.
+    ' Esto previene que hojas previamente visibles queden expuestas.
+    If Sh.Name = Configuration2.MAIN_MENU_SHEET Then
+        Application.ScreenUpdating = False
+        Application.DisplayAlerts = False
+        Application.EnableEvents = False  ' Evitar recursión
+        Call SheetService2.HideAndProtectAllSheetsExcept(Configuration2.MAIN_MENU_SHEET)
+        Application.ScreenUpdating = True
+        Application.DisplayAlerts = True
+        Application.EnableEvents = True
+        g_PreviousSheetName = Sh.Name
+        Exit Sub
+    End If
     
-    ' If Sh.Name <> Configuration2.MAIN_MENU_SHEET And Not IsAuditSheet(Sh.Name) Then
-    '     Sh.Visible = xlSheetVisible
-    ' End If
+    ' Hacer visible la hoja activada (solo si no es Audit Trail)
+    If Not IsAuditSheet(Sh.Name) Then
+        Sh.Visible = xlSheetVisible
+    End If
     
-    ' If Sh.Name <> g_PreviousSheetName Then
-    '     On Error Resume Next
-    '     Call AuditLogger2.LogAction( _
-    '         action:="Navegación entre hojas", _
-    '         sheetName:=Sh.Name, _
-    '         dataModified:="Cambio de vista", _
-    '         beforeChange:="Hoja anterior: " & g_PreviousSheetName, _
-    '         afterChange:="Hoja actual: " & Sh.Name, _
-    '         moduleAndSubroutine:="ThisWorkbook.Workbook_SheetActivate" _
-    '     )
-    '     On Error GoTo 0
-    '     g_PreviousSheetName = Sh.Name
-    ' End If
-    
-    ' Evento desactivado - navegación libre sin restricciones
+    ' Auditar navegación entre hojas (evitar duplicados)
+    If Sh.Name <> g_PreviousSheetName Then
+        On Error Resume Next
+        Call AuditLogger2.LogAction( _
+            action:="Navegación entre hojas", _
+            sheetName:=Sh.Name, _
+            dataModified:="Cambio de vista", _
+            beforeChange:="Hoja anterior: " & g_PreviousSheetName, _
+            afterChange:="Hoja actual: " & Sh.Name, _
+            moduleAndSubroutine:="ThisWorkbook.Workbook_SheetActivate" _
+        )
+        On Error GoTo 0
+        g_PreviousSheetName = Sh.Name
+    End If
 End Sub
 
 '' ----------------------------------------------------------------------
@@ -245,10 +266,10 @@ Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
         moduleAndSubroutine:="ThisWorkbook.Workbook_BeforeSave" _
     )
     
-    ' ========== BACKUP AUTOMÁTICO TEMPORALMENTE DESACTIVADO ==========
-    ' Para reactivar, descomentar la siguiente línea
-    ' =================================================================
-    ' Call mod_BackupManager.CrearBackupAutomatico
+    ' ========== BACKUP AUTOMÁTICO ACTIVADO ==========
+    ' Crea copia de seguridad antes de cada guardado
+    ' =================================================
+    Call mod_BackupManager.CrearBackupAutomatico
     
     Exit Sub
 ErrorHandler:
@@ -279,15 +300,7 @@ Private Sub Workbook_BeforeClose(Cancel As Boolean)
         moduleAndSubroutine:="ThisWorkbook.Workbook_BeforeClose" _
     )
     
-    ' ========== ANÁLISIS AUTOMÁTICO TEMPORALMENTE DESACTIVADO ==========
-    ' Para reactivar, descomentar el bloque de código a continuación
-    ' ===================================================================
-    ' If g_AnalisisPendiente Then
-    '     Call dataProcessAnalysis.EjecutarAnalisis
-    '     g_AnalisisPendiente = False
-    ' End If
-    
     Exit Sub
 ErrorHandler:
-    ' Call ErrorLogger2.Log("ThisWorkbook.Workbook_BeforeClose", VBA.Err.Description, VBA.Err.Number)
+    Call ErrorLogger2.Log("ThisWorkbook.Workbook_BeforeClose", VBA.Err.Description, VBA.Err.Number)
 End Sub

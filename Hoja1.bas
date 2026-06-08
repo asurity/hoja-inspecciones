@@ -27,17 +27,12 @@ Option Explicit
 Private Sub Worksheet_Activate()
     On Error GoTo ErrorHandler
     Application.ScreenUpdating = False
-    Call WorkbookProtector2.UnprotectWorkbook
-    Application.DisplayAlerts = False
-    Dim ws As Worksheet
-    For Each ws In ThisWorkbook.Worksheets
-        If ws.Name <> Me.Name Then
-            ws.Visible = xlSheetVeryHidden
-        End If
-    Next ws
-    Application.DisplayAlerts = True
-    Call WorkbookProtector2.ProtectWorkbook
-    Me.EnableSelection = xlUnlockedCells ' Permite editar celdas desbloqueadas (como J15)
+    
+    ' Aplicar protección centralizada según el rol del usuario
+    ' Admin → desprotegido (puede editar filtros, configuraciones)
+    ' Usuario → solo lectura con copiado
+    ' Otros → sin selección
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
     
     ' Refrescar cronograma resumen
     Call CronogramaResumen.RefrescarResumenCronograma
@@ -45,9 +40,7 @@ Private Sub Worksheet_Activate()
     Application.ScreenUpdating = True
     Exit Sub
 ErrorHandler:
-    Application.DisplayAlerts = True
     Application.ScreenUpdating = True
-    Call WorkbookProtector2.ProtectWorkbook
     Call ErrorLogger2.Log("Menú principal.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
 End Sub
 
@@ -87,7 +80,7 @@ Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean
     If Not Intersect(Target, tblResumen.DataBodyRange) Is Nothing Then
         
         ' Obtener la fila de la tabla donde se hizo doble clic
-        Set filaTabla = tblResumen.ListRows(Target.Row - tblResumen.Range.Row)
+        Set filaTabla = tblResumen.ListRows(Target.row - tblResumen.Range.row)
         
         ' Leer los valores de la fila
         iniciales = Trim(filaTabla.Range.Cells(1, tblResumen.ListColumns("Iniciales").Index).Value)
@@ -155,7 +148,7 @@ End Sub
 '   1. Llama a SheetProtector para proteger la hoja con la contraseña de la aplicación.
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Deactivate()
-    Call SheetProtector2.ProtectSheet(Me, Configuration2.APP_PASSWORD)
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
 End Sub
 
 '' ----------------------------------------------------------------------
@@ -198,10 +191,20 @@ End Sub
 Public Sub AbrirGestorCronograma()
     On Error GoTo ErrorHandler
 
+    ' ========== M04: Estandarizado con frmInput (ocultación de contraseña) ==========
+    ' Ahora usa el mismo formulario modal que AdminAccessControl2,
+    ' con la contraseña oculta (caracteres ***) en lugar del InputBox estándar.
+    Dim frm As New frmInput
+    frm.Show vbModal
+    
     Dim contrasena As String
-    contrasena = InputBox("Ingrese la contraseña de administrador:", "Gestor de Cronograma")
+    contrasena = frm.txtContrasena.Value
+    
+    ' Limpiar la instancia del formulario
+    Unload frm
+    Set frm = Nothing
 
-    ' Si el usuario cancela el InputBox, contrasena = "" → no continuar
+    ' Si el usuario no ingresó contraseña, cancelar
     If contrasena = "" Then Exit Sub
 
     ' Validar contraseña contra CRONOGRAMA_ADMIN_PASSWORD (incluye auditoría interna)
@@ -211,11 +214,11 @@ Public Sub AbrirGestorCronograma()
     End If
 
     ' Abrir gestor en modo modal
-    Dim frm As frmGestorCronograma
-    Set frm = New frmGestorCronograma
-    frm.Show vbModal
+    Dim frmGestor As frmGestorCronograma
+    Set frmGestor = New frmGestorCronograma
+    frmGestor.Show vbModal
 
-    Set frm = Nothing
+    Set frmGestor = Nothing
 
     ' Refrescar resumen al cerrar el gestor (puede haber pausas/reactivaciones)
     Call CronogramaResumen.RefrescarResumenCronograma
