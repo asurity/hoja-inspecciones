@@ -206,12 +206,14 @@ Public Property Get Planta() As String
     Planta = mPlanta
 End Property
 
+' ACTUALIZADO 23/06/2026: Usar .Text en vez de .Value para garantizar String
+' (evita conversión implícita Date→String con locale del sistema)
 Public Property Get FechaInspeccion() As String
-    FechaInspeccion = Trim(txtFecha.Value)
+    FechaInspeccion = Trim(txtFecha.Text)
 End Property
 
 Public Property Get FechaAuditada() As String
-    FechaAuditada = Trim(txtFechaAuditada.Value)
+    FechaAuditada = Trim(txtFechaAuditada.Text)
 End Property
 
 Public Property Get HoraInicio() As String
@@ -260,26 +262,27 @@ Public Property Get ObservacionGeneral() As String
 End Property
 
 Public Property Get CalificacionVestuario() As String
-    ' Si el puesto no requiere calificaciones, retornar "-"
-    If Not RequiereCalificaciones() Then
+    ' Si el control no está visible, el campo no aplica para este puesto
+    If Not cboCalificacionVestuario.Visible Then
         CalificacionVestuario = "-"
     Else
         CalificacionVestuario = Trim(cboCalificacionVestuario.Value)
     End If
 End Property
 
+' ACTUALIZADO 23/06/2026: Usar .Text en vez de .Value para garantizar String
 Public Property Get FechaVencVestuario() As String
-    ' Si el puesto no requiere calificaciones, retornar "-"
-    If Not RequiereCalificaciones() Then
+    ' Si el control no está visible, el campo no aplica para este puesto
+    If Not txtFechaVencVestuario.Visible Then
         FechaVencVestuario = "-"
     Else
-        FechaVencVestuario = Trim(txtFechaVencVestuario.Value)
+        FechaVencVestuario = Trim(txtFechaVencVestuario.Text)
     End If
 End Property
 
 Public Property Get CalificacionOperador() As String
-    ' Si el puesto no requiere calificaciones, retornar "-"
-    If Not RequiereCalificaciones() Then
+    ' Si el control no está visible, el campo no aplica para este puesto
+    If Not cboCalificacionOperador.Visible Then
         CalificacionOperador = "-"
     Else
         CalificacionOperador = Trim(cboCalificacionOperador.Value)
@@ -287,11 +290,11 @@ Public Property Get CalificacionOperador() As String
 End Property
 
 Public Property Get FechaVencOperador() As String
-    ' Si el puesto no requiere calificaciones, retornar "-"
-    If Not RequiereCalificaciones() Then
+    ' Si el control no está visible, el campo no aplica para este puesto
+    If Not txtFechaVencOperador.Visible Then
         FechaVencOperador = "-"
     Else
-        FechaVencOperador = Trim(txtFechaVencOperador.Value)
+        FechaVencOperador = Trim(txtFechaVencOperador.Text)
     End If
 End Property
 
@@ -1081,7 +1084,7 @@ Private Sub ConfigurarCabecera()
         .Top = 136
         .Width = 100
         .Height = 16
-        .Caption = "RPN anterior:"
+        .Caption = "%TA anterior:"
         .Font.Name = "Segoe UI"
         .Font.Size = 8
         .Font.Bold = True
@@ -1425,8 +1428,20 @@ Private Sub UserForm_Activate()
         ' Debug.Print "CargarPreguntasDinamicas completado"
     Else
         ' Debug.Print "ERROR: No hay secciones. Mostrando form sin preguntas."
-        MsgBox "No se encontraron secciones configuradas. El formulario mostrará solo la cabecera.", _
-               vbExclamation, "Advertencia"
+        MsgBox "No se encontraron secciones configuradas para la plantilla '" & mIDPlantilla & "'." & vbCrLf & vbCrLf & _
+               "El formulario se cerrará. Verifique la configuración de secciones en tblSecciones.", _
+               vbCritical, "Error de inicialización"
+        Unload Me
+        Exit Sub
+    End If
+    
+    ' VERIFICACIÓN CRÍTICA: asegurar que se cargaron preguntas
+    If mPreguntaSecciones.Count = 0 Then
+        MsgBox "ERROR CRÍTICO: No se pudieron cargar las preguntas de la plantilla '" & mIDPlantilla & "'." & vbCrLf & vbCrLf & _
+               "Verifique que existan preguntas en tblPreguntas para las secciones configuradas." & vbCrLf & vbCrLf & _
+               "El formulario se cerrará.", vbCritical, "Error de inicialización"
+        Unload Me
+        Exit Sub
     End If
     
     ' --- Búsqueda automática de historial (silenciosa) ---
@@ -1709,18 +1724,23 @@ End Sub
 '            y que NO esté vencida (debe ser mayor a la fecha actual)
 ' Fecha: 23/04/2026 - FASE 7
 ' Actualizado: 24/04/2026 - Validación estricta de fecha futura
+' ACTUALIZADO: 23/06/2026 — Usa ParseFechaDMY (independiente de locale) en vez de IsDate/CDate
 ' ----------------------------------------------------------------------
 Private Sub txtFechaVencVestuario_Exit(ByVal Cancel As MSForms.ReturnBoolean)
     On Error GoTo ErrorHandler
     
+    ' ACTUALIZADO 23/06/2026: Usar .Text para obtener siempre String
     Dim fechaTexto As String
-    fechaTexto = Trim(txtFechaVencVestuario.Value)
+    fechaTexto = Trim(txtFechaVencVestuario.Text)
     
     ' Si está vacío, permitir (campo opcional)
     If Len(fechaTexto) = 0 Then Exit Sub
     
-    ' Validar formato de fecha
-    If Not IsDate(fechaTexto) Then
+    ' Validar formato de fecha usando ParseFechaDMY (independiente de locale)
+    Dim fechaParsed As Variant
+    fechaParsed = ChecklistValidator.ParseFechaDMY(fechaTexto)
+    
+    If IsEmpty(fechaParsed) Then
         MsgBox "La fecha de vencimiento de vestuario debe tener un formato válido (dd/mm/yyyy)." & vbCrLf & _
                "Ejemplo: 31/12/2026", vbExclamation, "Formato de fecha inválido"
         Cancel = True
@@ -1729,7 +1749,7 @@ Private Sub txtFechaVencVestuario_Exit(ByVal Cancel As MSForms.ReturnBoolean)
     
     ' VALIDACIÓN CRÍTICA: La fecha de vencimiento DEBE ser mayor a la fecha actual
     ' Si está vencida, la calificación no es válida y NO se puede continuar
-    If CDate(fechaTexto) <= Date Then
+    If CDate(fechaParsed) <= Date Then
         MsgBox "La fecha de vencimiento de vestuario ya pasó (" & fechaTexto & ")." & vbCrLf & vbCrLf & _
                "La calificación de vestuario está VENCIDA." & vbCrLf & _
                "El personal debe renovar su calificación antes de realizar la inspección." & vbCrLf & vbCrLf & _
@@ -1751,18 +1771,23 @@ End Sub
 '            y que NO esté vencida (debe ser mayor a la fecha actual)
 ' Fecha: 23/04/2026 - FASE 7
 ' Actualizado: 24/04/2026 - Validación estricta de fecha futura
+' ACTUALIZADO: 23/06/2026 — Usa ParseFechaDMY (independiente de locale) en vez de IsDate/CDate
 ' ----------------------------------------------------------------------
 Private Sub txtFechaVencOperador_Exit(ByVal Cancel As MSForms.ReturnBoolean)
     On Error GoTo ErrorHandler
     
+    ' ACTUALIZADO 23/06/2026: Usar .Text para obtener siempre String
     Dim fechaTexto As String
-    fechaTexto = Trim(txtFechaVencOperador.Value)
+    fechaTexto = Trim(txtFechaVencOperador.Text)
     
     ' Si está vacío, permitir (campo opcional)
     If Len(fechaTexto) = 0 Then Exit Sub
     
-    ' Validar formato de fecha
-    If Not IsDate(fechaTexto) Then
+    ' Validar formato de fecha usando ParseFechaDMY (independiente de locale)
+    Dim fechaParsed As Variant
+    fechaParsed = ChecklistValidator.ParseFechaDMY(fechaTexto)
+    
+    If IsEmpty(fechaParsed) Then
         MsgBox "La fecha de vencimiento de operador debe tener un formato válido (dd/mm/yyyy)." & vbCrLf & _
                "Ejemplo: 31/12/2026", vbExclamation, "Formato de fecha inválido"
         Cancel = True
@@ -1771,7 +1796,7 @@ Private Sub txtFechaVencOperador_Exit(ByVal Cancel As MSForms.ReturnBoolean)
     
     ' VALIDACIÓN CRÍTICA: La fecha de vencimiento DEBE ser mayor a la fecha actual
     ' Si está vencida, la calificación no es válida y NO se puede continuar
-    If CDate(fechaTexto) <= Date Then
+    If CDate(fechaParsed) <= Date Then
         MsgBox "La fecha de vencimiento de operador ya pasó (" & fechaTexto & ")." & vbCrLf & vbCrLf & _
                "La calificación de operador está VENCIDA." & vbCrLf & _
                "El personal debe renovar su calificación antes de realizar la inspección." & vbCrLf & vbCrLf & _
@@ -1823,6 +1848,21 @@ Private Sub btnGuardar_Click()
     ' PASO 2: Validar datos de inspección recurrente si aplica
     If Not ValidarDatosRecurrentes() Then
         Exit Sub
+    End If
+    
+    ' PASO 2.5: Confirmar factores adicionales (% OOL y % Recuperación) si aplica
+    If mEsInspeccionRecurrente And mRequiereFactoresAdicionales Then
+        Dim mensajeFactores As String
+        mensajeFactores = "CONFIRMAR FACTORES ADICIONALES:" & vbCrLf & vbCrLf & _
+                          "Los siguientes valores se guardarán con la inspección:" & vbCrLf & vbCrLf & _
+                          "  • % Recuperación: " & mPorcRecuperacion & " %" & vbCrLf & _
+                          "  • % OOL: " & mPorcOOL & " %" & vbCrLf & vbCrLf & _
+                          "¿Está seguro que estos valores son correctos?" & vbCrLf & vbCrLf & _
+                          "Seleccione 'No' para regresar y corregirlos."
+        
+        If MsgBox(mensajeFactores, vbYesNo + vbQuestion + vbDefaultButton2, "Confirmar factores adicionales") <> vbYes Then
+            Exit Sub
+        End If
     End If
     
     ' PASO 3: Delegar al orquestador (él se encarga de recopilar, validar respuestas y guardar)
@@ -3001,8 +3041,12 @@ Private Sub BuscarHistorialSilencioso()
     End If
     
     ' Calcular número de inspección
+    ' CORREGIDO (15/06/2026): Usar CalcularNumeroInspeccionSiguiente() que
+    ' usa MAX(NumeroInspeccion) en vez de depender de ObtenerUltimaInspeccion.
+    ' Esto es más robusto ante desordenamiento por fechas iguales.
     Dim numInspeccion As Long
-    numInspeccion = ultInsp("NumeroInspeccion") + 1
+    numInspeccion = InspectionHistoryService.CalcularNumeroInspeccionSiguiente( _
+        iniciales, True, puestoEval, "")
     mNumeroInspeccion = numInspeccion
     txtNumeroInspeccion.Value = CStr(numInspeccion)
     
@@ -3258,13 +3302,13 @@ Private Sub btnBuscarHistorico_Click()
     lblRPNAnterior.Visible = True
     lblModoRPN.Visible = True
     
-    ' Determinar número de inspección (última + 1)
+    ' Determinar número de inspección
+    ' CORREGIDO (15/06/2026): Usar CalcularNumeroInspeccionSiguiente() que
+    ' usa MAX(NumeroInspeccion) en vez de depender de ObtenerUltimaInspeccion.
+    ' Esto es más robusto ante desordenamiento por fechas iguales.
     Dim numInspeccion As Long
-    If ultInsp.Exists("NumeroInspeccion") Then
-        numInspeccion = CLng(ultInsp("NumeroInspeccion")) + 1
-    Else
-        numInspeccion = 2  ' Asumir que la encontrada es la primera
-    End If
+    numInspeccion = InspectionHistoryService.CalcularNumeroInspeccionSiguiente( _
+        iniciales, True, puestoEval, "")
     mNumeroInspeccion = numInspeccion
     txtNumeroInspeccion.Value = numInspeccion
     

@@ -1,5 +1,8 @@
 Option Explicit
 
+' Bandera para mostrar el mensaje de "Audit Trail lleno" una sola vez por sesión.
+Private auditTrailLlenoNotificado As Boolean
+
 ' ------------------------------------------------------------------------------
 ' Módulo: AuditLogger2
 ' Descripción: Servicio centralizado de auditoría con soporte de rotación
@@ -49,8 +52,19 @@ Public Sub LogAction(ByVal action As String, ByVal sheetName As String, _
     Set ws = AuditRotation2.ObtenerHojaAuditActiva()
 
     If ws Is Nothing Then
-        Debug.Print "[AuditLogger2] ERROR: ObtenerHojaAuditActiva devolvió Nothing. Registro no guardado."
-        GoTo ErrorHandler
+        ' Audit Trail completamente lleno — notificar UNA sola vez al usuario.
+        If Not auditTrailLlenoNotificado Then
+            auditTrailLlenoNotificado = True
+            MsgBox "ATENCIÓN: Se ha alcanzado el límite máximo de registros de auditoría " & _
+                   "(" & Configuration2.AUDIT_MAX_SHEETS & " hojas × " & Format(Configuration2.AUDIT_MAX_ROWS, "#,##0") & " filas)." & vbCrLf & vbCrLf & _
+                   "El sistema continuará funcionando normalmente, pero NO se registrarán " & _
+                   "nuevos eventos de auditoría hasta que se libere espacio." & vbCrLf & vbCrLf & _
+                   "Contacte al administrador para archivar los registros existentes.", _
+                   vbExclamation, "Audit Trail Lleno"
+        End If
+        Debug.Print "[AuditLogger2] Audit Trail lleno — registro NO guardado (acción: " & action & ")."
+        Application.EnableEvents = True
+        Exit Sub
     End If
 
     ' -- Paso 2: determinar el nombre de tabla correspondiente a esa hoja ------

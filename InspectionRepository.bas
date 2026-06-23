@@ -26,6 +26,9 @@ Public Function CrearInspeccion(ByVal datos As Object) As String
     Set wsHistorico = ThisWorkbook.Sheets(Configuration2.SHEET_HISTORICO)
     Set tblInspecciones = wsHistorico.ListObjects(Configuration2.TABLE_INSPECCIONES)
     
+    ' FASE 9 (09/06/2026): Desproteger hoja Histórico para permitir escritura VBA
+    Call SheetProtector2.UnprotectSheet(wsHistorico, Configuration2.APP_PASSWORD)
+    
     ' Generar ID único
     idInspeccion = GenerarUUID()
     
@@ -37,17 +40,33 @@ Public Function CrearInspeccion(ByVal datos As Object) As String
         .Cells(1, tblInspecciones.ListColumns("Iniciales personal").Index).Value = datos("Iniciales")
         .Cells(1, tblInspecciones.ListColumns("ID Plantilla").Index).Value = datos("IDPlantilla")
         .Cells(1, tblInspecciones.ListColumns("Planta").Index).Value = datos("Planta")
-        .Cells(1, tblInspecciones.ListColumns("Fecha inspeccion").Index).Value = datos("FechaInspeccion")
         .Cells(1, tblInspecciones.ListColumns("Auditor").Index).Value = datos("Evaluador")
         .Cells(1, tblInspecciones.ListColumns("Estado").Index).Value = Configuration2.INSPECCION_EN_PROGRESO
+
+        ' --- FECHA INSPECCION (CORRECCIÓN FORMATO EXCEL) ---
+        Dim parsedFechaInsp As Variant
+        parsedFechaInsp = ChecklistValidator.ParseFechaDMY(CStr(datos("FechaInspeccion")))
+        If Not IsEmpty(parsedFechaInsp) Then
+            .Cells(1, tblInspecciones.ListColumns("Fecha inspeccion").Index).Value = parsedFechaInsp ' Envía Date puro
+        Else
+            .Cells(1, tblInspecciones.ListColumns("Fecha inspeccion").Index).Value = datos("FechaInspeccion")
+        End If
+        .Cells(1, tblInspecciones.ListColumns("Fecha inspeccion").Index).NumberFormat = "dd/mm/yyyy"
         
-        ' Fecha Auditada (fecha evaluada)
+        ' --- FECHA AUDITADA (CORRECCIÓN FORMATO EXCEL) ---
         If datos.Exists("FechaAuditada") Then
             On Error Resume Next
-            Dim colFechaAuditada As Long
+            Dim colFechaAuditada As Variant
             colFechaAuditada = Application.Match("Fecha Auditada", tblInspecciones.HeaderRowRange, 0)
             If Not IsError(colFechaAuditada) Then
-                .Cells(1, colFechaAuditada).Value = datos("FechaAuditada")
+                Dim parsedFechaAud As Variant
+                parsedFechaAud = ChecklistValidator.ParseFechaDMY(CStr(datos("FechaAuditada")))
+                If Not IsEmpty(parsedFechaAud) Then
+                    .Cells(1, CLng(colFechaAuditada)).Value = parsedFechaAud
+                Else
+                    .Cells(1, CLng(colFechaAuditada)).Value = datos("FechaAuditada")
+                End If
+                .Cells(1, CLng(colFechaAuditada)).NumberFormat = "dd/mm/yyyy"
             End If
             On Error GoTo ErrorHandler
         End If
@@ -80,70 +99,269 @@ Public Function CrearInspeccion(ByVal datos As Object) As String
         End If
         
         ' === NUEVOS CAMPOS - FASE 7 (23/04/2026): Calificaciones y Vencimientos ===
-        ' Guardar con validación de existencia de columna y valores predeterminados
         On Error Resume Next
-        Dim colIdx As Long
+        Dim colIdx As Variant 
         
-        ' Calificación Vestuario (Si/No, default "Si")
+        ' Calificación Vestuario
         colIdx = Application.Match("Calificacion Vestuario", tblInspecciones.HeaderRowRange, 0)
         If Not IsError(colIdx) Then
             Dim califVest As String
             califVest = Trim(CStr(datos("CalificacionVestuario")))
-            .Cells(1, colIdx).Value = IIf(Len(califVest) > 0, califVest, "Si")
+            .Cells(1, CLng(colIdx)).Value = IIf(Len(califVest) > 0, califVest, "Si")
         End If
         
-        ' Fecha Venc Vestuario (opcional, usar Configuration2.VALOR_NO_APLICA si está vacío)
+        ' --- FECHA VENCIMIENTO VESTUARIO (CORRECCIÓN FORMATO EXCEL) ---
         colIdx = Application.Match("Fecha Venc Vestuario", tblInspecciones.HeaderRowRange, 0)
         If Not IsError(colIdx) Then
-            Dim fechaVencVest As String
-            fechaVencVest = Trim(CStr(datos("FechaVencVestuario")))
-            .Cells(1, colIdx).Value = IIf(Len(fechaVencVest) > 0, fechaVencVest, Configuration2.VALOR_NO_APLICA)
+            Dim parsedVencVest As Variant
+            parsedVencVest = ChecklistValidator.ParseFechaDMY(CStr(datos("FechaVencVestuario")))
+            
+            If Not IsEmpty(parsedVencVest) Then
+                .Cells(1, CLng(colIdx)).Value = parsedVencVest
+                .Cells(1, CLng(colIdx)).NumberFormat = "dd/mm/yyyy"
+            Else
+                Dim fechaVencVest As String
+                fechaVencVest = Trim(CStr(datos("FechaVencVestuario")))
+                .Cells(1, CLng(colIdx)).Value = IIf(Len(fechaVencVest) > 0, fechaVencVest, Configuration2.VALOR_NO_APLICA)
+            End If
         End If
         
-        ' Calificación Operador (Si/No, default "Si")
+        ' Calificación Operador
         colIdx = Application.Match("Calificacion Operador", tblInspecciones.HeaderRowRange, 0)
         If Not IsError(colIdx) Then
             Dim califOper As String
             califOper = Trim(CStr(datos("CalificacionOperador")))
-            .Cells(1, colIdx).Value = IIf(Len(califOper) > 0, califOper, "Si")
+            .Cells(1, CLng(colIdx)).Value = IIf(Len(califOper) > 0, califOper, "Si")
         End If
         
-        ' Fecha Venc Operador (opcional, usar Configuration2.VALOR_NO_APLICA si está vacío)
+        ' --- FECHA VENCIMIENTO OPERADOR (CORRECCIÓN FORMATO EXCEL) ---
         colIdx = Application.Match("Fecha Venc Operador", tblInspecciones.HeaderRowRange, 0)
         If Not IsError(colIdx) Then
-            Dim fechaVencOper As String
-            fechaVencOper = Trim(CStr(datos("FechaVencOperador")))
-            .Cells(1, colIdx).Value = IIf(Len(fechaVencOper) > 0, fechaVencOper, Configuration2.VALOR_NO_APLICA)
+            Dim parsedVencOper As Variant
+            parsedVencOper = ChecklistValidator.ParseFechaDMY(CStr(datos("FechaVencOperador")))
+            
+            If Not IsEmpty(parsedVencOper) Then
+                .Cells(1, CLng(colIdx)).Value = parsedVencOper
+                .Cells(1, CLng(colIdx)).NumberFormat = "dd/mm/yyyy"
+            Else
+                Dim fechaVencOper As String
+                fechaVencOper = Trim(CStr(datos("FechaVencOperador")))
+                .Cells(1, CLng(colIdx)).Value = IIf(Len(fechaVencOper) > 0, fechaVencOper, Configuration2.VALOR_NO_APLICA)
+            End If
         End If
         
+        ' Columnas no usadas actualmente
+        colIdx = Application.Match("Fecha completado", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            .Cells(1, CLng(colIdx)).Value = Configuration2.VALOR_NO_APLICA
+        End If
+        
+        colIdx = Application.Match("Usuario completado", tblInspecciones.HeaderRowRange, 0)
+        If Not IsError(colIdx) Then
+            .Cells(1, CLng(colIdx)).Value = Configuration2.VALOR_NO_APLICA
+        End If
+
         On Error GoTo ErrorHandler
         ' === FIN NUEVOS CAMPOS FASE 7 ===
         
-        ' Columnas no usadas actualmente: completar con Configuration2.VALOR_NO_APLICA para evitar vacíos
-        On Error Resume Next
-        
-        ' Fecha completado (no se usa actualmente)
-        colIdx = Application.Match("Fecha completado", tblInspecciones.HeaderRowRange, 0)
-        If Not IsError(colIdx) Then
-            .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
-        End If
-        
-        ' Usuario completado (no se usa actualmente)
-        colIdx = Application.Match("Usuario completado", tblInspecciones.HeaderRowRange, 0)
-        If Not IsError(colIdx) Then
-            .Cells(1, colIdx).Value = Configuration2.VALOR_NO_APLICA
-        End If
-        
-        On Error GoTo ErrorHandler
     End With
+    
+    ' Reproteger hoja según el rol del usuario
+    Call SheetProtector2.ApplyRoleBasedProtection(wsHistorico, Configuration2.APP_PASSWORD)
     
     CrearInspeccion = idInspeccion
     Exit Function
     
 ErrorHandler:
+    ' Reproteger hoja incluso si hay error (fail-safe)
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(wsHistorico, Configuration2.APP_PASSWORD)
+    On Error GoTo 0
+    
     CrearInspeccion = ""
     Call ErrorLogger2.Log("InspectionRepository.CrearInspeccion", Err.Description, Err.Number)
 End Function
+
+'' ----------------------------------------------------------------------
+' Función: ExisteEnCronograma (PUBLIC)
+' Propósito: Verifica si existe una entrada activa en tblCronogramaInspecciones
+'            que coincida con Iniciales + IDPlantilla + Puesto + Planta.
+'            Usada por btnInhabilitar_Click para validar antes de inhabilitar.
+'
+' Parámetros:
+'   iniciales:   Iniciales del personal
+'   idPlantilla: ID de la plantilla
+'   puesto:      Nombre del puesto
+'   planta:      Nombre de la planta
+'
+' Retorna: True si existe al menos una entrada coincidente en el cronograma.
+' Fecha creación: 17/06/2026 - Fix: validar existencia en cronograma antes de inhabilitar
+' ----------------------------------------------------------------------
+Public Function ExisteEnCronograma( _
+    ByVal iniciales As String, _
+    ByVal idPlantilla As String, _
+    ByVal puesto As String, _
+    ByVal planta As String) As Boolean
+    
+    On Error GoTo ErrorHandler
+    
+    Dim wsCronograma As Worksheet
+    Dim tblCronograma As ListObject
+    
+    Set wsCronograma = ThisWorkbook.Sheets(Configuration2.SHEET_CRONOGRAMA)
+    Set tblCronograma = wsCronograma.ListObjects(Configuration2.TABLE_CRONOGRAMA)
+    
+    If tblCronograma.DataBodyRange Is Nothing Then
+        ExisteEnCronograma = False
+        Exit Function
+    End If
+    
+    Dim cronoRow As ListRow
+    Dim colIniciales As Long, colIDPlantilla As Long
+    Dim colPuesto As Long, colPlanta As Long
+    
+    colIniciales = tblCronograma.ListColumns("Iniciales personal").Index
+    colIDPlantilla = tblCronograma.ListColumns("ID Plantilla").Index
+    colPuesto = tblCronograma.ListColumns("Puesto").Index
+    colPlanta = tblCronograma.ListColumns("Planta personal").Index
+    
+    For Each cronoRow In tblCronograma.ListRows
+        Dim iniCrono As String, idPltCrono As String
+        Dim puestoCrono As String, plantaCrono As String
+        
+        iniCrono = Trim(CStr(cronoRow.Range.Cells(1, colIniciales).Value))
+        idPltCrono = Trim(CStr(cronoRow.Range.Cells(1, colIDPlantilla).Value))
+        puestoCrono = Trim(CStr(cronoRow.Range.Cells(1, colPuesto).Value))
+        plantaCrono = Trim(CStr(cronoRow.Range.Cells(1, colPlanta).Value))
+        
+        If UCase(iniCrono) = UCase(iniciales) And _
+           UCase(idPltCrono) = UCase(idPlantilla) And _
+           UCase(puestoCrono) = UCase(puesto) And _
+           UCase(plantaCrono) = UCase(planta) Then
+            
+            ExisteEnCronograma = True
+            Exit Function
+        End If
+    Next cronoRow
+    
+    ExisteEnCronograma = False
+    Exit Function
+    
+ErrorHandler:
+    ExisteEnCronograma = False
+    Call ErrorLogger2.Log("InspectionRepository.ExisteEnCronograma", Err.Description, Err.Number)
+End Function
+
+'' ----------------------------------------------------------------------
+' Subrutina: InhabilitarInspeccionEnCronograma (PUBLIC)
+' Propósito: Marca una entrada en tblCronogramaInspecciones como inhabilitada
+'            actualizando los campos "Activo en cronograma" y "Estado cronograma"
+'            a "Inhabilitada". Esto hace que desaparezca del resumen (tblResumenCronograma).
+'            NO escribe en tblInspecciones ni en tblRespuestas.
+'            El audit trail se registra vía Worksheet_Change de Hoja8 (Cronograma).
+'
+' Parámetros:
+'   iniciales:   Iniciales del personal (ej. "JGP")
+'   idPlantilla: ID de la plantilla (ej. "TPL003")
+'   puesto:      Nombre del puesto evaluado (ej. "Químico")
+'   planta:      Nombre de la planta (ej. "PTA")
+'
+' Fecha creación: 05/08/2026 - Feature "Inhabilitar Inspección"
+' Última mod: 17/06/2026 - Refactor: solo UPDATE en cronograma, sin INSERT en tblInspecciones
+' ----------------------------------------------------------------------
+Public Sub InhabilitarInspeccionEnCronograma( _
+    ByVal iniciales As String, _
+    ByVal idPlantilla As String, _
+    ByVal puesto As String, _
+    ByVal planta As String)
+    
+    On Error GoTo ErrorHandler
+    
+    ' ──────────────────────────────────────────────────────────────────
+    ' FIX (17/06/2026): Deshabilitar refresco de pantalla durante
+    ' la operación para evitar saltos causados por Protect/Unprotect.
+    ' EnableEvents se deja activo para que Worksheet_Change registre
+    ' los cambios en el audit trail (tblCronogramaInspecciones).
+    ' ──────────────────────────────────────────────────────────────────
+    Application.ScreenUpdating = False
+    
+    Dim wsCronograma As Worksheet
+    Dim tblCronograma As ListObject
+    
+    Set wsCronograma = ThisWorkbook.Sheets(Configuration2.SHEET_CRONOGRAMA)
+    Set tblCronograma = wsCronograma.ListObjects(Configuration2.TABLE_CRONOGRAMA)
+    
+    If tblCronograma.DataBodyRange Is Nothing Then
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    ' Desproteger para escritura VBA
+    Call SheetProtector2.UnprotectSheet(wsCronograma, Configuration2.APP_PASSWORD)
+    
+    Dim cronoRow As ListRow
+    Dim colIniciales As Long, colIDPlantilla As Long
+    Dim colPuesto As Long, colPlanta As Long
+    Dim colActivoCrono As Long, colEstadoCrono As Long
+    
+    colIniciales = tblCronograma.ListColumns("Iniciales personal").Index
+    colIDPlantilla = tblCronograma.ListColumns("ID Plantilla").Index
+    colPuesto = tblCronograma.ListColumns("Puesto").Index
+    colPlanta = tblCronograma.ListColumns("Planta personal").Index
+    
+    ' Columnas a actualizar (manejar si no existen aún)
+    On Error Resume Next
+    colActivoCrono = tblCronograma.ListColumns("Activo en cronograma").Index
+    If Err.Number <> 0 Then colActivoCrono = 0: Err.Clear
+    
+    colEstadoCrono = tblCronograma.ListColumns("Estado cronograma").Index
+    If Err.Number <> 0 Then colEstadoCrono = 0: Err.Clear
+    On Error GoTo ErrorHandler
+    
+    For Each cronoRow In tblCronograma.ListRows
+        Dim iniCrono As String, idPltCrono As String
+        Dim puestoCrono As String, plantaCrono As String
+        
+        iniCrono = Trim(CStr(cronoRow.Range.Cells(1, colIniciales).Value))
+        idPltCrono = Trim(CStr(cronoRow.Range.Cells(1, colIDPlantilla).Value))
+        puestoCrono = Trim(CStr(cronoRow.Range.Cells(1, colPuesto).Value))
+        plantaCrono = Trim(CStr(cronoRow.Range.Cells(1, colPlanta).Value))
+        
+        If UCase(iniCrono) = UCase(iniciales) And _
+           UCase(idPltCrono) = UCase(idPlantilla) And _
+           UCase(puestoCrono) = UCase(puesto) And _
+           UCase(plantaCrono) = UCase(planta) Then
+            
+            ' Marcar como inhabilitada
+            If colActivoCrono > 0 Then
+                cronoRow.Range.Cells(1, colActivoCrono).Value = "Inhabilitada"
+            End If
+            If colEstadoCrono > 0 Then
+                cronoRow.Range.Cells(1, colEstadoCrono).Value = "Inhabilitada"
+            End If
+            
+            Exit For
+        End If
+    Next cronoRow
+    
+    ' Reproteger
+    Call SheetProtector2.ApplyRoleBasedProtection(wsCronograma, Configuration2.APP_PASSWORD)
+    
+    ' Restaurar refresco de pantalla
+    Application.ScreenUpdating = True
+    
+    Exit Sub
+    
+ErrorHandler:
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(wsCronograma, Configuration2.APP_PASSWORD)
+    On Error GoTo 0
+    
+    ' Restaurar refresco de pantalla incluso en error
+    Application.ScreenUpdating = True
+    
+    Call ErrorLogger2.Log("InspectionRepository.InhabilitarInspeccionEnCronograma", Err.Description, Err.Number)
+End Sub
 
 '' ----------------------------------------------------------------------
 ' Subrutina: GuardarRespuestas
@@ -165,6 +383,9 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
     
     Set wsHistorico = ThisWorkbook.Sheets(Configuration2.SHEET_HISTORICO)
     ' Debug.Print "[GuardarRespuestas] Hoja Histórico obtenida: " & wsHistorico.Name
+    
+    ' FASE 9 (09/06/2026): Desproteger hoja Histórico para permitir escritura VBA
+    Call SheetProtector2.UnprotectSheet(wsHistorico, Configuration2.APP_PASSWORD)
     
     Set tblRespuestas = wsHistorico.ListObjects(Configuration2.TABLE_RESPUESTAS)
     ' Debug.Print "[GuardarRespuestas] Tabla tblRespuestas obtenida con " & tblRespuestas.ListColumns.Count & " columnas"
@@ -342,9 +563,13 @@ Public Sub GuardarRespuestas(ByVal idInspeccion As String, ByVal respuestas As C
     Exit Sub
     
 ErrorHandler:
+    ' Reproteger hoja incluso si hay error (fail-safe)
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(wsHistorico, Configuration2.APP_PASSWORD)
     Application.Calculation = xlCalculationAutomatic
     Application.ScreenUpdating = True
-    ' Debug.Print "[GuardarRespuestas] ERROR en respuesta " & contador & ": " & Err.Description
+    On Error GoTo 0
+    
     Call ErrorLogger2.Log("InspectionRepository.GuardarRespuestas", Err.Description, Err.Number)
     Err.Raise Err.Number, "InspectionRepository.GuardarRespuestas", Err.Description
 End Sub
@@ -370,7 +595,14 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
     Set wsHistorico = ThisWorkbook.Sheets(Configuration2.SHEET_HISTORICO)
     Set tblInspecciones = wsHistorico.ListObjects(Configuration2.TABLE_INSPECCIONES)
     
-    If tblInspecciones.DataBodyRange Is Nothing Then Exit Sub
+    ' FASE 9 (09/06/2026): Desproteger hoja Histórico para permitir escritura VBA
+    Call SheetProtector2.UnprotectSheet(wsHistorico, Configuration2.APP_PASSWORD)
+    
+    If tblInspecciones.DataBodyRange Is Nothing Then
+        ' Reproteger incluso si no hay datos
+        Call SheetProtector2.ApplyRoleBasedProtection(wsHistorico, Configuration2.APP_PASSWORD)
+        Exit Sub
+    End If
     
     For Each inspeccionRow In tblInspecciones.ListRows
         Dim currentID As String
@@ -462,7 +694,7 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                 ' Guardar campos recurrentes si existen en calculos
                 If calculos.Exists("NumeroInspeccion") Then
                     On Error Resume Next
-                    Dim colIdx As Long
+                    Dim colIdx As Variant
                     
                     ' Numero Inspeccion (columna 32)
                     colIdx = 0
@@ -610,7 +842,8 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
                 
                 ' Auditoría
                 .Cells(1, tblInspecciones.ListColumns("Fecha calculo").Index).Value = Now
-                .Cells(1, tblInspecciones.ListColumns("Usuario calculo").Index).Value = Environ("Username")
+                .Cells(1, tblInspecciones.ListColumns("Usuario calculo").Index).Value = _
+                    .Cells(1, tblInspecciones.ListColumns("Auditor").Index).Value
                 
                 ' Columnas no usadas actualmente: completar con Configuration2.VALOR_NO_APLICA para evitar vacíos
                 On Error Resume Next
@@ -626,9 +859,17 @@ Public Sub ActualizarCalculosInspeccion(ByVal idInspeccion As String, ByVal calc
         End If
     Next inspeccionRow
     
+    ' Reproteger hoja según el rol del usuario
+    Call SheetProtector2.ApplyRoleBasedProtection(wsHistorico, Configuration2.APP_PASSWORD)
+    
     Exit Sub
     
 ErrorHandler:
+    ' Reproteger hoja incluso si hay error (fail-safe)
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(wsHistorico, Configuration2.APP_PASSWORD)
+    On Error GoTo 0
+    
     Call ErrorLogger2.Log("InspectionRepository.ActualizarCalculosInspeccion", Err.Description, Err.Number)
     Err.Raise Err.Number, "InspectionRepository.ActualizarCalculosInspeccion", Err.Description
 End Sub
@@ -676,7 +917,8 @@ Public Function ObtenerUltimasNInspecciones(ByVal iniciales As String, ByVal idP
             
             On Error Resume Next
             inspFecha = inspeccionRow.Range.Cells(1, tblInspecciones.ListColumns("Fecha inspeccion").Index).Value
-            inspRPN = CDbl(inspeccionRow.Range.Cells(1, tblInspecciones.ListColumns("RPN calculado").Index).Value)
+            ' CATEGORÍA 5 (16/06/2026): Leer RPN Total (con factores) para evaluar regla de 3 consecutivas
+            inspRPN = CDbl(inspeccionRow.Range.Cells(1, tblInspecciones.ListColumns("RPN Total").Index).Value)
             On Error GoTo ErrorHandler
             
             Dim par(0 To 1) As Variant

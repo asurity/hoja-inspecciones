@@ -77,14 +77,15 @@ Public Function BuscarInspeccionesPrevias( _
     Dim colIDInsp As Long, colIniciales As Long, colPuesto As Long
     Dim colFecha As Long, colRPN As Long, colCategoria As Long
     Dim colNumInsp As Long, colEsRec As Long, colRPNTotal As Long
-    Dim colIDPlantilla As Long
+    Dim colIDPlantilla As Long, colEstado As Long
     
     colIDInsp = tbl.ListColumns("ID Inspeccion").Index
     colIniciales = tbl.ListColumns("Iniciales personal").Index
     colFecha = tbl.ListColumns("Fecha inspeccion").Index
-    colRPN = tbl.ListColumns("RPN calculado").Index
+    colRPN = tbl.ListColumns("TA porcentaje").Index
     colCategoria = tbl.ListColumns("Categoria resultado").Index
     colIDPlantilla = tbl.ListColumns("ID Plantilla").Index
+    colEstado = tbl.ListColumns("Estado").Index
     
     ' Columnas nuevas (pueden no existir aún en BD - manejo con IsError)
     On Error Resume Next
@@ -117,6 +118,14 @@ Public Function BuscarInspeccionesPrevias( _
     For Each fila In tbl.ListRows
         coincide = False
         
+        ' NUEVO (05/08/2026): SALTAR registros inhabilitados
+        ' Las inspecciones inhabilitadas por Admin NO son inspecciones reales
+        ' y NO deben interferir con la búsqueda de inspecciones previas
+        ' (bloquearían el cálculo recurrente del mismo puesto+personal)
+        If UCase(Trim(CStr(fila.Range.Cells(1, colEstado).Value))) = UCase(Configuration2.INSPECCION_INHABILITADA) Then
+            GoTo NextFila
+        End If
+        
         ' Filtro primario: Iniciales
         inicialesFila = Trim(CStr(fila.Range.Cells(1, colIniciales).Value))
         If UCase(inicialesFila) = UCase(Trim(iniciales)) Then
@@ -143,7 +152,23 @@ Public Function BuscarInspeccionesPrevias( _
             If coincide Then
                 Set inspeccion = CreateObject("Scripting.Dictionary")
                 inspeccion("IDInspeccion") = CStr(fila.Range.Cells(1, colIDInsp).Value)
-                inspeccion("FechaInspeccion") = CDate(fila.Range.Cells(1, colFecha).Value)
+                
+                ' Leer fecha de forma independiente de locale
+                Dim cellFechaValue As Variant
+                cellFechaValue = fila.Range.Cells(1, colFecha).Value
+                If IsNumeric(cellFechaValue) Then
+                    ' Ya es un número serial de Excel (Date)
+                    inspeccion("FechaInspeccion") = CDate(cellFechaValue)
+                Else
+                    ' Es string → usar ParseFechaDMY
+                    Dim parsedFechaHist As Variant
+                    parsedFechaHist = ChecklistValidator.ParseFechaDMY(CStr(cellFechaValue))
+                    If Not IsEmpty(parsedFechaHist) Then
+                        inspeccion("FechaInspeccion") = CDate(parsedFechaHist)
+                    Else
+                        inspeccion("FechaInspeccion") = Date  ' Fallback: hoy
+                    End If
+                End If
                 
                 ' Puesto (si columna existe)
                 If colPuesto > 0 Then
@@ -152,10 +177,11 @@ Public Function BuscarInspeccionesPrevias( _
                     inspeccion("PuestoEvaluado") = "[No disponible]"
                 End If
                 
-                ' IMPORTANTE (23/04/2026): SIEMPRE usar RPN calculado (% TA puro)
-                ' para el promedio en inspecciones recurrentes. NO usar RPN Total
-                ' porque incluye factores adicionales (% Recuperación + % OOL) que
-                ' NO deben sumarse dos veces.
+                ' IMPORTANTE (15/06/2026 - CORREGIDO): Leer de columna "TA porcentaje"
+                ' en vez de "RPN calculado". "TA porcentaje" SIEMPRE contiene el % TA puro
+                ' sin factores adicionales, incluso en inspecciones recurrentes.
+                ' "RPN calculado" en cambio guarda el RPN Final que en recurrentes
+                ' incluye %Recuperación + %OOL, contaminando el promedio.
                 '
                 ' Ejemplo correcto:
                 '   Inspección 2: Promedio = (TA1 + TA2) / 2 + Factores2
@@ -194,6 +220,7 @@ Public Function BuscarInspeccionesPrevias( _
                 resultados.Add inspeccion
             End If
         End If
+NextFila:
     Next fila
     
     ' Ordenar resultados por fecha DESC (más reciente primero)
@@ -431,7 +458,31 @@ Private Function OrdenarPorFecha(ByVal coleccion As Collection) As Collection
     For i = 1 To UBound(items) - 1
         swapped = False
         For j = 1 To UBound(items) - i
-            If items(j)("FechaInspeccion") < items(j + 1)("FechaInspeccion") Then
+            ' ─────────────────────────────────────────────────────
+            ' CORREGIDO (15/06/2026): Cuando dos inspecciones tienen
+            ' la misma fecha (ej. múltiples inspecciones el mismo día),
+            ' usar NumeroInspeccion DESC como desempate para garantizar
+            ' que la más reciente quede primero.
+            ' ─────────────────────────────────────────────────────
+            Dim fechaJ As Date
+            Dim fechaJ1 As Date
+            fechaJ = items(j)("FechaInspeccion")
+            fechaJ1 = items(j + 1)("FechaInspeccion")
+            
+            Dim necesitaSwap As Boolean
+            necesitaSwap = False
+            
+            If fechaJ < fechaJ1 Then
+                ' j es más antigua que j+1 → llevar j+1 al frente
+                necesitaSwap = True
+            ElseIf fechaJ = fechaJ1 Then
+                ' Misma fecha → DESEMPATE: NumeroInspeccion DESC
+                If items(j)("NumeroInspeccion") < items(j + 1)("NumeroInspeccion") Then
+                    necesitaSwap = True
+                End If
+            End If
+            
+            If necesitaSwap Then
                 Set temp = items(j)
                 Set items(j) = items(j + 1)
                 Set items(j + 1) = temp

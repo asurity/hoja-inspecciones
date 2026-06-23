@@ -155,6 +155,13 @@ Public Function CheckAdminAccess() As Boolean
         
         ' (Opcional) Desproteger el libro para permitir cambios estructurales.
         ThisWorkbook.Unprotect Password:=Configuration2.APP_PASSWORD
+        
+        ' ========== FASE 5 (08/06/2026): Desproteger TODAS las hojas de módulo ==========
+        ' Al autenticarse como Admin, se desprotegen proactivamente todas las hojas
+        ' de módulo (excepto Audit Trail) para que el administrador pueda editar
+        ' libremente sin tener que navegar hoja por hoja.
+        Call UnprotectAllModuleSheetsForAdmin
+        
         CheckAdminAccess = True
         MsgBox "Acceso de administrador concedido. Ahora puede acceder a las funcionalidades restringidas.", vbInformation, "Acceso Concedido"
     Else
@@ -255,6 +262,13 @@ Public Sub AdminAccess()
             moduleAndSubroutine:="AdminAccessControl2.AdminAccess" _
         )
         
+        ' ========== FASE 5 (08/06/2026): Desproteger TODAS las hojas de módulo ==========
+        ' Al autenticarse como Admin, se desprotegen proactivamente todas las hojas
+        ' de módulo (excepto Audit Trail) para que el administrador pueda editar
+        ' libremente sin tener que navegar hoja por hoja.
+        ThisWorkbook.Unprotect Password:=Configuration2.APP_PASSWORD
+        Call UnprotectAllModuleSheetsForAdmin
+        
         MsgBox "Acceso de administrador concedido. Ahora puede acceder a las funcionalidades restringidas.", vbInformation, "Acceso Concedido"
     Else
         m_userRole = "Usuario" ' Mantener el rol de Usuario si la contraseña es incorrecta.
@@ -290,5 +304,108 @@ ErrorHandler:
     ' Registrar el error y notificar al usuario.
     Call ErrorLogger2.Log("AdminAccessControl2.AdminAccess", VBA.Err.Description, VBA.Err.Number)
     MsgBox "Ocurrió un error inesperado al procesar el acceso. Consulte el log de errores.", vbCritical, "Error"
+End Sub
+
+
+' ============================================================================
+' Subrutina: UnprotectAllModuleSheetsForAdmin
+' Propósito: Desprotege proactivamente TODAS las hojas de módulo del sistema
+'            (excepto las de Audit Trail) cuando un administrador se autentica.
+'            Evita que el admin tenga que navegar hoja por hoja para poder editarlas.
+'
+'            Para las hojas Audit Trail, aplica protección EXPLÍCITA con
+'            AUDIT_PASSWORD para garantizar su inmutabilidad incluso para admin.
+'
+' Fecha: 08/06/2026 - FASE 5 Activación frmInput Admin
+' Lógica:
+'   1. Itera sobre GetAllModuleSheetNames() (lista centralizada en Configuration2).
+'   2. Para hojas NO Audit Trail: llama ApplyRoleBasedProtection (como Admin → desprotege).
+'   3. Para hojas Audit Trail: aplica ProtectSheet con AUDIT_PASSWORD explícitamente.
+'   4. Hace Visible la hoja "Menú principal" al final (fallback).
+' Dependencias:
+'   - Configuration2: GetAllModuleSheetNames, GetAuditTrailSheetNames, APP_PASSWORD, AUDIT_PASSWORD
+'   - SheetProtector2: ApplyRoleBasedProtection, ProtectSheet
+'   - VariablesGlobales2: m_userRole (debe ser "Admin" al llamar esta sub)
+' ============================================================================
+Private Sub UnprotectAllModuleSheetsForAdmin()
+    On Error GoTo ErrorHandler
+    
+    Dim allModules As Variant
+    allModules = Configuration2.GetAllModuleSheetNames()
+    
+    Dim auditNames As Variant
+    auditNames = Configuration2.GetAuditTrailSheetNames()
+    
+    Dim moduleName As String
+    Dim esAudit As Boolean
+    Dim i As Long, j As Long
+    Dim ws As Worksheet
+    Dim hojasProcesadas As Long
+    Dim hojasFallidas As Long
+    
+    hojasProcesadas = 0
+    hojasFallidas = 0
+    
+    Debug.Print "[AdminAccessControl.UnprotectAllModuleSheetsForAdmin] INICIO — Rol actual: " & m_userRole
+    
+    For i = LBound(allModules) To UBound(allModules)
+        moduleName = CStr(allModules(i))
+        
+        ' Determinar si esta hoja es Audit Trail
+        esAudit = False
+        For j = LBound(auditNames) To UBound(auditNames)
+            If StrComp(moduleName, CStr(auditNames(j)), vbTextCompare) = 0 Then
+                esAudit = True
+                Exit For
+            End If
+        Next j
+        
+        ' Intentar obtener referencia a la hoja
+        On Error Resume Next
+        Set ws = ThisWorkbook.Sheets(moduleName)
+        On Error GoTo ErrorHandler
+        
+        If ws Is Nothing Then
+            Debug.Print "[AdminAccessControl.UnprotectAllModuleSheetsForAdmin] ⚠ Hoja no encontrada: '" & moduleName & "'"
+            Set ws = Nothing
+            GoTo ContinueLoop
+        End If
+        
+        If esAudit Then
+            ' Audit Trail: Proteger EXPLÍCITAMENTE (incluso para admin)
+            ' ApplyRoleBasedProtection con Admin dejaría la hoja desprotegida;
+            ' usamos ProtectSheet directamente para garantizar inmutabilidad.
+            Call SheetProtector2.UnprotectSheet(ws, Configuration2.AUDIT_PASSWORD)
+            Call SheetProtector2.ProtectSheet(ws, Configuration2.AUDIT_PASSWORD)
+            Debug.Print "[AdminAccessControl.UnprotectAllModuleSheetsForAdmin] 🔒 Audit Trail PROTEGIDA: '" & moduleName & "'"
+        Else
+            ' Hoja de módulo normal: ApplyRoleBasedProtection con Admin → desprotege
+            Call SheetProtector2.ApplyRoleBasedProtection(ws, Configuration2.APP_PASSWORD)
+            Debug.Print "[AdminAccessControl.UnprotectAllModuleSheetsForAdmin] 🔓 Desprotegida: '" & moduleName & "'"
+        End If
+        
+        hojasProcesadas = hojasProcesadas + 1
+        
+ContinueLoop:
+        Set ws = Nothing
+    Next i
+    
+    ' Asegurar que "Menú principal" esté visible y desprotegida
+    On Error Resume Next
+    Set ws = ThisWorkbook.Sheets("Menú principal")
+    If Not ws Is Nothing Then
+        ws.Visible = xlSheetVisible
+        Call SheetProtector2.ApplyRoleBasedProtection(ws, Configuration2.APP_PASSWORD)
+    End If
+    On Error GoTo ErrorHandler
+    
+    Debug.Print "[AdminAccessControl.UnprotectAllModuleSheetsForAdmin] FIN — Procesadas: " & hojasProcesadas & " | Fallidas: " & hojasFallidas
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "[AdminAccessControl.UnprotectAllModuleSheetsForAdmin] ⚠ ERROR: N°" & Err.Number & " - " & Err.Description
+    Call ErrorLogger2.Log("AdminAccessControl2.UnprotectAllModuleSheetsForAdmin", VBA.Err.Description, VBA.Err.Number)
+    Resume ContinueLoop
 End Sub
 

@@ -29,9 +29,10 @@ Option Explicit
 ' ------------------------------------------------------------------------------
 ' Función: ObtenerNombreHoja
 ' Retorna el nombre de la hoja Audit Trail para el número de secuencia dado.
-'   1 ? "Audit trail 1"
-'   2 ? "Audit trail 2"
-'   5 ? "Audit trail 5"
+'   Convención: TODAS las hojas llevan número (incluyendo la 1).
+'   1 → "Audit trail 1"
+'   2 → "Audit trail 2"
+'   5 → "Audit trail 5"
 ' ------------------------------------------------------------------------------
 Public Function ObtenerNombreHoja(ByVal numeroHoja As Long) As String
     ObtenerNombreHoja = Configuration2.AUDIT_BASE_NAME & " " & numeroHoja
@@ -40,9 +41,10 @@ End Function
 ' ------------------------------------------------------------------------------
 ' Función: ObtenerNombreTabla
 ' Retorna el nombre de la tabla ListObject para el número de secuencia dado.
-'   1 ? "tblAudit1"
-'   2 ? "tblAudit2"
-'   5 ? "tblAudit5"
+'   Convención: TODAS las tablas llevan número (incluyendo la 1).
+'   1 → "tblAudit1"
+'   2 → "tblAudit2"
+'   5 → "tblAudit5"
 ' ------------------------------------------------------------------------------
 Public Function ObtenerNombreTabla(ByVal numeroHoja As Long) As String
     ObtenerNombreTabla = Configuration2.AUDIT_TABLE_PREFIX & numeroHoja
@@ -142,13 +144,15 @@ Public Function ObtenerHojaAuditActiva() As Worksheet
     Next i
 
     ' Todas las hojas encontradas están llenas.
+    ' NO retornar la última hoja — Excel tiene un límite físico de ~1,048,576 filas.
+    ' Retornar Nothing para que AuditLogger2 suspenda el registro y notifique al usuario.
     If Not wsLast Is Nothing Then
-        Debug.Print "[AuditRotation2] *** CRÍTICO: todas las hojas Audit Trail están llenas. Se usará '" & wsLast.Name & "' (excederá el límite)."
-        Set ObtenerHojaAuditActiva = wsLast
+        Debug.Print "[AuditRotation2] *** CRÍTICO: todas las hojas Audit Trail están llenas (" & Configuration2.AUDIT_MAX_SHEETS & " hojas x " & Format(Configuration2.AUDIT_MAX_ROWS, "#,##0") & " filas c/u)."
+        Debug.Print "[AuditRotation2] *** El registro de auditoría se SUSPENDE para evitar desbordar Excel."
     Else
         Debug.Print "[AuditRotation2] *** ERROR CRÍTICO: no se encontró ninguna hoja Audit Trail en el libro."
-        Set ObtenerHojaAuditActiva = Nothing
     End If
+    Set ObtenerHojaAuditActiva = Nothing
     Exit Function
 
 ErrorHandler:
@@ -278,8 +282,11 @@ Public Sub TEST_LimpiarRegistrosPrueba()
     If respuesta <> vbYes Then Exit Sub
 
     Dim estadoEventos As Boolean
+    Dim estadoAlertas As Boolean
     estadoEventos = Application.EnableEvents
+    estadoAlertas = Application.DisplayAlerts
     Application.EnableEvents = False
+    Application.DisplayAlerts = False
     Application.ScreenUpdating = False
 
     Call WorkbookProtector2.UnprotectWorkbook
@@ -287,6 +294,7 @@ Public Sub TEST_LimpiarRegistrosPrueba()
     Dim i As Long
     Dim ws As Worksheet
     Dim tbl As ListObject
+    Dim fila As Long
 
     For i = 1 To Configuration2.AUDIT_MAX_SHEETS
         Dim nombreHoja As String
@@ -302,7 +310,7 @@ Public Sub TEST_LimpiarRegistrosPrueba()
         If Not ws Is Nothing Then
             Call SheetProtector2.UnprotectSheet(ws, Configuration2.AUDIT_PASSWORD)
 
-            ' Limpiar filas de la tabla dejando encabezados.
+            ' Limpiar filas de la tabla sin romper la estructura del ListObject.
             Set tbl = Nothing
             On Error Resume Next
             Set tbl = ws.ListObjects(nombreTabla)
@@ -310,9 +318,18 @@ Public Sub TEST_LimpiarRegistrosPrueba()
 
             If Not tbl Is Nothing Then
                 If Not tbl.DataBodyRange Is Nothing Then
-                    tbl.DataBodyRange.Delete
-                    Debug.Print "[TEST] Tabla '" & nombreTabla & "' en '" & nombreHoja & "' vaciada."
+                    ' Eliminar filas una por una desde abajo para no corromper la tabla.
+                    Dim totalFilasEliminadas As Long
+                    totalFilasEliminadas = tbl.ListRows.Count
+                    For fila = totalFilasEliminadas To 1 Step -1
+                        tbl.ListRows(fila).Delete
+                    Next fila
+                    Debug.Print "[TEST] Tabla '" & nombreTabla & "' en '" & nombreHoja & "' vaciada (" & totalFilasEliminadas & " filas eliminadas)."
+                Else
+                    Debug.Print "[TEST] Tabla '" & nombreTabla & "' en '" & nombreHoja & "' ya estaba vacía."
                 End If
+            Else
+                Debug.Print "[TEST] AVISO: Tabla '" & nombreTabla & "' no encontrada en '" & nombreHoja & "'."
             End If
 
             Call SheetProtector2.ProtectSheet(ws, Configuration2.AUDIT_PASSWORD)
@@ -322,11 +339,14 @@ Public Sub TEST_LimpiarRegistrosPrueba()
                 ws.Visible = xlSheetVeryHidden
                 Debug.Print "[TEST] Hoja '" & nombreHoja & "' ocultada (xlSheetVeryHidden)."
             End If
+        Else
+            Debug.Print "[TEST] Hoja '" & nombreHoja & "' NO EXISTE en el libro — se omite."
         End If
     Next i
 
     Call WorkbookProtector2.ProtectWorkbook
     Application.EnableEvents = estadoEventos
+    Application.DisplayAlerts = estadoAlertas
     Application.ScreenUpdating = True
 
     Debug.Print "[TEST] ? Limpieza completada. Estado restaurado: solo 'Audit trail' visible y vacía."
@@ -336,9 +356,110 @@ Public Sub TEST_LimpiarRegistrosPrueba()
 ErrorHandler:
     Call WorkbookProtector2.ProtectWorkbook
     Application.EnableEvents = estadoEventos
+    Application.DisplayAlerts = estadoAlertas
     Application.ScreenUpdating = True
     Debug.Print "[TEST] ERROR en limpieza: Nº" & Err.Number & " — " & Err.Description
     MsgBox "Error durante la limpieza: " & Err.Description, vbCritical, "Error"
+End Sub
+
+' ------------------------------------------------------------------------------
+' Sub: TEST_LlenarHojaEspecifica
+' Llena DIRECTAMENTE una hoja Audit Trail específica con N registros de prueba,
+' SIN pasar por AuditLogger2 (evita el MsgBox de "todo lleno" mientras llenamos).
+'
+' Uso típico para probar el escenario "5 hojas llenas":
+'   1. AUDIT_MAX_ROWS = 100
+'   2. TEST_GenerarRegistrosAudit(400)  ' llena hojas 1 a 4
+'   3. TEST_LlenarHojaEspecifica(5, 100) ' llena hoja 5 directamente
+'   4. Ahora cualquier LogAction disparará el MsgBox "Audit Trail Lleno"
+'
+' Parámetros:
+'   numeroHoja (Long): Número de hoja a llenar (1-5). Default = 5.
+'   cantidad    (Long): Cantidad de registros. Default = 100.
+' ------------------------------------------------------------------------------
+Public Sub TEST_LlenarHojaEspecifica(Optional ByVal numeroHoja As Long = 5, Optional ByVal cantidad As Long = 100)
+    On Error GoTo ErrorHandler
+
+    Dim nombreHoja As String
+    Dim nombreTabla As String
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim newRow As ListRow
+    Dim i As Long
+    Dim t0 As Double
+    t0 = Timer
+
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+
+    nombreHoja = ObtenerNombreHoja(numeroHoja)
+    nombreTabla = ObtenerNombreTabla(numeroHoja)
+
+    Debug.Print "[TEST] ========================================================"
+    Debug.Print "[TEST] Llenando '" & nombreHoja & "' con " & cantidad & " registros (bypass)..."
+
+    ' Verificar que la hoja existe
+    Set ws = Nothing
+    On Error Resume Next
+    Set ws = ThisWorkbook.Sheets(nombreHoja)
+    On Error GoTo ErrorHandler
+
+    If ws Is Nothing Then
+        MsgBox "La hoja '" & nombreHoja & "' no existe. Ejecute InicializarHojasAuditTrail primero.", vbExclamation, "Hoja no encontrada"
+        GoTo Cleanup
+    End If
+
+    ' Desproteger
+    Call WorkbookProtector2.UnprotectWorkbook
+    Call SheetProtector2.UnprotectSheet(ws, Configuration2.AUDIT_PASSWORD)
+
+    ' Obtener tabla
+    Set tbl = Nothing
+    On Error Resume Next
+    Set tbl = ws.ListObjects(nombreTabla)
+    On Error GoTo ErrorHandler
+
+    If tbl Is Nothing Then
+        MsgBox "La tabla '" & nombreTabla & "' no existe en '" & nombreHoja & "'.", vbExclamation, "Tabla no encontrada"
+        GoTo Cleanup
+    End If
+
+    ' Escribir registros directamente
+    For i = 1 To cantidad
+        Set newRow = tbl.ListRows.Add(AlwaysInsert:=True)
+        With newRow.Range
+            .Cells(1, 1).Value = Date
+            .Cells(1, 2).Value = Time
+            .Cells(1, 3).Value = Environ("USERNAME")
+            .Cells(1, 4).Value = "HojaPrueba"
+            .Cells(1, 5).Value = "TEST - Llenado directo " & i
+            .Cells(1, 6).Value = "Campo" & (i Mod 10)
+            .Cells(1, 7).Value = "Antes_" & i
+            .Cells(1, 8).Value = "Despues_" & i
+            .Cells(1, 9).Value = "AuditRotation2.TEST_LlenarHojaEspecifica"
+        End With
+        If i Mod 50 = 0 Then
+            Debug.Print "[TEST]   " & i & " / " & cantidad & " registros escritos en '" & nombreHoja & "'..."
+        End If
+    Next i
+
+    Debug.Print "[TEST] ? '" & nombreHoja & "' llena con " & cantidad & " registros en " & Format(Timer - t0, "0.00") & " seg."
+    Debug.Print "[TEST] ========================================================"
+    MsgBox "? Se escribieron " & cantidad & " registros directamente en '" & nombreHoja & "'.", vbInformation, "Llenado completado"
+
+Cleanup:
+    If Not ws Is Nothing Then
+        Call SheetProtector2.ProtectSheet(ws, Configuration2.AUDIT_PASSWORD)
+    End If
+    Call WorkbookProtector2.ProtectWorkbook
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
+    Exit Sub
+
+ErrorHandler:
+    Debug.Print "[TEST] ERROR en TEST_LlenarHojaEspecifica: Nº" & Err.Number & " — " & Err.Description
+    MsgBox "Error: " & Err.Description, vbCritical, "Error"
+    Resume Cleanup
 End Sub
 
 ' ==============================================================================

@@ -18,10 +18,10 @@ Option Explicit
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Activate()
     On Error GoTo ErrorHandler
-    Call SheetProtector2.ProtectSheet(Me, Configuration2.AUDIT_PASSWORD)
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.AUDIT_PASSWORD)
     Exit Sub
 ErrorHandler:
-    Call ErrorLogger2.Log("Audit trail.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
+    Call ErrorLogger2.Log("Audit trail 2.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
 End Sub
 
 ' ----------------------------------------------------------------------
@@ -30,5 +30,7 @@ End Sub
 '            seguridad ante cualquier posible cambio o desbloqueo accidental.
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Deactivate()
-    Call SheetProtector2.ProtectSheet(Me, Configuration2.AUDIT_PASSWORD)
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.AUDIT_PASSWORD)
+    On Error GoTo 0
 End Sub

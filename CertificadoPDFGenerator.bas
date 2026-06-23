@@ -28,6 +28,7 @@ Public Sub GenerarCertificadoPDF(ByVal idInspeccion As String)
     Dim wsPlantilla As Worksheet
     Dim rutaPDF As String
     Dim nombreArchivo As String
+    Dim sheetEstabaProtegida As Boolean
     
     ' Obtener hojas
     ' Debug.Print "[DEBUG] Obteniendo hoja Histórico..."
@@ -64,12 +65,16 @@ Public Sub GenerarCertificadoPDF(ByVal idInspeccion As String)
     ' Debug.Print "[DEBUG] Datos de inspección obtenidos correctamente"
     
     ' DESPROTEGER WORKBOOK para permitir cambio de visibilidad (URS-22)
+    ' FASE 9 (09/06/2026): Usar desprotección directa porque WorkbookProtector2
+    ' tiene caché m_IsProtected que puede estar desincronizado.
     Dim estabaProtegido As Boolean
     estabaProtegido = ThisWorkbook.ProtectStructure
     
     If estabaProtegido Then
         ' Debug.Print "[DEBUG] Desprotegiendo workbook para cambiar visibilidad..."
-        Call WorkbookProtector2.UnprotectWorkbook
+        On Error Resume Next
+        ThisWorkbook.Unprotect Password:=Configuration2.APP_PASSWORD
+        On Error GoTo ErrorHandler
     End If
     
     ' Hacer visible la plantilla temporalmente
@@ -77,10 +82,26 @@ Public Sub GenerarCertificadoPDF(ByVal idInspeccion As String)
     wsPlantilla.Visible = xlSheetVisible
     ' Debug.Print "[DEBUG] Plantilla visible: " & (wsPlantilla.Visible = xlSheetVisible)
     
+    ' DESPROTEGER HOJA para permitir escritura (la hoja puede estar protegida por URS-20/21)
+    sheetEstabaProtegida = False
+    On Error Resume Next
+    sheetEstabaProtegida = (wsPlantilla.ProtectContents Or wsPlantilla.ProtectDrawingObjects Or wsPlantilla.ProtectScenarios)
+    If sheetEstabaProtegida Then
+        ' Debug.Print "[DEBUG] Hoja protegida - desprotegiendo..."
+        wsPlantilla.Unprotect Configuration2.APP_PASSWORD
+    End If
+    On Error GoTo ErrorHandler
+    
     ' Poblar plantilla con datos
     ' Debug.Print "[DEBUG] Poblando plantilla con datos..."
     Call PoblarPlantillaCertificado(wsPlantilla, datosInspeccion)
     ' Debug.Print "[DEBUG] Plantilla poblada"
+    
+    ' REPROTEGER HOJA si estaba protegida
+    If sheetEstabaProtegida Then
+        ' Debug.Print "[DEBUG] Reprotegiendo hoja..."
+        wsPlantilla.Protect Configuration2.APP_PASSWORD, DrawingObjects:=True, Contents:=True, Scenarios:=True
+    End If
     
     ' Generar nombre de archivo
     nombreArchivo = GenerarNombreArchivoPDF(datosInspeccion)
@@ -128,9 +149,13 @@ Public Sub GenerarCertificadoPDF(ByVal idInspeccion As String)
     End With
     ' Debug.Print "[DEBUG] Números de página configurados"
     
-    ' Exportar como PDF
+' Exportar como PDF
     ' Debug.Print "[DEBUG] Iniciando exportación a PDF..."
     ' Debug.Print "[DEBUG] Método: ExportAsFixedFormat(xlTypePDF, ...)"
+    
+    ' ✅ NUEVO: Forzar cálculo y renderizado visual antes de exportar
+    Application.Calculate
+    DoEvents
     
     On Error Resume Next
     wsPlantilla.ExportAsFixedFormat xlTypePDF, rutaPDF, , True
@@ -203,7 +228,9 @@ Public Sub GenerarCertificadoPDF(ByVal idInspeccion As String)
     ' REPROTEGER WORKBOOK si estaba protegido (URS-22)
     If estabaProtegido Then
         ' Debug.Print "[DEBUG] Reprotegiendo workbook..."
-        Call WorkbookProtector2.ProtectWorkbook
+        On Error Resume Next
+        ThisWorkbook.Protect Password:=Configuration2.APP_PASSWORD, Structure:=True, Windows:=False
+        On Error GoTo ErrorHandler
     End If
     
     ' Limpiar plantilla
@@ -239,11 +266,16 @@ ErrorHandler:
     On Error Resume Next
     If Not wsPlantilla Is Nothing Then
         wsPlantilla.Visible = xlSheetVeryHidden
+        ' Reproteger hoja si estaba protegida
+        If sheetEstabaProtegida Then
+            wsPlantilla.Protect Configuration2.APP_PASSWORD, DrawingObjects:=True, Contents:=True, Scenarios:=True
+        End If
     End If
     
     ' Reproteger workbook si se desprotegió
     If estabaProtegido Then
-        Call WorkbookProtector2.ProtectWorkbook
+        On Error Resume Next
+        ThisWorkbook.Protect Password:=Configuration2.APP_PASSWORD, Structure:=True, Windows:=False
     End If
     On Error GoTo 0
     On Error GoTo 0
@@ -269,11 +301,24 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     Set wsHistorico = ThisWorkbook.Sheets(Configuration2.SHEET_HISTORICO)
     Set tbl = wsHistorico.ListObjects(Configuration2.TABLE_INSPECCIONES)
     
-    ' Buscar registro
+' Buscar registro
     encontrada = False
     Dim row As Long
+    Dim colID As Long
+    
+    ' Obtenemos la columna exacta dinámicamente, por si el usuario la movió de la posición 1
+    On Error Resume Next
+    colID = tbl.ListColumns("ID Inspeccion").Index
+    On Error GoTo ErrorHandler
+    
+    If colID = 0 Then
+        MsgBox "Error: No se encontró la columna 'ID Inspeccion' en el Histórico.", vbCritical
+        Set ObtenerDatosInspeccion = Nothing
+        Exit Function
+    End If
+    
     For row = 1 To tbl.DataBodyRange.Rows.Count
-        If Trim(tbl.DataBodyRange.Cells(row, 1).Value) = idInspeccion Then
+        If Trim(tbl.DataBodyRange.Cells(row, colID).Value) = idInspeccion Then
             encontrada = True
             Exit For
         End If
@@ -288,19 +333,23 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     Set fila = tbl.DataBodyRange.Rows(row)
     
     datos("ID") = idInspeccion
-    datos("Area") = fila.Cells(1, 2).Value
-    datos("LineaAuditada") = fila.Cells(1, 3).Value
-    datos("HoraInicio") = fila.Cells(1, 4).Value
-    datos("HoraTermino") = fila.Cells(1, 5).Value
-    datos("AY1") = fila.Cells(1, 6).Value
-    datos("AY2") = fila.Cells(1, 7).Value
-    datos("OP") = fila.Cells(1, 8).Value
-    datos("LugarAuditoria") = fila.Cells(1, 9).Value
-    datos("Iniciales") = fila.Cells(1, 10).Value
-    datos("IDPlantilla") = fila.Cells(1, 11).Value
-    datos("Planta") = fila.Cells(1, 12).Value
-    datos("FechaInspeccion") = fila.Cells(1, 13).Value
-    datos("Auditor") = fila.Cells(1, 14).Value
+    ' FIX 22/04/2026: Usar ListColumns por nombre en lugar de índices hardcodeados
+    ' Razón: Los índices fijos (col 2, col 3, etc.) no coinciden necesariamente con el orden
+    ' físico de columnas en tblInspecciones, ya que la tabla ha evolucionado con nuevas columnas.
+    ' InspectionRepository escribe usando ListColumns por nombre; aquí leemos igual.
+    datos("Area") = SafeColumnValue(fila, tbl, "Area")
+    datos("LineaAuditada") = SafeColumnValue(fila, tbl, "Linea Auditada")
+    datos("HoraInicio") = SafeColumnValue(fila, tbl, "Hora inicio")
+    datos("HoraTermino") = SafeColumnValue(fila, tbl, "Hora termino")
+    datos("AY1") = SafeColumnValue(fila, tbl, "Iniciales AY1")
+    datos("AY2") = SafeColumnValue(fila, tbl, "Iniciales AY2")
+    datos("OP") = SafeColumnValue(fila, tbl, "Iniciales OP")
+    datos("LugarAuditoria") = SafeColumnValue(fila, tbl, "Lugar Auditoria")
+    datos("Iniciales") = SafeColumnValue(fila, tbl, "Iniciales personal")
+    datos("IDPlantilla") = SafeColumnValue(fila, tbl, "ID Plantilla")
+    datos("Planta") = SafeColumnValue(fila, tbl, "Planta")
+    datos("FechaInspeccion") = SafeColumnValue(fila, tbl, "Fecha inspeccion")
+    datos("Auditor") = SafeColumnValue(fila, tbl, "Auditor")
     
     ' Fecha Auditada (puede no existir en inspecciones antiguas)
     On Error Resume Next
@@ -326,15 +375,33 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     End If
     On Error GoTo ErrorHandler
     
-    datos("TAPuntaje") = fila.Cells(1, 16).Value
-    datos("TAMaximos") = fila.Cells(1, 17).Value
-    datos("TANoAplica") = fila.Cells(1, 18).Value
-    datos("TAPorcentaje") = fila.Cells(1, 19).Value
+    ' FIX 22/04/2026: TA leído por nombre de columna, no por índice hardcodeado
+    ' InspectionRepository escribe en "TA puntaje obtenido", "TA puntos maximos", etc.
+    ' Los índices hardcodeados (16, 17, 18, 19) no coinciden con el orden real si se insertaron columnas
+    datos("TAPuntaje") = SafeColumnValue(fila, tbl, "TA puntaje obtenido")
+    datos("TAMaximos") = SafeColumnValue(fila, tbl, "TA puntos maximos")
+    datos("TANoAplica") = SafeColumnValue(fila, tbl, "TA puntos no aplica")
+    datos("TAPorcentaje") = SafeColumnValue(fila, tbl, "TA porcentaje")
     
     ' FIX 21/04/2026: Usar ListColumns en lugar de índices hardcodeados
     ' Razón: tblInspecciones tiene 31 columnas (col 20 = Auditoria Procesos, 21 = RPN, 22 = Categoria)
     datos("RPN") = fila.Cells(1, tbl.ListColumns("RPN calculado").Index).Value
-    datos("Categoria") = fila.Cells(1, tbl.ListColumns("Categoria resultado").Index).Value
+    ' NUEVO FIX: Extraer solo el número de la columna "Categoria resultado"
+    ' La tabla guarda "Categoría 3", pero el generador necesita el número 3
+    Dim valorCategoria As String
+    valorCategoria = Trim(CStr(fila.Cells(1, tbl.ListColumns("Categoria resultado").Index).Value))
+    
+    ' Remover la palabra "Categoría" (con y sin tilde) para dejar solo el número
+    valorCategoria = Replace(valorCategoria, "Categoría", "", 1, -1, vbTextCompare)
+    valorCategoria = Replace(valorCategoria, "Categoria", "", 1, -1, vbTextCompare)
+    valorCategoria = Trim(valorCategoria)
+    
+    ' Guardar el número limpio
+    If IsNumeric(valorCategoria) Then
+        datos("Categoria") = CLng(valorCategoria)
+    Else
+        datos("Categoria") = 0
+    End If
     
     ' Intentar leer resultado de Auditoría de Procesos (buscar en varias posibles columnas)
     On Error Resume Next
@@ -464,7 +531,15 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     
     colFechaVencVest = Application.Match("Fecha Venc Vestuario", tbl.HeaderRowRange, 0)
     If Not IsError(colFechaVencVest) Then
-        datos("FechaVencVestuario") = Trim(CStr(fila.Cells(1, CLng(colFechaVencVest)).Value))
+        ' ACTUALIZADO 23/06/2026: Leer como Date y formatear dd/mm/yyyy
+        ' (CStr usa locale del sistema — corrompe fechas en sistemas en inglés)
+        Dim rawVencVest As Variant
+        rawVencVest = fila.Cells(1, CLng(colFechaVencVest)).Value
+        If IsDate(rawVencVest) Then
+            datos("FechaVencVestuario") = Format(CDate(rawVencVest), "dd/mm/yyyy")
+        Else
+            datos("FechaVencVestuario") = Trim(CStr(rawVencVest))
+        End If
     Else
         datos("FechaVencVestuario") = Configuration2.VALOR_NO_APLICA
     End If
@@ -478,7 +553,14 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     
     colFechaVencOper = Application.Match("Fecha Venc Operador", tbl.HeaderRowRange, 0)
     If Not IsError(colFechaVencOper) Then
-        datos("FechaVencOperador") = Trim(CStr(fila.Cells(1, CLng(colFechaVencOper)).Value))
+        ' ACTUALIZADO 23/06/2026: Leer como Date y formatear dd/mm/yyyy
+        Dim rawVencOper As Variant
+        rawVencOper = fila.Cells(1, CLng(colFechaVencOper)).Value
+        If IsDate(rawVencOper) Then
+            datos("FechaVencOperador") = Format(CDate(rawVencOper), "dd/mm/yyyy")
+        Else
+            datos("FechaVencOperador") = Trim(CStr(rawVencOper))
+        End If
     Else
         datos("FechaVencOperador") = Configuration2.VALOR_NO_APLICA
     End If
@@ -514,6 +596,73 @@ Private Function ObtenerDatosInspeccion(ByVal idInspeccion As String) As Object
     
 ErrorHandler:
     Set ObtenerDatosInspeccion = Nothing
+End Function
+
+' --------------------------------------------------------------
+' Helper: Convertir fecha a string dd/mm/yyyy (INDEPENDIENTE de locale)
+' Acepta: Date, String en cualquier formato parseable, o Empty/Vacio
+' Retorna: String "dd/mm/yyyy" o "-" si el valor no es fecha válida
+' CREADO: 23/06/2026 — Fix definitivo de locale-dependence en fechas
+' --------------------------------------------------------------
+Private Function FechaToString(ByVal valor As Variant) As String
+    On Error Resume Next
+    
+    If IsEmpty(valor) Then
+        FechaToString = "-"
+        Exit Function
+    End If
+    
+    Dim strVal As String
+    strVal = Trim(CStr(valor))
+    
+    If Len(strVal) = 0 Or strVal = "-" Or strVal = Configuration2.VALOR_NO_APLICA Then
+        FechaToString = strVal
+        Exit Function
+    End If
+    
+    ' Si ya es un Date, formatear directo
+    If IsDate(valor) Then
+        FechaToString = Format(CDate(valor), "dd/mm/yyyy")
+        Exit Function
+    End If
+    
+    ' Intentar parsear con ParseFechaDMY (independiente de locale)
+    Dim parsed As Variant
+    parsed = ChecklistValidator.ParseFechaDMY(strVal)
+    If Not IsEmpty(parsed) Then
+        FechaToString = Format(parsed, "dd/mm/yyyy")
+        Exit Function
+    End If
+    
+    ' Último recurso: intentar CDate + Format
+    If IsDate(strVal) Then
+        FechaToString = Format(CDate(strVal), "dd/mm/yyyy")
+        Exit Function
+    End If
+    
+    ' No es fecha reconocible, devolver el string original
+    FechaToString = strVal
+End Function
+
+' --------------------------------------------------------------
+' Helper: Leer valor de una columna por nombre (sin depender del índice físico)
+' Parámetros:
+'   fila - Fila de datos (Range) de tblInspecciones
+'   tbl  - ListObject de la tabla
+'   colName - Nombre exacto de la columna (mismo que usa InspectionRepository)
+' Retorna:
+'   Valor de la celda, o Empty si la columna no existe
+' --------------------------------------------------------------
+Private Function SafeColumnValue(ByVal fila As Range, ByVal tbl As ListObject, ByVal colName As String) As Variant
+    On Error Resume Next
+    Dim colIdx As Long
+    colIdx = tbl.ListColumns(colName).Index
+    If Err.Number = 0 Then
+        SafeColumnValue = fila.Cells(1, colIdx).Value
+    Else
+        SafeColumnValue = Empty
+    End If
+    Err.Clear
 End Function
 
 ' --------------------------------------------------------------
@@ -558,18 +707,35 @@ End Function
 ' Poblar plantilla con datos de inspección
 ' --------------------------------------------------------------
 Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion As Object)
-    On Error Resume Next
+    On Error GoTo ErrorHandler
     
     ' Debug.Print "[POBLACIÓN] Iniciando población de plantilla..."
     
     ' Obtener puesto desde tblPersonal (hoja correcta: SHEET_PERSONAL)
     Dim nombreEvaluado As String
     Dim puesto As String
+
     nombreEvaluado = ObtenerNombrePersonal(datosInspeccion("Iniciales"))
     puesto = ObtenerPuestoPersonal(datosInspeccion("Iniciales"))
     If Len(nombreEvaluado) = 0 Then nombreEvaluado = datosInspeccion("Iniciales")
     If Len(puesto) = 0 Then puesto = "No especificado"
+
+' -----------------------------------------------------------
+    ' NUEVO: HEADER (Código de Registro y Versión en D1 y D2)
+    ' -----------------------------------------------------------
+    Dim datosPlantilla As Object
+    Set datosPlantilla = ObtenerDatosPlantilla(CStr(datosInspeccion("IDPlantilla")))
     
+    ' Imprimir en D1 (Fila 1, Columna 4) y D2 (Fila 2, Columna 4)
+    wsPlantilla.Cells(1, 4).Value = "Código de registro: " & datosPlantilla("CodigoRegistro")
+    wsPlantilla.Cells(2, 4).Value = "Versión: " & datosPlantilla("Version")
+    
+    ' Forzar formato para que se vea estético
+    With wsPlantilla.Range("D1:D2")
+        .HorizontalAlignment = xlRight
+        .VerticalAlignment = xlCenter
+    End With
+
     ' -----------------------------------------------------------
     ' NUEVO: SECCIÓN 0 - BLOQUE CATEGORÍA (Filas 6-8)
     ' -----------------------------------------------------------
@@ -580,7 +746,12 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     Dim colorFondo As Long
     Dim numCategoria As Long
     
-    numCategoria = CLng(datosInspeccion("Categoria"))
+    ' ✅ NUEVO: Validación segura para evitar que el PDF salga en blanco
+    If IsNumeric(datosInspeccion("Categoria")) And Len(Trim(datosInspeccion("Categoria"))) > 0 Then
+        numCategoria = CLng(datosInspeccion("Categoria"))
+    Else
+        numCategoria = 0 ' Asigna 0 si está vacío o es texto, para que no aborte la macro
+    End If
     
     ' Obtener nombre categoría desde tblCategoriasRPN
     nombreCategoria = ObtenerNombreCategoria(numCategoria)
@@ -622,11 +793,12 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     End If
     
     ' NUEVA ESTRUCTURA - 4 COLUMNAS
-    wsPlantilla.Cells(10, 2).Value = Format(datosInspeccion("FechaInspeccion"), "DD-MM-YYYY")   ' B10 - Fecha ejecución
+    ' ACTUALIZADO 23/06/2026: Usar siempre string dd/mm/yyyy para fechas
+    wsPlantilla.Cells(10, 2).Value = "'" & FechaToString(datosInspeccion("FechaInspeccion"))   ' B10 - Fecha ejecución (prefijo ' para forzar texto literal)
     wsPlantilla.Cells(11, 2).Value = Format(datosInspeccion("HoraInicio"), "HH:MM") & " - " & Format(datosInspeccion("HoraTermino"), "HH:MM")  ' B11 - Rango horas
     wsPlantilla.Cells(12, 2).Value = datosInspeccion("Planta")                                  ' B12 - Planta
     wsPlantilla.Cells(13, 2).Value = datosInspeccion("LineaAuditada")                            ' B13 - Línea auditada
-    wsPlantilla.Cells(14, 2).Value = Format(datosInspeccion("FechaAuditada"), "DD-MM-YYYY")     ' B14 - Fecha evaluada
+    wsPlantilla.Cells(14, 2).Value = "'" & FechaToString(datosInspeccion("FechaAuditada"))     ' B14 - Fecha evaluada (prefijo ' para forzar texto literal)
     wsPlantilla.Cells(15, 2).Value = datosInspeccion("Iniciales")                               ' B15 - Iniciales evaluado
     wsPlantilla.Cells(16, 2).Value = puestoAMostrar                                              ' B16 - Puesto evaluado
     wsPlantilla.Cells(17, 2).Value = datosInspeccion("Area")                                     ' B17 - Área
@@ -645,18 +817,13 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     ' Debug.Print "[POBLACIÓN] Poblando calificaciones vestuario/operador..."
     
     ' Fila 23: Calificación Vestuario
+    ' ACTUALIZADO 23/06/2026: Usar FechaToString para garantizar dd/mm/yyyy como string
     wsPlantilla.Cells(23, 2).Value = datosInspeccion("CalificacionVestuario")  ' B23 - Calificación Vestuario
-    wsPlantilla.Cells(23, 4).Value = datosInspeccion("FechaVencVestuario")     ' D23 - Fecha Venc Vestuario
-    
-    ' Aplicar formato condicional a D23 (fecha vencimiento vestuario)
-    Call AplicarFormatoFechaVencimiento(wsPlantilla, 23, 4, datosInspeccion("FechaVencVestuario"))
+    wsPlantilla.Cells(23, 4).Value = "'" & FechaToString(datosInspeccion("FechaVencVestuario"))     ' D23 - Fecha Venc Vestuario (prefijo ' para forzar texto literal)
     
     ' Fila 24: Calificación Operador
     wsPlantilla.Cells(24, 2).Value = datosInspeccion("CalificacionOperador")   ' B24 - Calificación Operador
-    wsPlantilla.Cells(24, 4).Value = datosInspeccion("FechaVencOperador")      ' D24 - Fecha Venc Operador
-    
-    ' Aplicar formato condicional a D24 (fecha vencimiento operador)
-    Call AplicarFormatoFechaVencimiento(wsPlantilla, 24, 4, datosInspeccion("FechaVencOperador"))
+    wsPlantilla.Cells(24, 4).Value = "'" & FechaToString(datosInspeccion("FechaVencOperador"))      ' D24 - Fecha Venc Operador (prefijo ' para forzar texto literal)
     
     ' Debug.Print "[POBLACIÓN] Calificaciones completadas"
     
@@ -716,7 +883,7 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
         rpnAnterior = CDbl(datosInspeccion("RPNAnterior"))
         If Err.Number <> 0 Then rpnAnterior = 0
         Err.Clear
-        On Error GoTo 0
+        On Error GoTo ErrorHandler
     End If
     wsPlantilla.Cells(37, 2).Value = Format(rpnAnterior, "0.00")    ' B37 - % TA Anterior (era B35)
     
@@ -738,7 +905,7 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
             ' Debug.Print "[CertificadoPDF] RPN Total leído de BD: " & rpnTotal
         End If
         Err.Clear
-        On Error GoTo 0
+        On Error GoTo ErrorHandler
     Else
         ' Columna no existe (inspección antigua), usar RPN calculado
         rpnTotal = CDbl(datosInspeccion("RPN"))
@@ -755,8 +922,9 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
         porcRecuperacion = CDbl(datosInspeccion("PorcentajeRecuperacion"))
         If Err.Number <> 0 Then porcRecuperacion = 0
         Err.Clear
-        On Error GoTo 0
+        On Error GoTo ErrorHandler
     End If
+    wsPlantilla.Cells(36, 4).NumberFormat = "0.00"  ' FIX: Forzar formato numérico, no porcentaje
     wsPlantilla.Cells(36, 4).Value = Format(porcRecuperacion, "0.00")  ' D36 - % Recovery
     
     ' D37 - % OOL (leer de BD si existe)
@@ -767,8 +935,9 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
         porcOOL = CDbl(datosInspeccion("PorcentajeOOL"))
         If Err.Number <> 0 Then porcOOL = 0
         Err.Clear
-        On Error GoTo 0
+        On Error GoTo ErrorHandler
     End If
+    wsPlantilla.Cells(37, 4).NumberFormat = "0.00"  ' FIX: Forzar formato numérico, no porcentaje
     wsPlantilla.Cells(37, 4).Value = Format(porcOOL, "0.00")            ' D37 - % OOL
     
     ' Debug.Print "[POBLACIÓN] Resultados técnicos completados"
@@ -804,7 +973,7 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     ' -----------------------------------------------------------
     ' Debug.Print "[POBLACIÓN] Poblando tabla de respuestas..."
     
-    On Error GoTo 0
+    On Error GoTo ErrorHandler
     
     ' Calcular fila de inicio para tabla de preguntas (2 filas después de resultados)
     Dim filaInicioPreguntas As Long
@@ -815,12 +984,87 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     ultimaFilaRespuestas = PoblarTablaRespuestas(wsPlantilla, datosInspeccion, filaInicioPreguntas)
     
     ' -----------------------------------------------------------
-    ' SECCIÓN DE FEEDBACK (3 filas después de las preguntas)
+    ' SECCIÓN DE OBSERVACIONES GENERALES (justo después de las preguntas)
+    ' -----------------------------------------------------------
+    ' Debug.Print "[POBLACIÓN] Agregando sección de Observaciones Generales..."
+    
+    Dim filaObsGenerales As Long
+    filaObsGenerales = ultimaFilaRespuestas + 2  ' 1 fila vacía de separación
+    
+    ' Título de la sección
+    wsPlantilla.Range(wsPlantilla.Cells(filaObsGenerales, 1), wsPlantilla.Cells(filaObsGenerales, 4)).Merge
+    wsPlantilla.Cells(filaObsGenerales, 1).Value = "OBSERVACIONES GENERALES"
+    
+    With wsPlantilla.Cells(filaObsGenerales, 1)
+        .Font.Name = "Arial"
+        .Font.Size = 11
+        .Font.Bold = True
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Interior.Color = RGB(189, 215, 238)  ' Azul claro (mismo que encabezados)
+    End With
+    
+    ' 5 filas para el contenido del texto de observaciones generales
+    Dim filaInicioObsGen As Long
+    Dim filaFinObsGen As Long
+    filaInicioObsGen = filaObsGenerales + 1
+    filaFinObsGen = filaInicioObsGen + 4  ' 5 filas en total
+    
+    Dim filaObsGen As Long
+    For filaObsGen = filaInicioObsGen To filaFinObsGen
+        wsPlantilla.Range(wsPlantilla.Cells(filaObsGen, 1), wsPlantilla.Cells(filaObsGen, 4)).Merge
+        
+        With wsPlantilla.Cells(filaObsGen, 1)
+            .Font.Name = "Arial"
+            .Font.Size = 10
+            .HorizontalAlignment = xlLeft
+            .VerticalAlignment = xlTop
+            .WrapText = True
+            .Value = ""
+        End With
+        
+        wsPlantilla.Rows(filaObsGen).rowHeight = 25
+        
+        If filaObsGen < filaFinObsGen Then
+            With wsPlantilla.Range(wsPlantilla.Cells(filaObsGen, 1), wsPlantilla.Cells(filaObsGen, 4)).Borders(xlEdgeBottom)
+                .LineStyle = xlContinuous
+                .Weight = xlThin
+            End With
+        End If
+    Next filaObsGen
+    
+    ' Escribir el texto de observaciones generales en la primera fila de contenido
+    Dim textoObs As String
+    textoObs = CStr(datosInspeccion("ObservacionesGenerales") & "")
+    If Len(Trim(textoObs)) > 0 Then
+        wsPlantilla.Cells(filaInicioObsGen, 1).Value = textoObs
+    Else
+        wsPlantilla.Cells(filaInicioObsGen, 1).Value = "Sin observaciones generales registradas."
+    End If
+    
+    ' Borde grueso alrededor de toda la sección
+    Dim rangoObsGenCompleto As Range
+    Set rangoObsGenCompleto = wsPlantilla.Range(wsPlantilla.Cells(filaObsGenerales, 1), wsPlantilla.Cells(filaFinObsGen, 4))
+    
+    With rangoObsGenCompleto
+        .BorderAround LineStyle:=xlContinuous, Weight:=xlMedium
+    End With
+    
+    ' Borde inferior del título
+    With wsPlantilla.Range(wsPlantilla.Cells(filaObsGenerales, 1), wsPlantilla.Cells(filaObsGenerales, 4)).Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+    End With
+    
+    ' Debug.Print "[POBLACIÓN] Sección de Observaciones Generales agregada en filas " & filaObsGenerales & "-" & filaFinObsGen
+    
+    ' -----------------------------------------------------------
+    ' SECCIÓN DE FEEDBACK (después de observaciones generales)
     ' -----------------------------------------------------------
     ' Debug.Print "[POBLACIÓN] Agregando sección de Feedback..."
     
     Dim filaFeedback As Long
-    filaFeedback = ultimaFilaRespuestas + 2  ' 1 fila vacía de separación
+    filaFeedback = filaFinObsGen + 2  ' 1 fila vacía de separación
     
     ' Título de la sección (fila N)
     wsPlantilla.Range(wsPlantilla.Cells(filaFeedback, 1), wsPlantilla.Cells(filaFeedback, 4)).Merge
@@ -1125,8 +1369,42 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     Dim filaTextoMuestreo As Long
     filaTextoMuestreo = filaMuestreoMicro + 1
     
+    ' DINAMIZACIÓN 09/06/2026: Leer el número de pregunta desde tblPreguntas
+    ' y marcar SI/NO según el resultado real de la inspección.
+    ' CORRECCIÓN 23/06/2026: El número mostrado debe coincidir con la numeración
+    ' secuencial del certificado (proceso + aséptico), no con el Numero original
+    ' de tblPreguntas (que es el número dentro de su propio checklist).
+    Dim preguntaMuestreo As Object
+    Set preguntaMuestreo = BuscarPreguntaMuestreoMicro(datosInspeccion)
+    
+    Dim numPregunta As String
+    Dim marcaSI As String
+    Dim marcaNO As String
+    
+    If Not preguntaMuestreo Is Nothing Then
+        ' Buscar la posición secuencial de esta pregunta en la colección de
+        ' respuestas (mismo orden que usa PoblarTablaRespuestas para numerar).
+        numPregunta = BuscarPosicionSecuencialPregunta(preguntaMuestreo("ID"), datosInspeccion("Respuestas"))
+        ' Regla: No Cumple → SI(x) ; Cumple → NO(x)
+        If EvaluarCumplimientoMuestreo(preguntaMuestreo("ID"), datosInspeccion("Respuestas")) Then
+            marcaSI = "(x)"
+            marcaNO = "(  )"
+        Else
+            marcaSI = "(  )"
+            marcaNO = "(x)"
+        End If
+    Else
+        ' Fallback: si no se encuentra la pregunta, usar "__" (blank para llenado manual)
+        ' y dejar checkboxes vacíos
+        numPregunta = "__"
+        marcaSI = "(  )"
+        marcaNO = "(  )"
+    End If
+    
     wsPlantilla.Range(wsPlantilla.Cells(filaTextoMuestreo, 1), wsPlantilla.Cells(filaTextoMuestreo, 4)).Merge
-    wsPlantilla.Cells(filaTextoMuestreo, 1).Value = "Muestreo microbiológico: Por incumplimiento del punto 17 se requiere seguimiento (2 verificaciones) / No requiere verificación: SI (  ) / NO (  )"
+    wsPlantilla.Cells(filaTextoMuestreo, 1).Value = _
+        "Muestreo microbiológico: Por incumplimiento del punto " & numPregunta & _
+        " se requiere seguimiento (2 verificaciones) / No requiere verificación: SI " & marcaSI & " / NO " & marcaNO
     
     With wsPlantilla.Cells(filaTextoMuestreo, 1)
         .Font.Name = "Arial"
@@ -1272,9 +1550,9 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     fechaEmision = Date
     horaEmision = Format(Now, "HH:MM:SS")
     
-    ' Usuario que emitió (usar el nombre del auditor de la inspección)
+    ' Usuario que emitió (nombre del usuario de Windows, igual que en Menú Principal I9)
     Dim usuarioEmision As String
-    usuarioEmision = datosInspeccion("Auditor")
+    usuarioEmision = Application.userName
     If Len(Trim(usuarioEmision)) = 0 Then
         usuarioEmision = "No especificado"
     End If
@@ -1301,6 +1579,16 @@ Private Sub PoblarPlantillaCertificado(wsPlantilla As Worksheet, datosInspeccion
     
     ' Debug.Print "[POBLACIÓN] Footer agregado en fila " & filaFooter
     ' Debug.Print "[POBLACIÓN] ¡Plantilla completamente poblada!"
+    
+    Exit Sub
+    
+ErrorHandler:
+    ' Debug.Print "[ERROR PoblarPlantillaCertificado] [" & Err.Number & "] " & Err.Description
+    Call ErrorLogger2.Log("CertificadoPDFGenerator.PoblarPlantillaCertificado", Err.Description, Err.Number)
+    MsgBox "Error al poblar la plantilla del certificado:" & vbCrLf & _
+           "[" & Err.Number & "] " & Err.Description & vbCrLf & vbCrLf & _
+           "El certificado PDF podría estar incompleto. Verifique los datos.", _
+           vbExclamation, "Error en certificado"
 End Sub
 
 ' --------------------------------------------------------------
@@ -1532,6 +1820,157 @@ Private Function EsRespuestaIncumplimiento(textoOpcion As String) As Boolean
 End Function
 
 ' --------------------------------------------------------------
+' Buscar la posición secuencial de una pregunta en la colección
+' de respuestas. Esta posición coincide con la numeración que
+' PoblarTablaRespuestas asigna en el certificado PDF (1, 2, 3...).
+' Parámetros:
+'   idPregunta - ID de la pregunta a buscar
+'   respuestas - Collection de respuestas de la inspección
+' Retorna: número de posición como String, o "__" si no se encuentra
+' AGREGADO 23/06/2026 - Corrección numeración muestreo microbiológico
+' --------------------------------------------------------------
+Private Function BuscarPosicionSecuencialPregunta(ByVal idPregunta As String, ByVal respuestas As Collection) As String
+    On Error GoTo ErrorHandler
+    
+    If respuestas Is Nothing Or respuestas.Count = 0 Then
+        BuscarPosicionSecuencialPregunta = "__"
+        Exit Function
+    End If
+    
+    Dim i As Long
+    Dim resp As Object
+    
+    For i = 1 To respuestas.Count
+        Set resp = respuestas(i)
+        If CStr(resp("IDPregunta")) = idPregunta Then
+            BuscarPosicionSecuencialPregunta = CStr(i)
+            Exit Function
+        End If
+    Next i
+    
+    ' No encontrada en las respuestas
+    BuscarPosicionSecuencialPregunta = "__"
+    Exit Function
+    
+ErrorHandler:
+    BuscarPosicionSecuencialPregunta = "__"
+End Function
+
+' --------------------------------------------------------------
+' Buscar la pregunta de "Muestreo Microbiológico" en tblPreguntas
+' Retorna Dictionary con "ID" (ID_Pregunta) y "Numero", o Nothing
+' si no se encuentra. Filtra por la plantilla de la inspección.
+' AGREGADO 09/06/2026 - Dinamización del certificado PDF
+' --------------------------------------------------------------
+Private Function BuscarPreguntaMuestreoMicro(ByVal datosInspeccion As Object) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim wsChecklist As Worksheet
+    Dim tbl As ListObject
+    Dim fila As Long
+    
+    Set wsChecklist = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
+    Set tbl = wsChecklist.ListObjects(Configuration2.TABLE_PREGUNTAS)
+    
+    If tbl Is Nothing Or tbl.DataBodyRange Is Nothing Then
+        Set BuscarPreguntaMuestreoMicro = Nothing
+        Exit Function
+    End If
+    
+    Dim colIDPlantilla As Long
+    Dim colIDPregunta As Long
+    Dim colNumero As Long
+    Dim colTexto As Long
+    
+    colIDPlantilla = tbl.ListColumns("ID Plantilla").Index
+    colIDPregunta = tbl.ListColumns("ID Pregunta").Index
+    colNumero = tbl.ListColumns("Numero").Index
+    colTexto = tbl.ListColumns("Texto").Index
+    
+    Dim idPlantilla As String
+    idPlantilla = CStr(datosInspeccion("IDPlantilla"))
+    
+    ' Buscar pregunta cuyo texto contenga "muestreo" Y "microbiológico"
+    For fila = 1 To tbl.DataBodyRange.Rows.Count
+        ' Filtrar por la plantilla de la inspección actual
+        If Trim(CStr(tbl.DataBodyRange.Cells(fila, colIDPlantilla).Value)) = idPlantilla Then
+            Dim textoPregunta As String
+            textoPregunta = LCase(Trim(CStr(tbl.DataBodyRange.Cells(fila, colTexto).Value)))
+            
+            ' Normalizar acentos para búsqueda robusta
+            textoPregunta = Replace(textoPregunta, "á", "a")
+            textoPregunta = Replace(textoPregunta, "é", "e")
+            textoPregunta = Replace(textoPregunta, "í", "i")
+            textoPregunta = Replace(textoPregunta, "ó", "o")
+            textoPregunta = Replace(textoPregunta, "ú", "u")
+            
+            If InStr(textoPregunta, "muestreo") > 0 And InStr(textoPregunta, "microbiologico") > 0 Then
+                Dim resultado As Object
+                Set resultado = CreateObject("Scripting.Dictionary")
+                resultado("ID") = CStr(tbl.DataBodyRange.Cells(fila, colIDPregunta).Value)
+                resultado("Numero") = CStr(tbl.DataBodyRange.Cells(fila, colNumero).Value)
+                Set BuscarPreguntaMuestreoMicro = resultado
+                Exit Function
+            End If
+        End If
+    Next fila
+    
+    ' No encontrada
+    Set BuscarPreguntaMuestreoMicro = Nothing
+    Exit Function
+    
+ErrorHandler:
+    Set BuscarPreguntaMuestreoMicro = Nothing
+End Function
+
+' --------------------------------------------------------------
+' Evaluar si la respuesta a la pregunta de muestreo microbiológico
+' indica incumplimiento ("No Cumple").
+' Parámetros:
+'   idPregunta - ID de la pregunta de muestreo
+'   respuestas - Collection de respuestas de la inspección
+' Retorna: True si la respuesta es incumplimiento (No Cumple → SI marcado)
+' AGREGADO 09/06/2026 - Dinamización del certificado PDF
+' --------------------------------------------------------------
+Private Function EvaluarCumplimientoMuestreo(ByVal idPregunta As String, ByVal respuestas As Collection) As Boolean
+    On Error GoTo ErrorHandler
+    
+    EvaluarCumplimientoMuestreo = False
+    
+    If respuestas Is Nothing Or respuestas.Count = 0 Then Exit Function
+    
+    ' Obtener tblOpciones para resolver el texto de la opción
+    Dim wsChecklist As Worksheet
+    Dim tblOpciones As ListObject
+    
+    Set wsChecklist = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
+    Set tblOpciones = wsChecklist.ListObjects(Configuration2.TABLE_OPCIONES)
+    
+    Dim resp As Object
+    Dim i As Long
+    
+    For i = 1 To respuestas.Count
+        Set resp = respuestas(i)
+        
+        If CStr(resp("IDPregunta")) = idPregunta Then
+            Dim textoOpcion As String
+            textoOpcion = ObtenerTextoOpcion(CStr(resp("IDOpcion")), tblOpciones)
+            
+            ' Reutilizar la función existente de detección de incumplimiento
+            EvaluarCumplimientoMuestreo = EsRespuestaIncumplimiento(textoOpcion)
+            Exit Function
+        End If
+    Next i
+    
+    ' No se encontró respuesta para esta pregunta → asumir cumple
+    EvaluarCumplimientoMuestreo = False
+    Exit Function
+    
+ErrorHandler:
+    EvaluarCumplimientoMuestreo = False
+End Function
+
+' --------------------------------------------------------------
 ' Obtener nombre por iniciales (tblPersonal en SHEET_PERSONAL)
 ' tblPersonal: [1]Iniciales [2]Planta [3-13]Puestos Si/No [14]Activo
 ' No hay columna Nombre ? se devuelven las iniciales como identificador
@@ -1595,23 +2034,18 @@ Private Sub AplicarFormatoFechaVencimiento(ws As Worksheet, fila As Long, column
         Exit Sub
     End If
     
-    ' Intentar convertir a fecha
-    Dim fechaVenc As Date
-    Dim esValida As Boolean
-    esValida = False
-    
-    ' Probar conversión directa
-    On Error Resume Next
-    fechaVenc = CDate(fechaStr)
-    If Err.Number = 0 Then esValida = True
-    Err.Clear
-    On Error GoTo 0
+    ' Intentar convertir a fecha usando parseo independiente de locale
+    Dim fechaParsed As Variant
+    fechaParsed = ChecklistValidator.ParseFechaDMY(fechaStr)
     
     ' Si no es válida, salir
-    If Not esValida Then
+    If IsEmpty(fechaParsed) Then
         ' Debug.Print "[FormatoFecha] Fecha no válida: " & fechaStr
         Exit Sub
     End If
+    
+    Dim fechaVenc As Date
+    fechaVenc = fechaParsed  ' ParseFechaDMY ya devuelve Date
     
     ' Comparar con la fecha actual
     Dim hoy As Date
@@ -1816,50 +2250,49 @@ End Function
 ' --------------------------------------------------------------
 Private Sub LimpiarPlantillaCertificado(wsPlantilla As Worksheet)
     On Error Resume Next
+
+' -- Limpiar Header (Registro y Versión) --
+    wsPlantilla.Cells(1, 4).ClearContents  ' D1
+    wsPlantilla.Cells(2, 4).ClearContents  ' D2    
     
-    ' Solo limpiar celdas de DATOS — nunca los labels, títulos ni encabezados estáticos
-    ' que fueron definidos por PlantillaCertificadoSetup y deben persistir entre ejecuciones
+    ' Solo limpiar celdas de DATOS basados en tu MAPA DE 4 COLUMNAS (A:D)
     
-    ' -- NUEVO: Bloque Categoría ---------------------------------
-    wsPlantilla.Range("A6:D8").ClearContents  ' Limpiar completamente
-    wsPlantilla.Range("A6:D8").Interior.Color = RGB(255, 255, 255)  ' Blanco
+    ' -- Bloque Categoría --
+    wsPlantilla.Range("A6:D8").ClearContents
+    wsPlantilla.Range("A6:D8").Interior.Color = RGB(255, 255, 255)
     
-    ' -- Sección 1: Datos de inspección (desplazadas +3) ---------
-    wsPlantilla.Cells(10, 3).ClearContents  ' C10 - Fecha
-    wsPlantilla.Cells(10, 5).ClearContents  ' E10 - Hora inicio
-    wsPlantilla.Cells(10, 7).ClearContents  ' G10 - Hora fin
-    wsPlantilla.Cells(11, 3).ClearContents  ' C11 - Nombre evaluado
-    wsPlantilla.Cells(11, 7).ClearContents  ' G11 - Iniciales
-    wsPlantilla.Cells(12, 3).ClearContents  ' C12 - Puesto
-    wsPlantilla.Cells(12, 6).ClearContents  ' F12 - Planta
-    wsPlantilla.Cells(13, 3).ClearContents  ' C13 - Área
-    wsPlantilla.Cells(13, 6).ClearContents  ' F13 - Línea
-    wsPlantilla.Cells(14, 3).ClearContents  ' C14 - Lugar auditoría
-    wsPlantilla.Cells(15, 3).ClearContents  ' C15 - Evaluador
-    wsPlantilla.Cells(16, 4).ClearContents  ' D16 - AY1
-    wsPlantilla.Cells(16, 6).ClearContents  ' F16 - AY2
-    wsPlantilla.Cells(16, 7).ClearContents  ' G16 - OP
+    ' -- Sección 1: Datos de inspección --
+    wsPlantilla.Cells(10, 2).ClearContents  ' B10 - Fecha
+    wsPlantilla.Cells(11, 2).ClearContents  ' B11 - Rango horas
+    wsPlantilla.Cells(12, 2).ClearContents  ' B12 - Planta
+    wsPlantilla.Cells(13, 2).ClearContents  ' B13 - Línea auditada
+    wsPlantilla.Cells(14, 2).ClearContents  ' B14 - Fecha evaluada
+    wsPlantilla.Cells(15, 2).ClearContents  ' B15 - Iniciales
+    wsPlantilla.Cells(16, 2).ClearContents  ' B16 - Puesto
+    wsPlantilla.Cells(17, 2).ClearContents  ' B17 - Área
+    wsPlantilla.Cells(18, 2).ClearContents  ' B18 - Lugar auditoría
+    wsPlantilla.Cells(19, 2).ClearContents  ' B19 - Evaluador
     
-    ' -- Sección 2: Resultados generales ------------------
-    wsPlantilla.Cells(20, 3).ClearContents  ' C20 - TA puntaje
-    wsPlantilla.Cells(20, 5).ClearContents  ' E20 - TA máximos
-    wsPlantilla.Cells(21, 3).ClearContents  ' C21 - TA no aplica
-    wsPlantilla.Cells(22, 3).ClearContents  ' C22 - Porcentaje
+    wsPlantilla.Cells(20, 3).ClearContents  ' C20 - AY1
+    wsPlantilla.Cells(21, 3).ClearContents  ' C21 - AY2
+    wsPlantilla.Cells(22, 3).ClearContents  ' C22 - OP
     
-    ' -- Sección 3: Calificaciones Vestuario/Operador (Filas 23-24) -----
-    ' IMPORTANTE: NO limpiar C23 ni C24 porque contienen el texto estático "Fecha de vencimiento: "
+    ' -- Sección 3: Calificaciones Vestuario/Operador --
     wsPlantilla.Cells(23, 2).ClearContents  ' B23 - Calificación Vestuario
     wsPlantilla.Cells(23, 4).ClearContents  ' D23 - Fecha Venc Vestuario
+    wsPlantilla.Cells(23, 4).Interior.Color = xlNone
     wsPlantilla.Cells(24, 2).ClearContents  ' B24 - Calificación Operador
     wsPlantilla.Cells(24, 4).ClearContents  ' D24 - Fecha Venc Operador
+    wsPlantilla.Cells(24, 4).Interior.Color = xlNone
     
-    ' -- Sección 4: Auditoría de Procesos (Filas 26-28) -----
-    wsPlantilla.Cells(26, 2).ClearContents  ' B26 - AP Crítica No Cumple
-    wsPlantilla.Cells(27, 2).ClearContents  ' B27 - AP Mayor No Cumple
-    wsPlantilla.Cells(28, 2).ClearContents  ' B28 - AP Menor No Cumple
+    ' -- Sección 4: Auditoría de Procesos --
+    wsPlantilla.Cells(26, 2).ClearContents  ' B26 - AP Crítica
+    wsPlantilla.Cells(27, 2).ClearContents  ' B27 - AP Mayor
+    wsPlantilla.Cells(28, 2).ClearContents  ' B28 - AP Menor
     wsPlantilla.Range("B29:D31").ClearContents  ' Resultado AP
+    wsPlantilla.Range("B29:D31").Interior.Color = xlNone
     
-    ' -- Sección 5: Resultados técnicos (Filas 33-38) -----
+    ' -- Sección 5: Resultados técnicos --
     wsPlantilla.Cells(33, 2).ClearContents  ' B33 - TA Máximos
     wsPlantilla.Cells(34, 2).ClearContents  ' B34 - TA Puntaje
     wsPlantilla.Cells(35, 2).ClearContents  ' B35 - TA No Aplica
@@ -1869,24 +2302,21 @@ Private Sub LimpiarPlantillaCertificado(wsPlantilla As Worksheet)
     wsPlantilla.Cells(36, 4).ClearContents  ' D36 - % Recuperación
     wsPlantilla.Cells(37, 4).ClearContents  ' D37 - % OOL
     
-    ' -- Sección 6: Filas de respuestas (fila 40 en adelante) -----
+    ' -- Sección 6: Filas de respuestas y Feedback --
     Dim ultimaFila As Long
     ultimaFila = wsPlantilla.UsedRange.row + wsPlantilla.UsedRange.Rows.Count - 1
     If ultimaFila >= 40 Then
-        wsPlantilla.Range( _
-            wsPlantilla.Cells(40, 2), _
-            wsPlantilla.Cells(ultimaFila, 7) _
-        ).ClearContents
+        ' Usar Clear en lugar de ClearContents borra las tablas dinámicas generadas
+        wsPlantilla.Rows("40:" & ultimaFila).Clear
     End If
     
-    ' -- Limpiar configuración de números de página --------------
+    ' -- Configuración PDF --
     With wsPlantilla.PageSetup
         .CenterFooter = ""
     End With
     
     On Error GoTo 0
 End Sub
-
 ' --------------------------------------------------------------
 ' Generar nombre inteligente para archivo PDF (Paso 5 MVP)
 ' Formato: CERTIFICADO_[PUESTO]_[INICIALES]_[FECHA]_CAT[N]_[ESTADO].pdf
@@ -1918,10 +2348,16 @@ Private Function GenerarNombreArchivoPDF(datosInspeccion As Object) As String
     ElseIf IsDate(fechaValue) Then
         ' Puede ser String "dd-mm-yyyy", Date, o número serial de Excel
         If VarType(fechaValue) = vbString Then
-            ' String ? Convertir a Date
-            fechaStr = Format(CDate(fechaValue), "YYYY-MM-DD")
+            ' String → Usar ParseFechaDMY (independiente de locale) en vez de CDate
+            Dim fechaParsedArchivo As Variant
+            fechaParsedArchivo = ChecklistValidator.ParseFechaDMY(CStr(fechaValue))
+            If Not IsEmpty(fechaParsedArchivo) Then
+                fechaStr = Format(fechaParsedArchivo, "YYYY-MM-DD")
+            Else
+                fechaStr = Format(Date, "YYYY-MM-DD")
+            End If
         Else
-            ' Date o número serial ? Formatear directamente
+            ' Date o número serial → Formatear directamente
             fechaStr = Format(fechaValue, "YYYY-MM-DD")
         End If
     Else
@@ -1946,16 +2382,21 @@ Private Function GenerarNombreArchivoPDF(datosInspeccion As Object) As String
         ' Debug.Print "[ARCHIVO] Categoría no numérica [" & categoriaValue & "], usando 0"
     End If
     
-    ' Obtener puesto (limpiar caracteres especiales para nombre de archivo)
-    puesto = ObtenerPuestoPersonal(iniciales)
+' ✅ CORRECCIÓN: Priorizar el puesto específico de la inspección actual
+    If datosInspeccion.Exists("PuestoEvaluado") And Len(Trim(CStr(datosInspeccion("PuestoEvaluado")))) > 0 Then
+        puesto = Trim(CStr(datosInspeccion("PuestoEvaluado")))
+    Else
+        ' Fallback: Si no hay puesto específico, buscar en la lista de personal general
+        puesto = ObtenerPuestoPersonal(iniciales)
+        if InStr(puesto, ",") > 0 Then
+            puesto = Trim(Left(puesto, InStr(puesto, ",") - 1))
+        End If
+    End If
+    
+    ' Limpiar el puesto final obtenido (caracteres especiales y espacios)
     If Len(puesto) = 0 Then
         puesto = "SIN_PUESTO"
     Else
-        ' Si tiene múltiples puestos separados por coma, tomar solo el primero
-        If InStr(puesto, ",") > 0 Then
-            puesto = Trim(Left(puesto, InStr(puesto, ",") - 1))
-        End If
-        ' Limpiar espacios y caracteres no válidos para nombres de archivo
         puesto = Replace(puesto, " ", "_")
         puesto = Replace(puesto, "/", "_")
         puesto = Replace(puesto, "\", "_")
@@ -2108,3 +2549,70 @@ ErrorHandler:
     MsgBox "Error: " & Err.Description, vbCritical
     Call ErrorLogger2.Log("CertificadoPDFGenerator.GenerarPDFDesdeSeleccion", Err.Description, Err.Number)
 End Sub
+
+' --------------------------------------------------------------
+' NUEVA FUNCIÓN: Obtener Código de Registro y Versión de la Plantilla
+' --------------------------------------------------------------
+Private Function ObtenerDatosPlantilla(ByVal idPlantilla As String) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim datos As Object
+    Set datos = CreateObject("Scripting.Dictionary")
+    datos.Add "CodigoRegistro", "-"
+    datos.Add "Version", "-"
+    
+    Dim wsChecklist As Worksheet
+    Dim tbl As ListObject
+    Dim fila As Long
+    
+    Set wsChecklist = ThisWorkbook.Sheets(Configuration2.SHEET_CHECKLIST)
+    
+    On Error Resume Next
+    Set tbl = wsChecklist.ListObjects(Configuration2.TABLE_PLANTILLAS)
+    On Error GoTo ErrorHandler
+    
+    If tbl Is Nothing Or tbl.DataBodyRange Is Nothing Then
+        Set ObtenerDatosPlantilla = datos
+        Exit Function
+    End If
+    
+    Dim colID As Variant, colCod As Variant, colVer As Variant
+    On Error Resume Next
+    colID = Application.Match("ID Plantilla", tbl.HeaderRowRange, 0)
+    
+    ' Buscar Código Registro (con o sin tilde)
+    colCod = Application.Match("Codigo Registro", tbl.HeaderRowRange, 0)
+    If IsError(colCod) Then colCod = Application.Match("Código Registro", tbl.HeaderRowRange, 0)
+    
+    ' Buscar Versión (con o sin tilde)
+    colVer = Application.Match("Version", tbl.HeaderRowRange, 0)
+    If IsError(colVer) Then colVer = Application.Match("Versión", tbl.HeaderRowRange, 0)
+    On Error GoTo ErrorHandler
+    
+    ' Si no encuentra la columna ID, salir
+    If IsError(colID) Then
+        Set ObtenerDatosPlantilla = datos
+        Exit Function
+    End If
+    
+    ' Buscar la plantilla
+    For fila = 1 To tbl.DataBodyRange.Rows.Count
+        If Trim(CStr(tbl.DataBodyRange.Cells(fila, CLng(colID)).Value)) = Trim(idPlantilla) Then
+            ' Extraer Código si la columna existe
+            If Not IsError(colCod) Then
+                datos("CodigoRegistro") = Trim(CStr(tbl.DataBodyRange.Cells(fila, CLng(colCod)).Value))
+            End If
+            ' Extraer Versión si la columna existe
+            If Not IsError(colVer) Then
+                datos("Version") = Trim(CStr(tbl.DataBodyRange.Cells(fila, CLng(colVer)).Value))
+            End If
+            Exit For
+        End If
+    Next fila
+    
+    Set ObtenerDatosPlantilla = datos
+    Exit Function
+    
+ErrorHandler:
+    Set ObtenerDatosPlantilla = datos
+End Function

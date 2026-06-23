@@ -22,16 +22,13 @@ Private m_oldValues As Variant ' Almacena los valores previos a un cambio para a
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Change(ByVal Target As Range)
     On Error GoTo ErrorHandler
-    Application.ScreenUpdating = False
     
     Dim tablesToAudit As Variant
     tablesToAudit = Array(Configuration2.TABLE_ASEGURAMIENTO)
     Call TableAuditor2.AuditTableChanges(Me, Target, tablesToAudit, m_oldValues)
     
-    Application.ScreenUpdating = True
     Exit Sub
 ErrorHandler:
-    Application.ScreenUpdating = True
     Call ErrorLogger2.Log("Worksheet_Change (" & Me.Name & ")", VBA.Err.Description, VBA.Err.Number)
 End Sub
 
@@ -61,6 +58,9 @@ End Sub
 '            Aplica protección según el rol del usuario.
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Activate()
+    ' ## NAVEGACIÓN ## Guardia: evitar doble ejecución durante navegación (FASE 4, 08/06/2026)
+    If g_NavigationInProgress Then Exit Sub
+    
     On Error GoTo ErrorHandler
     
     ' Aplicar protección centralizada según el rol del usuario

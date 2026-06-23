@@ -27,6 +27,12 @@ Private m_oldValues As Variant ' Almacena valores previos para auditoría (si ap
 Private Sub Workbook_Open()
     On Error GoTo ErrorHandler
     
+    ' ========== VERIFICACIÓN DE WHITELIST DE RUTAS ==========
+    ' Verifica que el archivo se esté ejecutando desde una ruta autorizada.
+    ' Si la ruta no está en tblWhiteList (Configuración), cierra el libro.
+    ' =========================================================
+    Call PathWhitelist.EnforceWhitelist
+    
     ' ========== ACTIVACIÓN DE PROTECCIONES DE SEGURIDAD (URS-22, URS-20) ==========
     ' • URS-22: Proteger estructura del libro (evita eliminar/mover hojas)
     ' • URS-20: Proteger hojas individuales (evita editar celdas específicas)
@@ -65,18 +71,10 @@ Private Sub Workbook_Open()
     Call SystemInitializer.InicializarSistemaCompleto
     
     ' ========== SISTEMA DE NAVEGACIÓN ACTIVADO ==========
-    ' SheetService2 maneja visibilidad/ocultación de hojas
-    ' ApplyRoleBasedProtection aplica protección según rol
+    ' ## NAVEGACIÓN ## FASE 3 (08/06/2026): Usar MostrarMenu en lugar de HideAndProtectAllSheetsExcept
     ' ====================================================
     
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    Application.DisplayAlerts = False
-    Call SheetService2.HideAndProtectAllSheetsExcept(Configuration2.MAIN_MENU_SHEET)
-    ThisWorkbook.Sheets(Configuration2.MAIN_MENU_SHEET).Activate
-    Application.ScreenUpdating = True
-    Application.EnableEvents = True
-    Application.DisplayAlerts = True
+    Call NavigationService2.MostrarMenu
     Call UserManager2.DisplayUserName
     g_PreviousSheetName = Configuration2.MAIN_MENU_SHEET
     
@@ -170,25 +168,25 @@ End Sub
 ' pero el código NUNCA estuvo comentado. Se actualiza el comentario para reflejar el estado real.
 '' ----------------------------------------------------------------------
 Private Sub Workbook_SheetActivate(ByVal Sh As Object)
-    ' ========== PROTECCIÓN AL ACTIVAR MENÚ PRINCIPAL DIRECTAMENTE ==========
-    ' Si el usuario hace clic en la pestaña "Menú principal" (sin usar botón de navegación),
-    ' este evento asegura que todas las demás hojas se oculten y protejan.
-    ' Esto previene que hojas previamente visibles queden expuestas.
+    ' ## NAVEGACIÓN ## Guardián central de visibilidad (FASE 3, 08/06/2026)
+    ' Si NavigationService2 está navegando, no interferir.
+    If g_NavigationInProgress Then Exit Sub
+    
+    ' Si el usuario hace clic directo en la pestaña "Menú principal",
+    ' delegar a MostrarMenu (que oculta todo excepto el menú).
     If Sh.Name = Configuration2.MAIN_MENU_SHEET Then
-        Application.ScreenUpdating = False
-        Application.DisplayAlerts = False
-        Application.EnableEvents = False  ' Evitar recursión
-        Call SheetService2.HideAndProtectAllSheetsExcept(Configuration2.MAIN_MENU_SHEET)
-        Application.ScreenUpdating = True
-        Application.DisplayAlerts = True
-        Application.EnableEvents = True
+        Call NavigationService2.MostrarMenu
         g_PreviousSheetName = Sh.Name
         Exit Sub
     End If
     
     ' Hacer visible la hoja activada (solo si no es Audit Trail)
     If Not IsAuditSheet(Sh.Name) Then
+        On Error Resume Next ' Evita el crash por protección de estructura
+        Call WorkbookProtector2.UnprotectWorkbook
         Sh.Visible = xlSheetVisible
+        Call WorkbookProtector2.ProtectWorkbook
+        On Error GoTo 0
     End If
     
     ' Auditar navegación entre hojas (evitar duplicados)
@@ -213,9 +211,12 @@ End Sub
 '            Usado para evitar hacer visibles las hojas Audit Trail automáticamente.
 '' ----------------------------------------------------------------------
 Private Function IsAuditSheet(ByVal sheetName As String) As Boolean
+    ' ## NAVEGACIÓN ## FASE 3: Usar GetAuditTrailSheetNames() en vez de AuditRotation2
+    Dim auditNames As Variant
+    auditNames = Configuration2.GetAuditTrailSheetNames()
     Dim i As Long
-    For i = 1 To Configuration2.AUDIT_MAX_SHEETS
-        If sheetName = AuditRotation2.ObtenerNombreHoja(i) Then
+    For i = LBound(auditNames) To UBound(auditNames)
+        If StrComp(sheetName, CStr(auditNames(i)), vbTextCompare) = 0 Then
             IsAuditSheet = True
             Exit Function
         End If

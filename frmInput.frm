@@ -1,8 +1,10 @@
-
 Option Explicit
 
 Private Sub UserForm_Initialize()
-    ' Llama al adaptador para configurar el diseño y los elementos del formulario.'
+    ' Configurar el TextBox para ocultar la contraseña con asteriscos (***).
+    Me.txtContrasena.PasswordChar = "*"
+    
+    ' Llama al adaptador para configurar el diseño y los elementos del formulario.
     'Call InputAdapter.ConfigureForm(Me)
 End Sub
 

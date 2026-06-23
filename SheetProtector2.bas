@@ -148,15 +148,25 @@ Public Sub ApplyRoleBasedProtection(ByRef ws As Worksheet, ByVal sheetPassword A
     ' Desproteger primero garantiza que ws.Protect siempre opera sobre una hoja sin protección.
     Call UnprotectSheet(ws, sheetPassword)
     
-    If m_userRole = "Admin" Then
+    ' FASE 9 (09/06/2026): Fallback defensivo. Si m_userRole se vacía por pérdida
+    ' de estado VBA (ej: tras un error no manejado), usar INITIAL_USER_ROLE en lugar
+    ' de caer en el caso "Else" que aplica ProtectSheet (bloquea VBA con UIOnly=False).
+    Dim effectiveRole As String
+    effectiveRole = m_userRole
+    If effectiveRole = "" Then
+        effectiveRole = Configuration2.INITIAL_USER_ROLE
+        Debug.Print "[SheetProtector.ApplyRoleBasedProtection] ⚠ m_userRole vacío, usando fallback: '" & effectiveRole & "'"
+    End If
+    
+    If effectiveRole = "Admin" Then
         ' Admin: queda desprotegida (ya se llamó UnprotectSheet arriba).
         Debug.Print "[SheetProtector.ApplyRoleBasedProtection] → Admin: hoja '" & ws.Name & "' queda DESPROTEGIDA"
-    ElseIf m_userRole = "Usuario" Then
+    ElseIf effectiveRole = "Usuario" Then
         Debug.Print "[SheetProtector.ApplyRoleBasedProtection] → Usuario: aplicando ProtectSheetForReading a '" & ws.Name & "'"
         Call ProtectSheetForReading(ws, sheetPassword)
     Else
-        Debug.Print "[SheetProtector.ApplyRoleBasedProtection] → Otro ('" & m_userRole & "'): aplicando ProtectSheet a '" & ws.Name & "'"
-        Call ProtectSheet(ws, sheetPassword)
+        Debug.Print "[SheetProtector.ApplyRoleBasedProtection] → Otro ('" & effectiveRole & "'): aplicando ProtectSheetForReading (fallback) a '" & ws.Name & "'"
+        Call ProtectSheetForReading(ws, sheetPassword)
     End If
     
     Debug.Print "[SheetProtector.ApplyRoleBasedProtection] FIN - Hoja: '" & ws.Name & "'"

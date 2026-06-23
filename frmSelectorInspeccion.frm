@@ -16,6 +16,7 @@
 '   - cboPersonal (ComboBox): Lista de personal por puesto y planta
 '   - lblPlantillas (Label): "Seleccione Plantilla:"
 '   - cboPlantillas (ComboBox): Lista de plantillas disponibles
+'   - btnInhabilitar (CommandButton): "Inhabilitar Inspección" (solo Admin)
 '   - btnAceptar (CommandButton): "Iniciar Inspección"
 '   - btnCancelar (CommandButton): "Cancelar"
 '
@@ -278,6 +279,21 @@ End Sub
 ' Propósito: Configura los botones Aceptar y Cancelar.
 ' ----------------------------------------------------------------------
 Private Sub ConfigurarBotones()
+    ' Botón Inhabilitar Inspección (NUEVO - solo Admin)
+    With Me.btnInhabilitar
+        .Left = 20
+        .Top = 265
+        .Width = 120
+        .Height = 32
+        .Caption = "Inhabilitar Inspección"
+        .Font.Name = "Segoe UI"
+        .Font.Size = 9
+        .Font.Bold = True
+        .BackColor = RGB(220, 192, 192)  ' Rojo claro
+        .ForeColor = RGB(160, 0, 0)      ' Rojo oscuro
+        .Visible = False
+    End With
+    
     ' Botón Aceptar
     With Me.btnAceptar
         .Left = 150
@@ -338,6 +354,13 @@ Private Sub UserForm_Initialize()
     Call ConfigurarCampoPlantillas
     Call ConfigurarBotones
     
+    ' NUEVO (09/06/2026): Mostrar botón "Inhabilitar Inspección" solo para Admin
+    if ThisWorkbook.GetUserRole() = "Admin" Then
+        btnInhabilitar.Visible = True
+    Else
+        btnInhabilitar.Visible = False
+    End If
+    
     ' Cargar lista de plantas
     Call CargarPlantas
     
@@ -347,6 +370,7 @@ Private Sub UserForm_Initialize()
     cboPersonal.Enabled = False
     cboPlantillas.Enabled = False
     btnAceptar.Enabled = False
+    btnInhabilitar.Enabled = False
     
     Exit Sub
 ErrorHandler:
@@ -387,6 +411,7 @@ Private Sub cboPlanta_Change()
     cboPlantillas.Enabled = False
     cboPlantillas.BackColor = vbWhite
     btnAceptar.Enabled = False
+    btnInhabilitar.Enabled = False
     
     Exit Sub
 ErrorHandler:
@@ -423,6 +448,7 @@ Private Sub cboPuesto_Change()
     cboPlantillas.Enabled = False
     cboPlantillas.BackColor = vbWhite
     btnAceptar.Enabled = False
+    btnInhabilitar.Enabled = False
     
     Exit Sub
 ErrorHandler:
@@ -456,6 +482,7 @@ Private Sub cboPersonal_Change()
     mIDPlantilla = ""
     mNombrePlantilla = ""
     btnAceptar.Enabled = False
+    btnInhabilitar.Enabled = False
     
     Exit Sub
 ErrorHandler:
@@ -488,6 +515,7 @@ Private Sub cboPlantillas_Change()
     ' Habilitar botón Aceptar si tenemos planta
     If Len(mPlanta) > 0 Then
         btnAceptar.Enabled = True
+        btnInhabilitar.Enabled = True
     End If
     
     Exit Sub
@@ -544,6 +572,93 @@ Private Sub btnAceptar_Click()
     Exit Sub
 ErrorHandler:
     MsgBox "Error al abrir Checklist Virtual: " & Err.Description, vbCritical, "Error"
+End Sub
+
+'' ----------------------------------------------------------------------
+' Evento: btnInhabilitar_Click
+' Propósito: Marca la entrada correspondiente en tblCronogramaInspecciones
+'            como "Inhabilitada" (campos "Activo en cronograma" y "Estado cronograma")
+'            para que desaparezca del resumen (tblResumenCronograma).
+'            NO escribe en tblInspecciones ni en tblRespuestas.
+' Fecha creación: 05/08/2026
+' Última mod: 17/06/2026 - Refactor: solo UPDATE en cronograma
+' ----------------------------------------------------------------------
+Private Sub btnInhabilitar_Click()
+    On Error GoTo ErrorHandler
+    
+    ' Validar que todos los campos estén completos
+    If Len(mPlantaSeleccionada) = 0 Then
+        MsgBox "Por favor seleccione una Planta.", vbExclamation, "Validación"
+        Exit Sub
+    End If
+    
+    If Len(mPuestoSeleccionado) = 0 Then
+        MsgBox "Por favor seleccione un Puesto.", vbExclamation, "Validación"
+        Exit Sub
+    End If
+    
+    If Len(mPersonalSeleccionado) = 0 Then
+        MsgBox "Por favor seleccione Personal.", vbExclamation, "Validación"
+        Exit Sub
+    End If
+    
+    If Len(mIDPlantilla) = 0 Then
+        MsgBox "Por favor seleccione una Plantilla.", vbExclamation, "Validación"
+        Exit Sub
+    End If
+    
+    If Len(mPlanta) = 0 Then
+        MsgBox "No se pudo obtener la Planta del Personal.", vbCritical, "Error"
+        Exit Sub
+    End If
+    
+    ' ──────────────────────────────────────────────────────────────────
+    ' Validar que la persona tenga una inspección programada en el
+    ' cronograma antes de intentar inhabilitar.
+    ' ──────────────────────────────────────────────────────────────────
+    If Not InspectionRepository.ExisteEnCronograma( _
+        mPersonalSeleccionado, mIDPlantilla, mPuestoSeleccionado, mPlantaSeleccionada) Then
+        
+        MsgBox "No es posible inhabilitar esta inspección." & vbCrLf & vbCrLf & _
+               "Esta persona no posee una inspección programada en el cronograma." & vbCrLf & _
+               "Solo se pueden inhabilitar inspecciones con recurrencia activa.", _
+               vbExclamation, "Inhabilitación no disponible"
+        Exit Sub
+    End If
+    
+    ' Confirmar la acción
+    Dim mensaje As String
+    mensaje = "¿Está seguro de INHABILITAR esta inspección?" & vbCrLf & vbCrLf & _
+              "Personal: " & mPersonalSeleccionado & vbCrLf & _
+              "Puesto: " & mPuestoSeleccionado & vbCrLf & _
+              "Planta: " & mPlantaSeleccionada & vbCrLf & _
+              "Plantilla: " & mIDPlantilla & vbCrLf & vbCrLf & _
+              "La entrada en el cronograma se marcará como 'Inhabilitada'" & vbCrLf & _
+              "y dejará de aparecer en el resumen." & vbCrLf & vbCrLf & _
+              "¿Continuar?"
+    
+    If MsgBox(mensaje, vbYesNo + vbExclamation + vbDefaultButton2, "Confirmar Inhabilitación") <> vbYes Then
+        Exit Sub
+    End If
+    
+    ' Inhabilitar la inspección (actualiza solo tblCronogramaInspecciones)
+    Call InspectionRepository.InhabilitarInspeccionEnCronograma( _
+        mPersonalSeleccionado, _
+        mIDPlantilla, _
+        mPuestoSeleccionado, _
+        mPlantaSeleccionada)
+    
+    MsgBox "Inspección inhabilitada correctamente." & vbCrLf & vbCrLf & _
+           "La entrada ha sido marcada como inhabilitada en el cronograma.", _
+           vbInformation, "Inhabilitación Exitosa"
+    
+    ' Cerrar el formulario
+    mCancelado = True
+    Unload Me
+    
+    Exit Sub
+ErrorHandler:
+    MsgBox "Error al inhabilitar inspección: " & Err.Description, vbCritical, "Error"
 End Sub
 
 '' ----------------------------------------------------------------------
@@ -654,6 +769,7 @@ Public Sub AplicarPrellenado()
                 ' Habilitar botón Aceptar
                 If Len(mPlanta) > 0 Then
                     btnAceptar.Enabled = True
+                    btnInhabilitar.Enabled = True
                 End If
                 Exit For
             End If

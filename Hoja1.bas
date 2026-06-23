@@ -25,8 +25,10 @@ Option Explicit
 '   5. Refresca cronograma resumen de inspecciones.
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Activate()
+    ' ## NAVEGACIÓN ## Guardia: evitar doble ejecución durante navegación (FASE 4, 08/06/2026)
+    If g_NavigationInProgress Then Exit Sub
+    
     On Error GoTo ErrorHandler
-    Application.ScreenUpdating = False
     
     ' Aplicar protección centralizada según el rol del usuario
     ' Admin → desprotegido (puede editar filtros, configuraciones)
@@ -37,10 +39,8 @@ Private Sub Worksheet_Activate()
     ' Refrescar cronograma resumen
     Call CronogramaResumen.RefrescarResumenCronograma
     
-    Application.ScreenUpdating = True
     Exit Sub
 ErrorHandler:
-    Application.ScreenUpdating = True
     Call ErrorLogger2.Log("Menú principal.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
 End Sub
 

@@ -49,15 +49,15 @@ Public Sub InicializarSistemaCompleto()
     Debug.Print "  ✓ Resumen cronograma actualizado"
     
     ' --- PASO 5: Mensaje de bienvenida (solo si se inicializó por primera vez) ---
-    If cronogramaInicializado Then
-        MsgBox "¡Bienvenido al Sistema de Inspecciones!" & vbCrLf & vbCrLf & _
-               "El sistema ha sido inicializado correctamente:" & vbCrLf & _
-               "• Personal: " & validacion("CantPersonal") & " persona(s)" & vbCrLf & _
-               "• Plantillas: " & validacion("CantPlantillas") & " plantilla(s)" & vbCrLf & _
-               "• Cronogramas: " & validacion("CantCronogramas") & " registro(s)" & vbCrLf & vbCrLf & _
-               "Haz doble clic en cualquier fila de la tabla para iniciar una inspección.", _
-               vbInformation, "Sistema Inicializado"
-    End If
+    'If cronogramaInicializado Then
+    '    MsgBox "¡Bienvenido al Sistema de Inspecciones!" & vbCrLf & vbCrLf & _
+    '           "El sistema ha sido inicializado correctamente:" & vbCrLf & _
+    '           "• Personal: " & validacion("CantPersonal") & " persona(s)" & vbCrLf & _
+    '           "• Plantillas: " & validacion("CantPlantillas") & " plantilla(s)" & vbCrLf & _
+    '           "• Cronogramas: " & validacion("CantCronogramas") & " registro(s)" & vbCrLf & vbCrLf & _
+    '           "Haz doble clic en cualquier fila de la tabla para iniciar una inspección.", _
+    '           vbInformation, "Sistema Inicializado"
+    'End If
     
     Debug.Print "=== FIN: InicializarSistemaCompleto ==="
     Exit Sub
@@ -151,6 +151,26 @@ Private Function ValidarDatosMaestros() As Object
     End If
     
     resultado("CantEvaluadores") = tblAseg.ListRows.Count
+    
+    ' --- Validar tblRangosRecuperacion (no bloqueante) ---
+    Dim tblRangosRec As ListObject
+    Set tblRangosRec = ThisWorkbook.Sheets(Configuration2.SHEET_CONFIGURACION).ListObjects(Configuration2.TABLE_RANGOS_RECUPERACION)
+    
+    If tblRangosRec.DataBodyRange Is Nothing Then
+        Debug.Print "[ValidarDatosMaestros] ADVERTENCIA: tblRangosRecuperacion está vacía. Los % de Recuperación se convertirán a 0."
+    Else
+        Debug.Print "[ValidarDatosMaestros] tblRangosRecuperacion OK - " & tblRangosRec.ListRows.Count & " rangos configurados"
+    End If
+    
+    ' --- Validar tblRangosOOL (no bloqueante) ---
+    Dim tblRangosOOL As ListObject
+    Set tblRangosOOL = ThisWorkbook.Sheets(Configuration2.SHEET_CONFIGURACION).ListObjects(Configuration2.TABLE_RANGOS_OOL)
+    
+    If tblRangosOOL.DataBodyRange Is Nothing Then
+        Debug.Print "[ValidarDatosMaestros] ADVERTENCIA: tblRangosOOL está vacía. Los % de OOL se convertirán a 0."
+    Else
+        Debug.Print "[ValidarDatosMaestros] tblRangosOOL OK - " & tblRangosOOL.ListRows.Count & " rangos configurados"
+    End If
     
     ' --- Todo válido ---
     resultado("Valido") = True
@@ -271,6 +291,14 @@ End Function
 Private Sub InicializarCronogramaSilencioso(ByRef tblCronograma As ListObject)
     On Error GoTo ErrorHandler
     
+    ' === OPTIMIZACIÓN DE RENDIMIENTO ===
+    ' Sin esto, cada ListRows.Add redibuja la pantalla completa,
+    ' causando que Excel se congele con cronogramas grandes.
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+    ' ===================================
+    
     Dim tblPersonal As ListObject
     Dim tblPlantillas As ListObject
     Dim personaRow As ListRow
@@ -336,9 +364,19 @@ Private Sub InicializarCronogramaSilencioso(ByRef tblCronograma As ListObject)
         Next personaRow
     End If
     
+    ' === RESTAURAR ESTADO DE APLICACIÓN ===
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
+    ' =======================================
+    
     Exit Sub
     
 ErrorHandler:
+    ' Restaurar incluso si hay error (fail-safe)
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
     Debug.Print "ERROR en InicializarCronogramaSilencioso: " & Err.Description
 End Sub
 

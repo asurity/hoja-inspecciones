@@ -70,7 +70,7 @@ Public Const CRONOGRAMA_ADMIN_PASSWORD As String = "validacion002."
 '   Prefijo de las tablas ListObject en cada hoja.
 '   Hoja 1: "tblAudit"      Hoja 2: "tblAudit2"      ...  Hoja 5: "tblAudit5"
 ' ----------------------------------------------------------------------
-Public Const AUDIT_MAX_ROWS     As Long = 1000000        ' PRODUCCIÓN: 1000000 | DEBUG: 100 — TEMPORALMENTE EN 100 PARA TEST
+Public Const AUDIT_MAX_ROWS     As Long = 1000000      ' PRODUCCIÓN: 1000000 | DEBUG: 100 — TEMPORALMENTE EN 100 PARA TEST
 Public Const AUDIT_MAX_SHEETS   As Long = 5
 Public Const AUDIT_BASE_NAME    As String = "Audit trail"
 Public Const AUDIT_TABLE_PREFIX As String = "tblAudit"
@@ -161,6 +161,7 @@ Public Const SHEET_HISTORICO As String = "Historico"
 Public Const SHEET_CONFIGURACION As String = "Configuración"
 Public Const SHEET_CRONOGRAMA As String = "Cronograma"
 Public Const SHEET_ASEGURAMIENTO As String = "Aseguramiento de calidad"
+Public Const SHEET_GRAFICOS As String = "Graficos"
 
 ' ----------------------------------------------------------------------
 ' Constantes de nombres de tablas del sistema de inspecciones
@@ -175,6 +176,8 @@ Public Const TABLE_SECCIONES As String = "tblSecciones"
 Public Const TABLE_OPCIONES As String = "tblOpcionesDeRespuesta"
 Public Const TABLE_CRITICIDAD As String = "tblCriticidad"
 Public Const TABLE_CATEGORIAS_RPN As String = "tblCategoriasRPN"
+Public Const TABLE_RANGOS_RECUPERACION As String = "tblRangosRecuperacion"
+Public Const TABLE_RANGOS_OOL As String = "tblRangosOOL"
 Public Const TABLE_CONFIGURACION As String = "tblConfiguracion"
 Public Const TABLE_EQUIPOS As String = "tblEquipos"
 Public Const TABLE_PUESTO As String = "tblPuesto"
@@ -196,6 +199,7 @@ Public Const TABLE_PERSONAL_PRODUCCION As String = "tblPersonalProduccion"
 Public Const TABLE_OBSERVACIONES As String = "tblObservaciones"
 Public Const TABLE_TEC_CONTROL_PROCESO As String = "tblTecControlProceso"
 Public Const TABLE_ANALISIS_DESVIO As String = "tblAnalisisDesvio"
+Public Const TABLE_WHITELIST As String = "tblWhiteList"
 
 ' ----------------------------------------------------------------------
 ' Constantes de ubicación del cronograma resumen en Menú principal
@@ -231,6 +235,7 @@ Public Const ESTADO_PUESTO_INACTIVO As String = "Puesto inactivo"
 Public Const INSPECCION_EN_PROGRESO As String = "En progreso"
 Public Const INSPECCION_COMPLETADO As String = "Completado"
 Public Const INSPECCION_CANCELADO As String = "Cancelado"
+Public Const INSPECCION_INHABILITADA As String = "Inhabilitada"
 
 ' ============================================================================
 ' CONFIGURACIÓN DE CERTIFICADOS PDF
@@ -299,6 +304,58 @@ Public Function GetOrdenCriticidadPuestos() As Variant
         "Técnico de producción - grado C", _
         "Técnico de producción - grado D", _
         "Muestreador" _
+    )
+End Function
+
+' ============================================================================
+' AGRUPACIONES DE HOJAS PARA NAVEGACIÓN
+' Agregado: 08/06/2026 - FASE 0 Refactorización Navegación
+' Propósito: Centralizar listas de hojas para evitar recorrer todo
+'            ThisWorkbook.Worksheets en cada navegación.
+' ============================================================================
+
+' ----------------------------------------------------------------------
+' Función: GetAllModuleSheetNames
+' Propósito: Retorna un array con TODOS los nombres de hojas de módulo
+'            del sistema (excluyendo "Menú principal" que siempre está visible).
+'            Usado por SheetService2.ShowOnly para iterar eficientemente.
+' Uso: SheetService2.ShowOnly, NavigationService2
+' Nota: Si se agrega/renombra una hoja, actualizar ESTA lista.
+' ----------------------------------------------------------------------
+Public Function GetAllModuleSheetNames() As Variant
+    GetAllModuleSheetNames = Array( _
+        "Configuración", _
+        "Checklist", _
+        "Aseguramiento de calidad", _
+        "Personal", _
+        "Historico", _
+        "Cronograma", _
+        "Registro de errores", _
+        "Formulario de inspeccion", _
+        "Plantilla Certificado", _
+        "Graficos", _
+        "Audit trail 1", _
+        "Audit trail 2", _
+        "Audit trail 3", _
+        "Audit trail 4", _
+        "Audit trail 5" _
+    )
+End Function
+
+' ----------------------------------------------------------------------
+' Función: GetAuditTrailSheetNames
+' Propósito: Retorna un array con los nombres de las 5 hojas Audit Trail.
+'            Evita llamar a AuditRotation2.ObtenerNombreHoja() en loops
+'            dentro de SheetService2.ShowAuditTrailGroup.
+' Uso: SheetService2.ShowAuditTrailGroup
+' ----------------------------------------------------------------------
+Public Function GetAuditTrailSheetNames() As Variant
+    GetAuditTrailSheetNames = Array( _
+        "Audit trail 1", _
+        "Audit trail 2", _
+        "Audit trail 3", _
+        "Audit trail 4", _
+        "Audit trail 5" _
     )
 End Function
 
@@ -609,8 +666,8 @@ End Function
 ' Propósito: Registro de inspecciones completadas con resultados de scoring,
 '            RPN y categorización. Cada inspección está vinculada a un
 '            personal, plantilla y tiene múltiples respuestas en tblRespuestas.
-' Total columnas: 47 (actualizado 23/04/2026 - FASE 7: Calificaciones)
-' Última actualización: 23/04/2026 - Agregadas calificaciones vestuario/operador (cols 44-47)
+' Total columnas: 48 (actualizado 09/06/2026 - Agregada Fecha Auditada)
+' Última actualización: 09/06/2026 - Agregada columna Fecha Auditada [48]
 ' ----------------------------------------------------------------------
 ' COLUMNAS VERIFICADAS (21/04/2026):
 '   [01] ID Inspeccion               - String (UUID único, PK)
@@ -654,7 +711,9 @@ End Function
 '   [37] RPN Promedio                - Double ((RPN Ant + RPN Act)/2 - Nullable)
 '   [38] Porcentaje Recuperacion     - Double (futuro: datos microbiología - Default=0)
 '   [39] Porcentaje OOL              - Double (futuro: Out Of Limits micro - Default=0)
-'   [40] RPN Total                   - Double (RPN Prom + %Rec + %OOL - Nullable)
+'   [40] RPN Total                   - Double (RPN Prom + ValorRecuperación(%Rec) + ValorOOL(%OOL))
+'                                       Donde ValorRecuperación y ValorOOL se obtienen de
+'                                       tblRangosRecuperacion y tblRangosOOL por conversión de rangos.
 '   
 '   COLUMNAS - AUDITORÍA DE PROCESOS (escritas por InspectionCalculator):
 '   [41] AP Critica No Cumple        - Long (conteo de preguntas críticas no cumplidas)
@@ -667,15 +726,21 @@ End Function
 '   [46] Calificacion Operador       - String ("Si"/"No" - Default="Si")
 '   [47] Fecha Venc Operador         - String (dd/mm/yyyy - Opcional, puede estar vacío)
 '
+'   NUEVA COLUMNA - FECHA AUDITADA (09/06/2026):
+'   [48] Fecha Auditada              - Date (fecha en que se realizó la auditoría/evaluación)
+'                                      Se captura en frmChecklistVirtual (txtFechaAuditada)
+'                                      Default: fecha actual del sistema
+'                                      Usada en CertificadoPDFGenerator como "Fecha Evaluada" (B14)
+'
 ' MÓDULOS QUE USAN ESTA TABLA:
 '   - InspectionRepository.bas (CrearInspeccion, ActualizarCalculosInspeccion - ESCRITURA)
 '   - InspectionScheduler.bas (ObtenerUltimaInspeccion - LECTURA)
 '   - ChecklistOrchestrator.bas (GuardarInspeccionCompleta vía Repository - ESCRITURA cols 44-47)
-'   - CertificadoPDFGenerator.bas (ObtenerDatosInspeccion - LECTURA col 20-22, 27, 41-43)
+'   - CertificadoPDFGenerator.bas (ObtenerDatosInspeccion - LECTURA col 20-22, 27, 41-43, 48)
 '   - InspectionHistoryService.bas (BuscarInspeccionesPrevias - LECTURA cols 32-40)
 '   - RecurrentInspectionCalculator.bas (CalcularRPNPromedio - LECTURA/ESCRITURA cols 35-40)
 '   - InspectionCalculator.bas (CalcularResultadoAuditoriaProcesos - ESCRITURA cols 41-43)
-'   - frmChecklistVirtual.frm (Captura datos recurrentes y calificaciones - ESCRITURA cols 32-36, 44-47)
+'   - frmChecklistVirtual.frm (Captura datos recurrentes y calificaciones - ESCRITURA cols 32-36, 44-48)
 ' ----------------------------------------------------------------------
 
 ' ----------------------------------------------------------------------
@@ -700,4 +765,56 @@ End Function
 '   - InspectionRepository.bas (GuardarRespuestas - ESCRITURA)
 '   - frmChecklistVirtual.frm (ObtenerRespuestas, RecopilarRespuestas)
 '   - InspectionCalculator.bas (CalcularScoringTA usa IDCriticidad para ajuste "No Aplica")
+' ----------------------------------------------------------------------
+
+' ----------------------------------------------------------------------
+' TABLA: tblRangosRecuperacion
+' Ubicación: Hoja "Configuración"
+' Propósito: Conversión de % de Recuperación a valor numérico para RPN Total.
+'            Cada fila define un rango de porcentaje y su valor equivalente.
+' Total columnas: 3
+' Creada: 16/06/2026 - Corrección cálculo RPN con factores adicionales
+' ----------------------------------------------------------------------
+' COLUMNAS:
+'   [1] Rango Mínimo    - Double (límite inferior del rango, inclusivo)
+'   [2] Rango Máximo    - Double (límite superior del rango, inclusivo)
+'   [3] Valor           - Double (valor numérico asignado al rango)
+'
+' RANGOS PREDEFINIDOS:
+'   0%              → 0
+'   0.01% - 0.25%   → 4
+'   0.26% - 0.50%   → 6
+'   0.51% - 0.75%   → 8
+'   0.76% - 0.99%   → 10
+'   1.0% o más      → 12
+'
+' MÓDULOS QUE USAN ESTA TABLA:
+'   - RecurrentInspectionCalculator.bas (ObtenerValorRecuperacion - LECTURA)
+'   - SystemInitializer.bas (ValidarDatosMaestros - validación no bloqueante)
+' ----------------------------------------------------------------------
+
+' ----------------------------------------------------------------------
+' TABLA: tblRangosOOL
+' Ubicación: Hoja "Configuración"
+' Propósito: Conversión de % de OOL (Out Of Limits) a valor numérico para RPN Total.
+'            Cada fila define un rango de porcentaje y su valor equivalente.
+' Total columnas: 3
+' Creada: 16/06/2026 - Corrección cálculo RPN con factores adicionales
+' ----------------------------------------------------------------------
+' COLUMNAS:
+'   [1] Rango Mínimo    - Double (límite inferior del rango, inclusivo)
+'   [2] Rango Máximo    - Double (límite superior del rango, inclusivo)
+'   [3] Valor           - Double (valor numérico asignado al rango)
+'
+' RANGOS PREDEFINIDOS:
+'   0%              → 0
+'   0.01% - 0.50%   → 4
+'   0.51% - 1.00%   → 8
+'   1.01% - 2.00%   → 12
+'   2.01% - 3.00%   → 16
+'   3.01% o más     → 20
+'
+' MÓDULOS QUE USAN ESTA TABLA:
+'   - RecurrentInspectionCalculator.bas (ObtenerValorOOL - LECTURA)
+'   - SystemInitializer.bas (ValidarDatosMaestros - validación no bloqueante)
 ' ----------------------------------------------------------------------

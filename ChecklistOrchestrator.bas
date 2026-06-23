@@ -162,10 +162,19 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     Debug.Print "[PASO 2] Solicitando confirmación al usuario..."
     
     Dim respuesta As VbMsgBoxResult
+    Dim fechaMostrar As String
+    Dim fechaParsedMsg As Variant
+    fechaParsedMsg = ChecklistValidator.ParseFechaDMY(frm.FechaInspeccion)
+    If Not IsEmpty(fechaParsedMsg) Then
+        fechaMostrar = Format(fechaParsedMsg, "dd/mm/yyyy")
+    Else
+        fechaMostrar = frm.FechaInspeccion  ' fallback: mostrar el string tal cual
+    End If
+    
     respuesta = MsgBox("¿Está seguro que desea guardar esta inspección?" & vbCrLf & _
                        "Evaluado: " & frm.Evaluado & vbCrLf & _
                        "Puesto: " & frm.Puesto & vbCrLf & _
-                       "Fecha: " & Format(frm.FechaInspeccion, "dd/mm/yyyy"), _
+                       "Fecha: " & fechaMostrar, _
                        vbQuestion + vbYesNo, "Confirmar guardado")
     
     If respuesta <> vbYes Then
@@ -194,8 +203,8 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     datos("Iniciales") = frm.Evaluado
     datos("IDPlantilla") = frm.IDPlantilla
     datos("Planta") = frm.Planta
-    datos("FechaInspeccion") = CDate(frm.FechaInspeccion)
-    datos("FechaAuditada") = CDate(frm.FechaAuditada)
+    datos("FechaInspeccion") = ChecklistValidator.ParseFechaDMY(frm.FechaInspeccion)
+    datos("FechaAuditada") = ChecklistValidator.ParseFechaDMY(frm.FechaAuditada)
     datos("Evaluador") = frm.Evaluador
     datos("Area") = frm.Area
     datos("LineaAuditada") = frm.LineaAuditada
@@ -209,9 +218,15 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     
     ' NUEVOS CAMPOS - FASE 7 (23/04/2026): Calificaciones y Vencimientos
     datos("CalificacionVestuario") = frm.CalificacionVestuario
-    datos("FechaVencVestuario") = frm.FechaVencVestuario
+    ' ACTUALIZADO 23/06/2026: Parsear fechas de vencimiento con ParseFechaDMY
+    ' para evitar que Excel las interprete según el locale (bug: 02/06/2026 → Feb 6 en vez de Jun 2)
+    Dim fechaVencVestParsed As Variant
+    Dim fechaVencOperParsed As Variant
+    fechaVencVestParsed = ChecklistValidator.ParseFechaDMY(frm.FechaVencVestuario)
+    fechaVencOperParsed = ChecklistValidator.ParseFechaDMY(frm.FechaVencOperador)
+    datos("FechaVencVestuario") = IIf(Not IsEmpty(fechaVencVestParsed), fechaVencVestParsed, frm.FechaVencVestuario)
     datos("CalificacionOperador") = frm.CalificacionOperador
-    datos("FechaVencOperador") = frm.FechaVencOperador
+    datos("FechaVencOperador") = IIf(Not IsEmpty(fechaVencOperParsed), fechaVencOperParsed, frm.FechaVencOperador)
     
     Debug.Print "[PASO 5] Datos preparados OK"
     
@@ -364,7 +379,10 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     Debug.Print "  Factores adicionales - % Recuperación: " & porcRecuperacion & ", % OOL: " & porcOOL
     
     Dim metricas As Object
-    Set metricas = CalcularMetricasInspeccion(taData, esRecurrente, numeroInspeccion, rpnAnterior, idInspeccionAnterior, frm.Puesto, porcRecuperacion, porcOOL)
+    ' CATEGORÍA 5 (16/06/2026): Pasar frm.Evaluado (iniciales) y frm.IDPlantilla para regla de historial
+    ' BUGFIX (17/06/2026): Pasar frm.ModoRPN para distinguir modo manual de automático
+    '   (rpnAnterior puede ser 0 en modo manual si la inspección anterior fue perfecta)
+    Set metricas = CalcularMetricasInspeccion(taData, esRecurrente, numeroInspeccion, rpnAnterior, idInspeccionAnterior, frm.Puesto, frm.Evaluado, frm.IDPlantilla, porcRecuperacion, porcOOL, frm.ModoRPN)
     
     ' Extraer valores calculados
     Dim rpn As Double
@@ -390,7 +408,7 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     frecuencia = frm.FrecuenciaMeses
     
     Dim fechaProxima As Date
-    fechaProxima = InspectionCalculator.CalcularFechaProxima(CDate(frm.FechaInspeccion), frecuencia)
+    fechaProxima = InspectionCalculator.CalcularFechaProxima(ChecklistValidator.ParseFechaDMY(frm.FechaInspeccion), frecuencia)
     
     Dim diasVencimiento As Long
     diasVencimiento = InspectionCalculator.CalcularDiasVencimiento(fechaProxima)
@@ -426,7 +444,7 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     '   - Se usa para calcular promedios en futuras inspecciones
     '   - El RPN Total (con factores) se guarda por separado en columna "RPN Total"
     calculos("RPN") = rpn
-    calculos("Categoria") = "Categoría " & categoria
+    calculos("Categoria") = categoria
     calculos("RequiereAccion") = InspectionCalculator.DeterminarRequiereAccion(categoria)
     calculos("FechaProxima") = fechaProxima
     calculos("DiasVencimiento") = diasVencimiento
@@ -496,6 +514,20 @@ Public Sub GuardarInspeccionCompleta(ByRef frm As frmChecklistVirtual)
     Application.EnableEvents = True
     Application.ScreenUpdating = True
     Debug.Print "[PASO 14-15] Configuración restaurada OK"
+    
+    ' ===================================================================
+    ' PASO 15A: Guardar libro y crear copia de seguridad automática
+    ' ===================================================================
+    Debug.Print "[PASO 15A] Guardando libro y creando backup..."
+    On Error Resume Next
+    Call ThisWorkbook.Save  ' Dispara Workbook_BeforeSave → CrearBackupAutomatico
+    If Err.Number <> 0 Then
+        Debug.Print "[PASO 15A] AVISO: No se pudo guardar/backup: " & Err.Description
+        Err.Clear
+    Else
+        Debug.Print "[PASO 15A] Libro guardado y backup creado OK"
+    End If
+    On Error GoTo ErrorHandler
     
     ' ===================================================================
     ' PASO 16: Notificar éxito y ofrecer generar certificado
@@ -640,6 +672,7 @@ End Sub
 '   rpnAnterior (Double)         - RPN de inspección anterior (0 si no aplica)
 '   idInspeccionAnterior (String)- UUID de inspección anterior (vacío si manual)
 '   puestoEvaluado (String)      - Puesto específico de esta inspección
+'   modoRPN (String)             - Modo de RPN: "AUTO", "MANUAL", "NINGUNO" (BUGFIX 17/06/2026)
 '
 ' Retorna:
 '   (Object) Dictionary con métricas calculadas:
@@ -663,8 +696,11 @@ Private Function CalcularMetricasInspeccion( _
     ByVal rpnAnterior As Double, _
     ByVal idInspeccionAnterior As String, _
     ByVal puestoEvaluado As String, _
+    ByVal iniciales As String, _
+    ByVal idPlantilla As String, _
     Optional ByVal porcRecuperacion As Double = 0, _
-    Optional ByVal porcOOL As Double = 0 _
+    Optional ByVal porcOOL As Double = 0, _
+    Optional ByVal modoRPN As String = "" _
 ) As Object
     
     On Error GoTo ErrorHandler
@@ -695,7 +731,8 @@ Private Function CalcularMetricasInspeccion( _
         metricas("PuestoEvaluado") = puestoEvaluado
         metricas("RPN_Final") = rpnTA
         metricas("RPN_Total") = rpnTA  ' NUEVO: En primera inspección, RPN Total = RPN TA
-        metricas("Categoria") = InspectionCalculator.DeterminarCategoria(rpnTA, "", "")
+        ' CATEGORÍA 5 (16/06/2026): Pasar iniciales reales para evaluación de historial
+        metricas("Categoria") = InspectionCalculator.DeterminarCategoria(rpnTA, iniciales, idPlantilla)
         
         Debug.Print "[CalcularMetricas] RPN Final: " & Format(rpnTA, "0.00")
         Debug.Print "[CalcularMetricas] RPN Total: " & Format(rpnTA, "0.00") & " (= RPN TA en primera inspección)"
@@ -712,17 +749,20 @@ Private Function CalcularMetricasInspeccion( _
         ' ─────────────────────────────────────────────────────────────
         ' Dos escenarios válidos:
         ' 1. Recurrente automático: IDInspeccionAnterior existe (historial real en BD)
-        ' 2. Recurrente manual: IDInspeccionAnterior vacío PERO rpnAnterior > 0 (entrada manual)
+        ' 2. Recurrente manual: modoRPN = "MANUAL" (usuario ingresó %TA anterior)
+        ' BUGFIX (17/06/2026): Se usaba rpnAnterior > 0 para detectar modo manual,
+        '   pero %TA anterior = 0 es válido (inspección anterior perfecta sin hallazgos)
         ' ─────────────────────────────────────────────────────────────
         Debug.Print "[CalcularMetricas] Validando historial cargado..."
         Debug.Print "[CalcularMetricas]   IDInspeccionAnterior: '" & idInspeccionAnterior & "'"
         Debug.Print "[CalcularMetricas]   rpnAnterior: " & rpnAnterior
+        Debug.Print "[CalcularMetricas]   modoRPN: '" & modoRPN & "'"
         
         Dim tieneHistorialAutomatico As Boolean
         Dim tieneRPNManual As Boolean
         
         tieneHistorialAutomatico = (Len(Trim(idInspeccionAnterior)) > 0)
-        tieneRPNManual = (rpnAnterior > 0 And Len(Trim(idInspeccionAnterior)) = 0)
+        tieneRPNManual = (StrComp(modoRPN, "MANUAL", vbTextCompare) = 0)
         
         If Not tieneHistorialAutomatico And Not tieneRPNManual Then
             ' Error: No hay historial automático NI RPN manual
@@ -788,8 +828,9 @@ Private Function CalcularMetricasInspeccion( _
         
         Debug.Print "[CalcularMetricas] RPN Total: " & Format(rpnTotal, "0.00")
         
-        ' Categoría basada en RPN Total
-        metricas("Categoria") = RecurrentInspectionCalculator.DeterminarCategoriaRPNTotal(rpnTotal)
+        ' Categoría basada en RPN Total (con evaluación de Categoría 5 por historial)
+        ' CATEGORÍA 5 (16/06/2026): Pasar iniciales e idPlantilla para regla de 3 consecutivas
+        metricas("Categoria") = RecurrentInspectionCalculator.DeterminarCategoriaRPNTotal(rpnTotal, iniciales, idPlantilla)
         
         Debug.Print "[CalcularMetricas] Categoría: " & metricas("Categoria")
         

@@ -83,8 +83,22 @@ ErrorHandler:
     On Error Resume Next
     ws.Protect Password:=Configuration2.APP_PASSWORD
     On Error GoTo 0
-    ' Mostrar el error ORIGINAL que intentaba registrar, para no perder la pista.
-    MsgBox "Error al registrar en log." & vbCrLf & _
-           "Error original: [" & errorNumber & "] " & errorDescription & vbCrLf & _
-           "Origen: " & sourceSubroutine, vbCritical, "Error de Registro"
+    
+    ' Registrar en Debug.Print en lugar de MsgBox para evitar popups disruptivos
+    ' durante la operación normal (ej. durante Workbook_BeforeSave).
+    ' El error original que se intentaba registrar NO debe perderse.
+    Debug.Print "╔══════════════════════════════════════════════════════════════╗"
+    Debug.Print "║ [ErrorLogger] ERROR AL REGISTRAR EN LOG                     ║"
+    Debug.Print "║ Error original: [" & errorNumber & "] " & errorDescription
+    Debug.Print "║ Origen: " & sourceSubroutine
+    Debug.Print "║ Error interno: [" & Err.Number & "] " & Err.Description
+    Debug.Print "╚══════════════════════════════════════════════════════════════╝"
+    
+    ' En modo desarrollo, mostrar también MsgBox para debugging inmediato
+    If Not Configuration2.ENABLE_SHEET_PROTECTION Then
+        MsgBox "Error al registrar en log." & vbCrLf & _
+               "Error original: [" & errorNumber & "] " & errorDescription & vbCrLf & _
+               "Origen: " & sourceSubroutine & vbCrLf & _
+               "Error interno: " & Err.Description, vbCritical, "Error de Registro (DEBUG)"
+    End If
 End Sub

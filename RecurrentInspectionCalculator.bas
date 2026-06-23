@@ -123,10 +123,11 @@ End Function
 ' ══════════════════════════════════════════════════════════════════════
 ' Descripción:
 '   Calcula el RPN Total para inspecciones recurrentes.
-'   Fórmula: RPN Promedio + % Recuperación + % OOL
+'   Fórmula: RPN Promedio + ValorRecuperación(%Rec) + ValorOOL(%OOL)
 '
-'   FASE ACTUAL: Solo usa RPN Promedio (% Recuperación y % OOL = 0)
-'   FASE FUTURA: Integrará datos de microbiología cuando estén disponibles
+'   Los porcentajes de Recuperación y OOL NO se suman directamente.
+'   En su lugar, se convierten a un valor numérico según tablas de
+'   rangos definidas en Excel (tblRangosRecuperacion y tblRangosOOL).
 '
 ' Parámetros:
 '   rpnPromedio (Double)       - RPN Promedio calculado (requerido)
@@ -137,7 +138,7 @@ End Function
 '   (Double) - RPN Total resultante
 '
 ' Validaciones:
-'   - rpnPromedio debe ser > 0
+'   - rpnPromedio debe estar en rango [RPN_MIN, RPN_MAX]
 '   - porcRecuperacion >= 0 (puede ser 0 si no aplica)
 '   - porcOOL >= 0 (puede ser 0 si no aplica)
 '
@@ -147,11 +148,12 @@ End Function
 '   - Error 1005: Porcentaje OOL inválido
 '
 ' Ejemplo:
-'   ' Fase actual (sin microbiología)
+'   ' Sin microbiología (todo en 0)
 '   rpnTotal = CalcularRPNTotal(rpnPromedio:=78.9) → 78.9
-'   
-'   ' Fase futura (con microbiología)
-'   rpnTotal = CalcularRPNTotal(rpnPromedio:=78.9, porcRecuperacion:=5.2, porcOOL:=2.1) → 86.2
+'
+'   ' Con microbiología (se convierten por rango)
+'   rpnTotal = CalcularRPNTotal(rpnPromedio:=78.9, porcRecuperacion:=0.35, porcOOL:=1.2)
+'   → valorRec=6, valorOOL=12, RPN Total = 78.9 + 6 + 12 = 96.9
 ' ══════════════════════════════════════════════════════════════════════
 Public Function CalcularRPNTotal( _
     ByVal rpnPromedio As Double, _
@@ -192,23 +194,31 @@ Public Function CalcularRPNTotal( _
     End If
     
     ' ─────────────────────────────────────────────────────────────────
-    ' CÁLCULO: Suma de componentes
+    ' CONVERSIÓN: Obtener valores numéricos desde tablas de rangos
     ' ─────────────────────────────────────────────────────────────────
-    CalcularRPNTotal = rpnPromedio + porcRecuperacion + porcOOL
+    Dim valorRecuperacion As Double
+    Dim valorOOL As Double
+    
+    valorRecuperacion = ObtenerValorRecuperacion(porcRecuperacion)
+    valorOOL = ObtenerValorOOL(porcOOL)
+    
+    ' ─────────────────────────────────────────────────────────────────
+    ' CÁLCULO: RPN Promedio + valores convertidos de rangos
+    ' ─────────────────────────────────────────────────────────────────
+    CalcularRPNTotal = rpnPromedio + valorRecuperacion + valorOOL
     
     ' ─────────────────────────────────────────────────────────────────
     ' LOGGING: Registro detallado para auditoría
     ' ─────────────────────────────────────────────────────────────────
     Debug.Print "[RPN RECURRENTE] CalcularRPNTotal():"
     Debug.Print "  RPN Promedio:        " & Format(rpnPromedio, "0.00")
-    Debug.Print "  % Recuperación:      " & Format(porcRecuperacion, "0.00")
-    Debug.Print "  % OOL:               " & Format(porcOOL, "0.00")
+    Debug.Print "  % Recuperación:      " & Format(porcRecuperacion, "0.00") & " → Valor: " & valorRecuperacion
+    Debug.Print "  % OOL:               " & Format(porcOOL, "0.00") & " → Valor: " & valorOOL
     Debug.Print "  RPN Total:           " & Format(CalcularRPNTotal, "0.00")
+    Debug.Print "  Fórmula: " & Format(rpnPromedio, "0.00") & " + " & valorRecuperacion & " + " & valorOOL & " = " & Format(CalcularRPNTotal, "0.00")
     
     If porcRecuperacion = 0 And porcOOL = 0 Then
-        Debug.Print "  [NOTA] Modo actual: Sin datos microbiología (RPN Total = RPN Promedio)"
-    Else
-        Debug.Print "  [NOTA] Modo futuro: Con datos microbiología integrados"
+        Debug.Print "  [NOTA] Sin datos microbiología (RPN Total = RPN Promedio)"
     End If
     
     Exit Function
@@ -228,22 +238,25 @@ End Function
 '   el sistema original, garantizando consistencia.
 '
 ' Parámetros:
-'   rpnTotal (Double) - RPN Total calculado
+'   rpnTotal (Double) - RPN Total calculado (con factores)
+'   iniciales (String) - Iniciales del personal evaluado
+'   idPlantilla (String) - ID de la plantilla usada
 '
 ' Retorna:
 '   (Long) - Número de categoría (1-5)
 '
-' Lógica:
-'   1. Lee tblCategoriasRPN (columnas: RPN minimo, RPN maximo, Numero categoria)
-'   2. Busca en qué rango cae el rpnTotal
-'   3. Retorna el número de categoría correspondiente
+' Lógica (ACTUALIZADA 16/06/2026):
+'   1. Si RPN Total > 20, buscar últimas 2 inspecciones del mismo puesto
+'   2. Si las 3 (actual + 2 anteriores) tienen RPN Total > 20 → Categoría 5
+'   3. Si no → buscar en tblCategoriasRPN el rango que contiene el RPN Total
+'   4. Si ningún rango coincide → Categoría 4 (más restrictiva sin ser Cat 5)
 '
 ' Categorías estándar (según sistema actual):
-'   - Categoría 1: RPN 0    - 20   → Aprobado (Sin observaciones)
-'   - Categoría 2: RPN 20.1 - 40   → Aprobado con observaciones menores
-'   - Categoría 3: RPN 40.1 - 60   → Aprobado con observaciones mayores
-'   - Categoría 4: RPN 60.1 - 80   → Condicional
-'   - Categoría 5: RPN 80.1 - 100  → No Calificado
+'   - Categoría 1: RPN 0    - 14   → Aprobado (Sin observaciones)
+'   - Categoría 2: RPN 14.1 - 19   → Aprobado con observaciones menores
+'   - Categoría 3: RPN 19.1 - 40   → Aprobado con observaciones mayores
+'   - Categoría 4: RPN 40.1 - 100   → Condicional
+'   - Categoría 5: RPN 20 - 100  → No Calificado (tres veces consecutivas con este resultado de 20)
 '
 ' Validaciones:
 '   - rpnTotal >= 0
@@ -258,10 +271,32 @@ End Function
 '   categoria = DeterminarCategoriaRPNTotal(78.9) → 4 (Condicional)
 ' ══════════════════════════════════════════════════════════════════════
 Public Function DeterminarCategoriaRPNTotal( _
-    ByVal rpnTotal As Double _
+    ByVal rpnTotal As Double, _
+    ByVal iniciales As String, _
+    ByVal idPlantilla As String _
 ) As Long
     
     On Error GoTo ErrorHandler
+    
+    ' ═══════════════════════════════════════════════════════════════
+    ' PASO 0: Validar Categoría 5 por historial (3 consecutivas > 20)
+    ' ACTUALIZADO (16/06/2026): Evalúa RPN Total (con factores), no %TA puro
+    ' ═══════════════════════════════════════════════════════════════
+    If rpnTotal > 20 Then
+        Dim historial As Collection
+        Set historial = InspectionRepository.ObtenerUltimasNInspecciones(iniciales, idPlantilla, 2)
+        
+        If historial.Count >= 2 Then
+            If CDbl(historial(1)) > 20 And CDbl(historial(2)) > 20 Then
+                Debug.Print "[RPN RECURRENTE] CATEGORÍA 5: 3 inspecciones consecutivas con RPN Total > 20"
+                Debug.Print "  Actual: " & Format(rpnTotal, "0.00") & _
+                    " | Anterior 1: " & Format(CDbl(historial(1)), "0.00") & _
+                    " | Anterior 2: " & Format(CDbl(historial(2)), "0.00")
+                DeterminarCategoriaRPNTotal = 5
+                Exit Function
+            End If
+        End If
+    End If
     
     Dim ws As Worksheet
     Dim tblCategorias As ListObject
@@ -371,10 +406,13 @@ ErrorHandler:
     ' Registrar error y re-lanzar
     Call ErrorLogger2.Log(MODULO_NOMBRE & ".DeterminarCategoriaRPNTotal", Err.Description, Err.Number)
     
-    ' Error de fallback: Si no se puede categorizar, asignar categoría más conservadora
+    ' Error de fallback: Si no se puede categorizar, asignar Categoría 4
+    ' (la más restrictiva entre las categorías por rango, sin ser Cat 5 que es por historial)
+    ' ACTUALIZADO (16/06/2026): Antes asignaba Cat 5 como "precaución", pero Cat 5
+    ' solo debe asignarse por la regla de 3 inspecciones consecutivas > 20.
     If Err.Number = vbObjectError + 1008 Then
-        Debug.Print "[ERROR CRÍTICO] RPN Total sin categoría. Asignando Cat 5 por precaución"
-        DeterminarCategoriaRPNTotal = 5 ' Categoría más restrictiva
+        Debug.Print "[ERROR CRÍTICO] RPN Total sin categoría en tblCategoriasRPN. Asignando Cat 4 (máxima por rango)"
+        DeterminarCategoriaRPNTotal = 4 ' Categoría más restrictiva por rango (no Cat 5)
     Else
         Err.Raise Err.Number, Err.Source, Err.Description
     End If
@@ -433,4 +471,216 @@ Public Function ValidarConsistenciaRPN( _
     Else
         ValidarConsistenciaRPN = True
     End If
+End Function
+
+' ══════════════════════════════════════════════════════════════════════
+' FUNCIÓN: ObtenerValorRecuperacion
+' ══════════════════════════════════════════════════════════════════════
+' Descripción:
+'   Convierte un % de Recuperación a su valor numérico según la tabla
+'   de rangos tblRangosRecuperacion en la hoja Configuración.
+'
+' Rangos (definidos en Excel):
+'   0%              → 0
+'   0.01% - 0.25%   → 4
+'   0.26% - 0.50%   → 6
+'   0.51% - 0.75%   → 8
+'   0.76% - 0.99%   → 10
+'   1.0% o más      → 12
+'
+' Parámetros:
+'   porcentaje (Double) - % de Recuperación a convertir
+'
+' Retorna:
+'   (Double) - Valor numérico asignado según el rango
+' ══════════════════════════════════════════════════════════════════════
+Public Function ObtenerValorRecuperacion(ByVal porcentaje As Double) As Double
+    
+    On Error GoTo ErrorHandler
+    
+    ' Si es 0, retornar 0 sin consultar la tabla
+    If porcentaje = 0 Then
+        ObtenerValorRecuperacion = 0
+        Exit Function
+    End If
+    
+    Dim ws As Worksheet
+    Dim tblRangos As ListObject
+    Dim fila As ListRow
+    
+    Set ws = ThisWorkbook.Sheets(Configuration2.SHEET_CONFIGURACION)
+    Set tblRangos = ws.ListObjects(Configuration2.TABLE_RANGOS_RECUPERACION)
+    
+    If tblRangos Is Nothing Then
+        Debug.Print "[ObtenerValorRecuperacion] ERROR: tblRangosRecuperacion no encontrada"
+        ObtenerValorRecuperacion = 0
+        Exit Function
+    End If
+    
+    If tblRangos.DataBodyRange Is Nothing Then
+        Debug.Print "[ObtenerValorRecuperacion] ADVERTENCIA: tblRangosRecuperacion vacía"
+        ObtenerValorRecuperacion = 0
+        Exit Function
+    End If
+    
+    ' Buscar índices de columnas (robusto: case-insensitive, accent-insensitive, trim)
+    Dim colMin As Long, colMax As Long, colValor As Long
+    colMin = 0: colMax = 0: colValor = 0
+    
+    Dim col As ListColumn
+    Dim normalizedName As String
+    For Each col In tblRangos.ListColumns
+        ' Normalizar: trim + uppercase + reemplazar acentos para matching robusto
+        normalizedName = UCase(Trim(col.Name))
+        normalizedName = Replace(normalizedName, "Á", "A")
+        normalizedName = Replace(normalizedName, "É", "E")
+        normalizedName = Replace(normalizedName, "Í", "I")
+        normalizedName = Replace(normalizedName, "Ó", "O")
+        normalizedName = Replace(normalizedName, "Ú", "U")
+        
+        If normalizedName = "RANGO MINIMO" Then colMin = col.Index
+        If normalizedName = "RANGO MAXIMO" Then colMax = col.Index
+        If normalizedName = "VALOR" Then colValor = col.Index
+    Next col
+    
+    If colMin = 0 Or colMax = 0 Or colValor = 0 Then
+        ' Diagnóstico: imprimir nombres reales de columnas para facilitar depuración
+        Debug.Print "[ObtenerValorRecuperacion] ERROR: Columnas no encontradas (Min=" & colMin & ", Max=" & colMax & ", Valor=" & colValor & ")"
+        Debug.Print "[ObtenerValorRecuperacion] Columnas reales en la tabla:"
+        For Each col In tblRangos.ListColumns
+            Debug.Print "  Col " & col.Index & ": '" & col.Name & "' (normalizado: '" & UCase(Trim(col.Name)) & "')"
+        Next col
+        ObtenerValorRecuperacion = 0
+        Exit Function
+    End If
+    
+    ' Buscar rango que contiene el porcentaje
+    Dim rangoMin As Double, rangoMax As Double
+    For Each fila In tblRangos.ListRows
+        rangoMin = CDbl(fila.Range.Cells(1, colMin).Value)
+        rangoMax = CDbl(fila.Range.Cells(1, colMax).Value)
+        
+        If porcentaje >= rangoMin And porcentaje <= rangoMax Then
+            ObtenerValorRecuperacion = CDbl(fila.Range.Cells(1, colValor).Value)
+            
+            Debug.Print "[ObtenerValorRecuperacion] % Recuperación: " & Format(porcentaje, "0.00") & _
+                        " → Rango [" & rangoMin & " - " & rangoMax & "] → Valor: " & ObtenerValorRecuperacion
+            Exit Function
+        End If
+    Next fila
+    
+    ' Fallback: si no encuentra rango, retornar 0
+    Debug.Print "[ObtenerValorRecuperacion] ADVERTENCIA: % " & Format(porcentaje, "0.00") & " no coincide con ningún rango. Retornando 0."
+    ObtenerValorRecuperacion = 0
+    Exit Function
+    
+ErrorHandler:
+    Call ErrorLogger2.Log(MODULO_NOMBRE & ".ObtenerValorRecuperacion", Err.Description, Err.Number)
+    ObtenerValorRecuperacion = 0
+End Function
+
+' ══════════════════════════════════════════════════════════════════════
+' FUNCIÓN: ObtenerValorOOL
+' ══════════════════════════════════════════════════════════════════════
+' Descripción:
+'   Convierte un % de OOL a su valor numérico según la tabla
+'   de rangos tblRangosOOL en la hoja Configuración.
+'
+' Rangos (definidos en Excel):
+'   0%              → 0
+'   0.01% - 0.50%   → 4
+'   0.51% - 1.00%   → 8
+'   1.01% - 2.00%   → 12
+'   2.01% - 3.00%   → 16
+'   3.01% o más     → 20
+'
+' Parámetros:
+'   porcentaje (Double) - % de OOL a convertir
+'
+' Retorna:
+'   (Double) - Valor numérico asignado según el rango
+' ══════════════════════════════════════════════════════════════════════
+Public Function ObtenerValorOOL(ByVal porcentaje As Double) As Double
+    
+    On Error GoTo ErrorHandler
+    
+    ' Si es 0, retornar 0 sin consultar la tabla
+    If porcentaje = 0 Then
+        ObtenerValorOOL = 0
+        Exit Function
+    End If
+    
+    Dim ws As Worksheet
+    Dim tblRangos As ListObject
+    Dim fila As ListRow
+    
+    Set ws = ThisWorkbook.Sheets(Configuration2.SHEET_CONFIGURACION)
+    Set tblRangos = ws.ListObjects(Configuration2.TABLE_RANGOS_OOL)
+    
+    If tblRangos Is Nothing Then
+        Debug.Print "[ObtenerValorOOL] ERROR: tblRangosOOL no encontrada"
+        ObtenerValorOOL = 0
+        Exit Function
+    End If
+    
+    If tblRangos.DataBodyRange Is Nothing Then
+        Debug.Print "[ObtenerValorOOL] ADVERTENCIA: tblRangosOOL vacía"
+        ObtenerValorOOL = 0
+        Exit Function
+    End If
+    
+    ' Buscar índices de columnas (robusto: case-insensitive, accent-insensitive, trim)
+    Dim colMin As Long, colMax As Long, colValor As Long
+    colMin = 0: colMax = 0: colValor = 0
+    
+    Dim col As ListColumn
+    Dim normalizedName As String
+    For Each col In tblRangos.ListColumns
+        ' Normalizar: trim + uppercase + reemplazar acentos para matching robusto
+        normalizedName = UCase(Trim(col.Name))
+        normalizedName = Replace(normalizedName, "Á", "A")
+        normalizedName = Replace(normalizedName, "É", "E")
+        normalizedName = Replace(normalizedName, "Í", "I")
+        normalizedName = Replace(normalizedName, "Ó", "O")
+        normalizedName = Replace(normalizedName, "Ú", "U")
+        
+        If normalizedName = "RANGO MINIMO" Then colMin = col.Index
+        If normalizedName = "RANGO MAXIMO" Then colMax = col.Index
+        If normalizedName = "VALOR" Then colValor = col.Index
+    Next col
+    
+    If colMin = 0 Or colMax = 0 Or colValor = 0 Then
+        ' Diagnóstico: imprimir nombres reales de columnas para facilitar depuración
+        Debug.Print "[ObtenerValorOOL] ERROR: Columnas no encontradas (Min=" & colMin & ", Max=" & colMax & ", Valor=" & colValor & ")"
+        Debug.Print "[ObtenerValorOOL] Columnas reales en la tabla:"
+        For Each col In tblRangos.ListColumns
+            Debug.Print "  Col " & col.Index & ": '" & col.Name & "' (normalizado: '" & UCase(Trim(col.Name)) & "')"
+        Next col
+        ObtenerValorOOL = 0
+        Exit Function
+    End If
+    
+    ' Buscar rango que contiene el porcentaje
+    Dim rangoMin As Double, rangoMax As Double
+    For Each fila In tblRangos.ListRows
+        rangoMin = CDbl(fila.Range.Cells(1, colMin).Value)
+        rangoMax = CDbl(fila.Range.Cells(1, colMax).Value)
+        
+        If porcentaje >= rangoMin And porcentaje <= rangoMax Then
+            ObtenerValorOOL = CDbl(fila.Range.Cells(1, colValor).Value)
+            
+            Debug.Print "[ObtenerValorOOL] % OOL: " & Format(porcentaje, "0.00") & _
+                        " → Rango [" & rangoMin & " - " & rangoMax & "] → Valor: " & ObtenerValorOOL
+            Exit Function
+        End If
+    Next fila
+    
+    ' Fallback: si no encuentra rango, retornar 0
+    Debug.Print "[ObtenerValorOOL] ADVERTENCIA: % " & Format(porcentaje, "0.00") & " no coincide con ningún rango. Retornando 0."
+    ObtenerValorOOL = 0
+    Exit Function
+    
+ErrorHandler:
+    Call ErrorLogger2.Log(MODULO_NOMBRE & ".ObtenerValorOOL", Err.Description, Err.Number)
+    ObtenerValorOOL = 0
 End Function

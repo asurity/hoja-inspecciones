@@ -28,3 +28,12 @@ Public g_AnalisisPendiente As Boolean
 '            (FASE 2.6, 10/03/2026).
 '' ----------------------------------------------------------------------
 Public g_PreviousSheetName As String
+
+'' ----------------------------------------------------------------------
+' Variable global: g_NavigationInProgress
+' Propósito: Bandera que evita recursión entre Workbook_SheetActivate y
+'            NavigationService2 durante la navegación programática.
+'            Se pone True al iniciar navegación, False al terminar.
+'            (FASE 0 - Refactorización Navegación, 08/06/2026)
+'' ----------------------------------------------------------------------
+Public g_NavigationInProgress As Boolean

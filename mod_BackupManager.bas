@@ -174,6 +174,43 @@ Public Function CrearBackupAutomatico() As Boolean
     folderPath = GetLocalPath(ThisWorkbook.Path)
     originalName = ThisWorkbook.Name
     
+    ' ========================================================================
+    ' VALIDACIÓN CRÍTICA: Verificar que las rutas se resolvieron correctamente
+    ' Si GetLocalPath devuelve cadena vacía, significa que no pudo convertir
+    ' una URL de OneDrive/SharePoint a ruta local. En ese caso, NO intentar
+    ' SaveCopyAs porque fallará o guardará en ubicación incorrecta.
+    ' ========================================================================
+    If folderPath = "" Or originalPath = "" Then
+        Debug.Print "[Backup] ERROR: No se pudo resolver la ruta local del archivo."
+        Debug.Print "[Backup] FullName original: " & ThisWorkbook.FullName
+        Debug.Print "[Backup] Path original: " & ThisWorkbook.Path
+        Debug.Print "[Backup] El archivo está en OneDrive/SharePoint. Cierre el archivo,"
+        Debug.Print "[Backup] cópielo a una carpeta local (C:\...), y vuelva a abrirlo desde allí."
+        
+        ' Registrar en log de errores para trazabilidad
+        On Error Resume Next
+        Call ErrorLogger2.Log("mod_BackupManager.CrearBackupAutomatico", _
+            "No se pudo resolver ruta local. Posible archivo en OneDrive. Path=" & ThisWorkbook.Path, 0)
+        On Error GoTo 0
+        
+        CrearBackupAutomatico = False
+        Exit Function
+    End If
+    
+    ' Validar que folderPath es una ruta local (no una URL)
+    If Left(LCase(folderPath), 4) = "http" Then
+        Debug.Print "[Backup] ERROR: folderPath sigue siendo URL: " & folderPath
+        Debug.Print "[Backup] SaveCopyAs no funciona con URLs. Abra el archivo desde una carpeta local."
+        
+        On Error Resume Next
+        Call ErrorLogger2.Log("mod_BackupManager.CrearBackupAutomatico", _
+            "folderPath es URL, no ruta local: " & folderPath, 0)
+        On Error GoTo 0
+        
+        CrearBackupAutomatico = False
+        Exit Function
+    End If
+    
     Debug.Print "[Backup] Creando copia de seguridad..."
     Debug.Print "[Backup] Original: " & originalPath
     
@@ -206,15 +243,76 @@ Public Function CrearBackupAutomatico() As Boolean
     End If
     On Error GoTo ErrorHandler
     
-    ' Crear la copia usando la ruta local
-    ThisWorkbook.SaveCopyAs backupPath
+    ' ========================================================================
+    ' Crear la copia de seguridad
+    ' Estrategia: FileCopy como método principal (más fiable que SaveCopyAs).
+    ' SaveCopyAs es notoriamente inestable dentro de Workbook_BeforeSave en
+    ' algunas versiones de Excel, fallando silenciosamente sin crear el archivo.
+    ' FileCopy copia el archivo YA GUARDADO en disco (versión pre-guardado),
+    ' que es exactamente el respaldo deseado: si el guardado actual corrompe
+    ' algo, el backup contiene la versión anterior íntegra.
+    ' ========================================================================
+    Dim backupCreado As Boolean
+    backupCreado = False
     
-    Debug.Print "[Backup] ? Copia de seguridad creada exitosamente."
-    CrearBackupAutomatico = True
+    ' --- Intento 1: FileCopy (más fiable, copia el archivo desde disco) ---
+    On Error Resume Next
+    FileCopy originalPath, backupPath
+    If Err.Number = 0 Then
+        Set fso = CreateObject("Scripting.FileSystemObject")
+        If fso.FileExists(backupPath) Then
+            Debug.Print "[Backup] ? Copia de seguridad creada exitosamente (FileCopy): " & backupPath
+            Debug.Print "[Backup] Tamaño: " & fso.GetFile(backupPath).Size & " bytes"
+            backupCreado = True
+        End If
+    Else
+        Debug.Print "[Backup] FileCopy falló: " & Err.Number & " - " & Err.Description
+        Err.Clear
+    End If
+    On Error GoTo ErrorHandler
+    
+    ' --- Intento 2 (fallback): SaveCopyAs (captura cambios no guardados) ---
+    If Not backupCreado Then
+        On Error Resume Next
+        ThisWorkbook.SaveCopyAs backupPath
+        If Err.Number = 0 Then
+            Set fso = CreateObject("Scripting.FileSystemObject")
+            If fso.FileExists(backupPath) Then
+                Debug.Print "[Backup] ? Copia de seguridad creada exitosamente (SaveCopyAs): " & backupPath
+                Debug.Print "[Backup] Tamaño: " & fso.GetFile(backupPath).Size & " bytes"
+                backupCreado = True
+            Else
+                Debug.Print "[Backup] AVISO: SaveCopyAs no generó error pero el archivo NO existe: " & backupPath
+            End If
+        Else
+            Debug.Print "[Backup] SaveCopyAs falló: " & Err.Number & " - " & Err.Description
+            Err.Clear
+        End If
+        On Error GoTo ErrorHandler
+    End If
+    
+    ' --- Evaluar resultado ---
+    If backupCreado Then
+        CrearBackupAutomatico = True
+    Else
+        Debug.Print "[Backup] ERROR: Ningún método pudo crear el backup: " & backupPath
+        ' Usar Debug.Print en lugar de ErrorLogger2 para evitar MsgBox en cascada
+        ' (ErrorLogger2.Log puede fallar durante Workbook_BeforeSave y mostrar
+        ' su propio MsgBox de error, generando confusión)
+        On Error Resume Next
+        Call ErrorLogger2.Log("mod_BackupManager.CrearBackupAutomatico", _
+            "Ni FileCopy ni SaveCopyAs crearon el backup: " & backupPath, 0)
+        On Error GoTo 0
+        CrearBackupAutomatico = False
+    End If
     Exit Function
     
 ErrorHandler:
     Debug.Print "[Backup] ERROR: " & Err.Number & " - " & Err.Description
+    On Error Resume Next
+    Call ErrorLogger2.Log("mod_BackupManager.CrearBackupAutomatico", _
+        "Error " & Err.Number & ": " & Err.Description & " | BackupPath: " & backupPath, Err.Number)
+    On Error GoTo 0
     CrearBackupAutomatico = False
 End Function
 
@@ -259,7 +357,7 @@ End Function
 ' Última modificación: 12/01/2026 - Versión robusta con detección de OneDrive
 '******************************************************************************
 Private Function GetLocalPath(ByVal urlPath As String) As String
-    On Error Resume Next
+    ' NOTA: NO usar On Error Resume Next global. Cada bloque maneja sus propios errores.
     
     Dim fso As Object
     Dim wsh As Object
@@ -267,10 +365,12 @@ Private Function GetLocalPath(ByVal urlPath As String) As String
     Dim relativePath As String
     Dim localPath As String
     
+    On Error GoTo GetLocalPathError
     Set fso = CreateObject("Scripting.FileSystemObject")
     Set wsh = CreateObject("WScript.Shell")
+    On Error GoTo 0
     
-    ' Si NO es una URL, devolver la ruta original
+    ' Si NO es una URL, devolver la ruta original (ya es local)
     If Left(LCase(urlPath), 4) <> "http" Then
         GetLocalPath = urlPath
         Exit Function
@@ -320,8 +420,26 @@ Private Function GetLocalPath(ByVal urlPath As String) As String
                 ' Construir ruta local completa
                 localPath = oneDrivePath & "\" & relativePath
                 
-                ' Verificar que la ruta existe
-                If fso.FileExists(localPath) Or fso.FolderExists(localPath) Then
+                ' Verificar que la ruta existe (archivo o carpeta)
+                On Error Resume Next
+                Dim exists As Boolean
+                exists = fso.FileExists(localPath) Or fso.FolderExists(localPath)
+                On Error GoTo 0
+                
+                If exists Then
+                    GetLocalPath = localPath
+                    Exit Function
+                End If
+                
+                ' Si el archivo no existe pero la carpeta padre sí, usar la ruta de todos modos
+                ' (puede ser que estemos resolviendo la ruta de la carpeta, no del archivo)
+                Dim parentPath As String
+                parentPath = fso.GetParentFolderName(localPath)
+                On Error Resume Next
+                exists = fso.FolderExists(parentPath)
+                On Error GoTo 0
+                
+                If exists Then
                     GetLocalPath = localPath
                     Exit Function
                 End If
@@ -341,8 +459,43 @@ Private Function GetLocalPath(ByVal urlPath As String) As String
         End If
         On Error GoTo 0
         
-        ' Lógica similar para SharePoint (más compleja, requiere parsing adicional)
-        ' Por ahora, intentamos con FSO
+        If oneDrivePath <> "%OneDriveCommercial%" And oneDrivePath <> "%OneDrive%" And oneDrivePath <> "" Then
+            ' Intentar extraer ruta relativa de SharePoint
+            ' Formato común: https://[tenant].sharepoint.com/personal/[user]/Documents/...
+            Dim sharePointParts() As String
+            sharePointParts = Split(urlPath, "/")
+            Dim spFound As Boolean
+            spFound = False
+            Dim spIdx As Integer
+            For spIdx = LBound(sharePointParts) To UBound(sharePointParts)
+                If LCase(sharePointParts(spIdx)) = "documents" Then
+                    spFound = True
+                    Exit For
+                End If
+            Next spIdx
+            
+            If spFound And spIdx < UBound(sharePointParts) Then
+                relativePath = ""
+                Dim j As Integer
+                For j = spIdx + 1 To UBound(sharePointParts)
+                    If sharePointParts(j) <> "" Then
+                        If relativePath <> "" Then relativePath = relativePath & "\"
+                        relativePath = relativePath & DecodeURL(sharePointParts(j))
+                    End If
+                Next j
+                
+                If relativePath <> "" Then
+                    localPath = oneDrivePath & "\" & relativePath
+                    On Error Resume Next
+                    exists = fso.FolderExists(fso.GetParentFolderName(localPath))
+                    On Error GoTo 0
+                    If exists Then
+                        GetLocalPath = localPath
+                        Exit Function
+                    End If
+                End If
+            End If
+        End If
     End If
     
     ' ========================================================================
@@ -350,20 +503,29 @@ Private Function GetLocalPath(ByVal urlPath As String) As String
     ' ========================================================================
     On Error Resume Next
     localPath = fso.GetAbsolutePathName(urlPath)
-    If Err.Number = 0 And Left(LCase(localPath), 4) <> "http" Then
-        GetLocalPath = localPath
-        Exit Function
+    Dim fsoErr As Long
+    fsoErr = Err.Number
+    On Error GoTo 0
+    
+    If fsoErr = 0 Then
+        If Left(LCase(localPath), 4) <> "http" Then
+            GetLocalPath = localPath
+            Exit Function
+        End If
     End If
-    On Error GoTo 0
     
     ' ========================================================================
-    ' CASO 4: TODO FALLÓ - Devolver URL original con advertencia
+    ' CASO 4: TODO FALLÓ - Devolver cadena vacía para indicar fallo
     ' ========================================================================
-    GetLocalPath = urlPath
-    Debug.Print "[Backup] ADVERTENCIA: No se pudo convertir URL a ruta local."
-    Debug.Print "[Backup] Si el backup falla, guarde el archivo en una carpeta local primero."
+    Debug.Print "[Backup] ERROR CRÍTICO: No se pudo convertir URL a ruta local: " & urlPath
+    Debug.Print "[Backup] El archivo podría estar abierto desde OneDrive/SharePoint."
+    Debug.Print "[Backup] Guarde una copia local del archivo para habilitar backups."
+    GetLocalPath = "" ' Cadena vacía = fallo en conversión
+    Exit Function
     
-    On Error GoTo 0
+GetLocalPathError:
+    Debug.Print "[Backup] ERROR en GetLocalPath: " & Err.Number & " - " & Err.Description
+    GetLocalPath = ""
 End Function
 
 '******************************************************************************

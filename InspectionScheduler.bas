@@ -288,6 +288,9 @@ Public Sub ActualizarRegistroCronograma(ByVal iniciales As String, ByVal idPlant
     Set tblInspecciones = wsInspecciones.ListObjects(Configuration2.TABLE_INSPECCIONES)
     Set tblPersonal = wsPersonal.ListObjects(Configuration2.TABLE_PERSONAL)
     
+    ' FASE 9 (09/06/2026): Desproteger hoja Cronograma para permitir escritura VBA
+    Call SheetProtector2.UnprotectSheet(wsCronograma, Configuration2.APP_PASSWORD)
+    
     encontrado = False
     
     ' --- Buscar el registro espec\u00edfico en cronograma ---
@@ -317,9 +320,15 @@ Public Sub ActualizarRegistroCronograma(ByVal iniciales As String, ByVal idPlant
         Call CrearRegistroCronograma(iniciales, idPlantilla)
     End If
     
+    ' Reproteger hoja según el rol del usuario
+    Call SheetProtector2.ApplyRoleBasedProtection(wsCronograma, Configuration2.APP_PASSWORD)
     Exit Sub
     
 ErrorHandler:
+    ' Reproteger hoja incluso si hay error (fail-safe)
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(wsCronograma, Configuration2.APP_PASSWORD)
+    On Error GoTo 0
     Call ErrorLogger2.Log("InspectionScheduler.ActualizarRegistroCronograma", Err.Description, Err.Number)
 End Sub
 
@@ -430,6 +439,41 @@ Private Sub ActualizarRegistroCronogramaInterno( _
     Dim personalActivo As String
     personalActivo = ObtenerValorPersonal(tblPersonal, iniciales, "Activo")
     
+    ' ========================================================================
+    ' FASE 10 (17/06/2026): CAPTURAR valores ANTERIORES antes de sobreescribir.
+    ' Necesario porque el guardado de inspección deshabilita eventos
+    ' (Application.EnableEvents = False) y el Worksheet_Change de la Hoja8
+    ' jamás se entera de estas escrituras. Auditamos directamente aquí, igual
+    ' que PausarInspecciones/ReactivarInspecciones en CronogramaGestorService.
+    ' ========================================================================
+    Dim oldTotalInsp As Variant
+    Dim oldFechaUltima As Variant
+    Dim oldIDUltima As Variant
+    Dim oldRPNUltima As Variant
+    Dim oldCatUltima As Variant
+    Dim oldFechaProx As Variant
+    Dim oldDiasVenc As Variant
+    Dim oldEstado As Variant
+    Dim oldPuestoActivo As Variant
+    Dim oldPersActivo As Variant
+    Dim oldFechaAct As Variant
+    Dim oldReqRecalc As Variant
+    
+    With cronogramaRow.Range
+        oldTotalInsp = .Cells(1, tblCronograma.ListColumns("Total inspecciones").Index).Value
+        oldFechaUltima = .Cells(1, tblCronograma.ListColumns("Fecha ultima inspeccion").Index).Value
+        oldIDUltima = .Cells(1, tblCronograma.ListColumns("ID Ultima inspeccion").Index).Value
+        oldRPNUltima = .Cells(1, tblCronograma.ListColumns("RPN ultima inspeccion").Index).Value
+        oldCatUltima = .Cells(1, tblCronograma.ListColumns("Categoria ultima inspeccion").Index).Value
+        oldFechaProx = .Cells(1, tblCronograma.ListColumns("Fecha proxima inspeccion").Index).Value
+        oldDiasVenc = .Cells(1, tblCronograma.ListColumns("Dias para vencimiento").Index).Value
+        oldEstado = .Cells(1, tblCronograma.ListColumns("Estado cronograma").Index).Value
+        oldPuestoActivo = .Cells(1, tblCronograma.ListColumns("Puesto activo en personal").Index).Value
+        oldPersActivo = .Cells(1, tblCronograma.ListColumns("Personal activo").Index).Value
+        oldFechaAct = .Cells(1, tblCronograma.ListColumns("Fecha ultima actualizacion").Index).Value
+        oldReqRecalc = .Cells(1, tblCronograma.ListColumns("Requiere recalculo").Index).Value
+    End With
+    
     ' --- Actualizar campos del cronograma ---
     With cronogramaRow.Range
         .Cells(1, tblCronograma.ListColumns("Total inspecciones").Index).Value = totalInspecciones
@@ -457,6 +501,114 @@ Private Sub ActualizarRegistroCronogramaInterno( _
         .Cells(1, tblCronograma.ListColumns("Fecha ultima actualizacion").Index).Value = Now
         .Cells(1, tblCronograma.ListColumns("Requiere recalculo").Index).Value = "No"
     End With
+    
+    ' ========================================================================
+    ' FASE 10 (17/06/2026): AUDITAR cambios en cronograma.
+    ' Se compara cada campo viejo vs nuevo y se registra solo si hubo cambios.
+    ' Esto cubre el hueco dejado por Application.EnableEvents = False durante
+    ' el guardado programático de inspecciones (ChecklistOrchestrator).
+    ' ========================================================================
+    Dim changesBefore As String
+    Dim changesAfter As String
+    Dim changeCount As Long
+    changeCount = 0
+    
+    If CStr(oldTotalInsp) <> CStr(totalInspecciones) Then
+        changesBefore = changesBefore & "Total inspecciones: " & AuditValor(oldTotalInsp) & vbCrLf
+        changesAfter = changesAfter & "Total inspecciones: " & AuditValor(totalInspecciones) & vbCrLf
+        changeCount = changeCount + 1
+    End If
+    
+    If encontradaInspeccion Then
+        If CStr(oldFechaUltima) <> CStr(ultimaFecha) Then
+            changesBefore = changesBefore & "Fecha ultima: " & AuditValor(oldFechaUltima) & vbCrLf
+            changesAfter = changesAfter & "Fecha ultima: " & AuditValor(ultimaFecha) & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If CStr(oldIDUltima) <> CStr(ultimoID) Then
+            changesBefore = changesBefore & "ID Ultima: " & AuditValor(oldIDUltima) & vbCrLf
+            changesAfter = changesAfter & "ID Ultima: " & AuditValor(ultimoID) & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If CStr(oldRPNUltima) <> CStr(ultimoRPN) Then
+            changesBefore = changesBefore & "RPN ultima: " & AuditValor(oldRPNUltima) & vbCrLf
+            changesAfter = changesAfter & "RPN ultima: " & AuditValor(ultimoRPN) & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If CStr(oldCatUltima) <> CStr(ultimaCategoria) Then
+            changesBefore = changesBefore & "Categoria ultima: " & AuditValor(oldCatUltima) & vbCrLf
+            changesAfter = changesAfter & "Categoria ultima: " & AuditValor(ultimaCategoria) & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If CStr(oldFechaProx) <> CStr(fechaProxima) Then
+            changesBefore = changesBefore & "Fecha proxima: " & AuditValor(oldFechaProx) & vbCrLf
+            changesAfter = changesAfter & "Fecha proxima: " & AuditValor(fechaProxima) & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If CStr(oldDiasVenc) <> CStr(diasVencimiento) Then
+            changesBefore = changesBefore & "Dias vencimiento: " & AuditValor(oldDiasVenc) & vbCrLf
+            changesAfter = changesAfter & "Dias vencimiento: " & AuditValor(diasVencimiento) & vbCrLf
+            changeCount = changeCount + 1
+        End If
+    Else
+        ' Nunca inspeccionado: limpiar campos solo si antes tenían valor
+        If Len(CStr(oldFechaUltima)) > 0 Then
+            changesBefore = changesBefore & "Fecha ultima: " & AuditValor(oldFechaUltima) & vbCrLf
+            changesAfter = changesAfter & "Fecha ultima: (limpiado)" & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If Len(CStr(oldIDUltima)) > 0 Then
+            changesBefore = changesBefore & "ID Ultima: " & AuditValor(oldIDUltima) & vbCrLf
+            changesAfter = changesAfter & "ID Ultima: (limpiado)" & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If Len(CStr(oldRPNUltima)) > 0 Then
+            changesBefore = changesBefore & "RPN ultima: " & AuditValor(oldRPNUltima) & vbCrLf
+            changesAfter = changesAfter & "RPN ultima: (limpiado)" & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If Len(CStr(oldCatUltima)) > 0 Then
+            changesBefore = changesBefore & "Categoria ultima: " & AuditValor(oldCatUltima) & vbCrLf
+            changesAfter = changesAfter & "Categoria ultima: (limpiado)" & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If Len(CStr(oldFechaProx)) > 0 Then
+            changesBefore = changesBefore & "Fecha proxima: " & AuditValor(oldFechaProx) & vbCrLf
+            changesAfter = changesAfter & "Fecha proxima: (limpiado)" & vbCrLf
+            changeCount = changeCount + 1
+        End If
+        If CStr(oldDiasVenc) <> CStr(diasVencimiento) Then
+            changesBefore = changesBefore & "Dias vencimiento: " & AuditValor(oldDiasVenc) & vbCrLf
+            changesAfter = changesAfter & "Dias vencimiento: " & AuditValor(diasVencimiento) & vbCrLf
+            changeCount = changeCount + 1
+        End If
+    End If
+    
+    If CStr(oldEstado) <> CStr(estadoCronograma) Then
+        changesBefore = changesBefore & "Estado: " & AuditValor(oldEstado) & vbCrLf
+        changesAfter = changesAfter & "Estado: " & AuditValor(estadoCronograma) & vbCrLf
+        changeCount = changeCount + 1
+    End If
+    If CStr(oldPuestoActivo) <> CStr(puestoActivoEnPersonal) Then
+        changesBefore = changesBefore & "Puesto activo: " & AuditValor(oldPuestoActivo) & vbCrLf
+        changesAfter = changesAfter & "Puesto activo: " & AuditValor(puestoActivoEnPersonal) & vbCrLf
+        changeCount = changeCount + 1
+    End If
+    If CStr(oldPersActivo) <> CStr(personalActivo) Then
+        changesBefore = changesBefore & "Personal activo: " & AuditValor(oldPersActivo) & vbCrLf
+        changesAfter = changesAfter & "Personal activo: " & AuditValor(personalActivo) & vbCrLf
+        changeCount = changeCount + 1
+    End If
+    
+    If changeCount > 0 Then
+        Call AuditLogger2.LogAction( _
+            "Modificación en cronograma (macro)", _
+            Configuration2.SHEET_CRONOGRAMA, _
+            "tblCronogramaInspecciones | " & iniciales & " / " & idPlantilla & " (" & puesto & ")", _
+            changesBefore, _
+            changesAfter, _
+            "InspectionScheduler.ActualizarRegistroCronogramaInterno")
+    End If
     
     Exit Sub
     
@@ -692,4 +844,35 @@ Private Function GenerarCadenaAleatoria(ByVal longitud As Integer) As String
     Next i
     
     GenerarCadenaAleatoria = resultado
+End Function
+
+'' ----------------------------------------------------------------------
+' Función: AuditValor
+' Propósito: Formatea un valor para el Audit Trail. Si está vacío o es
+'            nulo, retorna "(vacío)". Si es fecha, la formatea.
+'            Usada por ActualizarRegistroCronogramaInterno para construir
+'            las cadenas before/after del log de auditoría.
+' FASE 10: 17/06/2026 — Agregada para cubrir hueco de auditoría programática.
+' ----------------------------------------------------------------------
+Private Function AuditValor(ByVal val As Variant) As String
+    If IsEmpty(val) Then
+        AuditValor = "(vacío)"
+        Exit Function
+    End If
+    
+    If IsNull(val) Then
+        AuditValor = "(vacío)"
+        Exit Function
+    End If
+    
+    If Len(CStr(val)) = 0 Then
+        AuditValor = "(vacío)"
+        Exit Function
+    End If
+    
+    If IsDate(val) Then
+        AuditValor = Format(val, "dd/mm/yyyy hh:nn:ss")
+    Else
+        AuditValor = CStr(val)
+    End If
 End Function

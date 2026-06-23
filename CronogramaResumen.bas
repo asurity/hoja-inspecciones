@@ -1,4 +1,3 @@
-Attribute VB_Name = "CronogramaResumen"
 ' ----------------------------------------------------------------------
 ' Módulo: CronogramaResumen
 ' Descripción: Gestiona la tabla resumen del cronograma en el Menú principal.
@@ -44,6 +43,9 @@ Public Sub RefrescarResumenCronograma()
     Set tblCronograma = wsCronograma.ListObjects(Configuration2.TABLE_CRONOGRAMA)
     Set tblResumen = wsMenu.ListObjects(Configuration2.TABLE_RESUMEN_CRONOGRAMA)
     
+    ' FASE 9 (09/06/2026): Desproteger Menú principal para permitir escritura VBA
+    Call SheetProtector2.UnprotectSheet(wsMenu, Configuration2.APP_PASSWORD)
+    
     ' --- Leer filtro de planta ---
     filtroPlanta = Trim(wsMenu.Range(Configuration2.RESUMEN_FILTRO_PLANTA_CELDA).Value)
     If filtroPlanta = "" Then filtroPlanta = "Todas"
@@ -58,6 +60,7 @@ Public Sub RefrescarResumenCronograma()
     
     ' --- Verificar que hay datos en cronograma ---
     If tblCronograma.DataBodyRange Is Nothing Then
+        Call SheetProtector2.ApplyRoleBasedProtection(wsMenu, Configuration2.APP_PASSWORD)
         Application.ScreenUpdating = True
         Exit Sub
     End If
@@ -150,6 +153,7 @@ SiguienteRegistro:
     
     ' --- Si no hay registros, salir ---
     If registros.Count = 0 Then
+        Call SheetProtector2.ApplyRoleBasedProtection(wsMenu, Configuration2.APP_PASSWORD)
         Application.ScreenUpdating = True
         Exit Sub
     End If
@@ -190,11 +194,18 @@ SiguienteRegistro:
     ' --- Aplicar formato condicional tipo semáforo ---
     Call AplicarFormatoSemaforoVencimiento(tblResumen)
     
+    ' Reproteger hoja según el rol del usuario
+    Call SheetProtector2.ApplyRoleBasedProtection(wsMenu, Configuration2.APP_PASSWORD)
+    
     Application.ScreenUpdating = True
     Exit Sub
     
 ErrorHandler:
+    ' Reproteger hoja incluso si hay error (fail-safe)
+    On Error Resume Next
+    Call SheetProtector2.ApplyRoleBasedProtection(wsMenu, Configuration2.APP_PASSWORD)
     Application.ScreenUpdating = True
+    On Error GoTo 0
     Call ErrorLogger2.Log("CronogramaResumen.RefrescarResumenCronograma", Err.Description, Err.Number)
 End Sub
 

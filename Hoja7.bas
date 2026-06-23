@@ -1,88 +1,32 @@
 '' ----------------------------------------------------------------------
-' Módulo: Hoja7 ("Registro errores")
-' Descripción: Eventos para la hoja Registro errores.
-'              Incluye protección por rol centralizada vía SheetProtector2.
-'              C03: Reemplazado m_userRole por GetUserRole().
-'
-' INSTRUCCIONES DE INSTALACIÓN:
-' 1. Abre el VBA Editor (Alt+F11)
-' 2. Busca en el árbol de la izquierda: Microsoft Excel Objetos → Hoja "Registro errores"
-' 3. Haz doble clic en esa hoja para abrir su módulo
-' 4. Copia TODO el código de este archivo
-' 5. Pégalo en el módulo de la hoja "Registro errores"
-' 6. Guarda el archivo
+' Módulo: Hoja7 ("Audit trail 1")
+' Descripción: Eventos para la hoja Audit trail 1.
+'              Protección con contraseña exclusiva de auditoría (AUDIT_PASSWORD).
+'              No permite edición bajo ningún rol de usuario.
+'              La visibilidad se gestiona centralizadamente por SheetService2.
+' ## NAVEGACIÓN ## — Hoja del grupo Audit Trail (5 hojas simultáneas)
 ' ----------------------------------------------------------------------
 Option Explicit
 
-Private m_oldValues As Variant ' Almacena los valores previos a un cambio para auditoría
-
 '' ----------------------------------------------------------------------
 ' Evento: Worksheet_Activate
-' Propósito: Se ejecuta cuando se activa la hoja Registro errores.
-'            Aplica protección centralizada según el rol del usuario (C03).
+' Propósito: Protege la hoja de auditoría con contraseña exclusiva.
+'            No verifica rol del usuario — máxima seguridad para audit trail.
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Activate()
     On Error GoTo ErrorHandler
-    
-    ' Aplicar protección centralizada según el rol del usuario
-    ' Admin → desprotegido (edición libre)
-    ' Usuario → solo lectura con copiado
-    ' Otros → sin selección
-    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
-    
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.AUDIT_PASSWORD)
     Exit Sub
 ErrorHandler:
-    Call ErrorLogger2.Log("Registro errores.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
+    Call ErrorLogger2.Log("Audit trail 1.Worksheet_Activate", VBA.Err.Description, VBA.Err.Number)
 End Sub
 
 '' ----------------------------------------------------------------------
 ' Evento: Worksheet_Deactivate
-' Propósito: Se ejecuta al salir de la hoja Registro errores.
-'            Aplica protección centralizada según el rol al salir.
+' Propósito: Refuerza la protección al salir de la hoja de auditoría.
 ' ----------------------------------------------------------------------
 Private Sub Worksheet_Deactivate()
     On Error Resume Next
-    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.APP_PASSWORD)
+    Call SheetProtector2.ApplyRoleBasedProtection(Me, Configuration2.AUDIT_PASSWORD)
     On Error GoTo 0
-End Sub
-
-'' ----------------------------------------------------------------------
-' Evento: Worksheet_Change
-' Propósito: Audita cualquier cambio realizado en las tablas de la hoja,
-'            registrando los valores anteriores y posteriores.
-' ----------------------------------------------------------------------
-Private Sub Worksheet_Change(ByVal Target As Range)
-    On Error GoTo ErrorHandler
-    Application.ScreenUpdating = False
-    
-    ' M06: Usar constante centralizada desde Configuration2
-    Dim tablesToAudit As Variant
-    tablesToAudit = Array(Configuration2.TABLE_REGISTRO_ERRORES)
-    Call TableAuditor2.AuditTableChanges(Me, Target, tablesToAudit, m_oldValues)
-    
-    Application.ScreenUpdating = True
-    Exit Sub
-ErrorHandler:
-    Application.ScreenUpdating = True
-    Call ErrorLogger2.Log("Worksheet_Change (Registro errores)", VBA.Err.Description, VBA.Err.Number)
-End Sub
-
-'' ----------------------------------------------------------------------
-' Evento: Worksheet_SelectionChange
-' Propósito: Almacena los valores seleccionados antes de un cambio para
-'            permitir la auditoría precisa de modificaciones.
-' ----------------------------------------------------------------------
-Private Sub Worksheet_SelectionChange(ByVal Target As Range)
-    On Error GoTo ErrorHandler
-    Const SELECTION_LIMIT As Long = 3000
-    
-    If Target.Cells.CountLarge < SELECTION_LIMIT Then
-        m_oldValues = Target.Value
-    Else
-        m_oldValues = Empty
-    End If
-    
-    Exit Sub
-ErrorHandler:
-    Call ErrorLogger2.Log("Worksheet_SelectionChange (Registro errores)", VBA.Err.Description, VBA.Err.Number)
 End Sub

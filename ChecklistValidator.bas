@@ -66,12 +66,16 @@ Public Function ValidarCabecera(ByVal datos As Object) As String
         Exit Function
     End If
     
-    If Not IsDate(fechaStr) Then
+    ' Usar ParseFechaDMY (independiente de locale) en vez de IsDate/CDate
+    Dim fechaParsed As Variant
+    fechaParsed = ParseFechaDMY(fechaStr)
+    
+    If IsEmpty(fechaParsed) Then
         ValidarCabecera = "La Fecha evaluada no tiene un formato válido (DD/MM/AAAA)."
         Exit Function
     End If
     
-    If CDate(fechaStr) > Date Then
+    If CDate(fechaParsed) > Date Then
         ValidarCabecera = "La Fecha evaluada no puede ser posterior a hoy."
         Exit Function
     End If
@@ -85,12 +89,15 @@ Public Function ValidarCabecera(ByVal datos As Object) As String
         Exit Function
     End If
     
-    If Not IsDate(fechaAuditadaStr) Then
+    Dim fechaAudParsed As Variant
+    fechaAudParsed = ParseFechaDMY(fechaAuditadaStr)
+    
+    If IsEmpty(fechaAudParsed) Then
         ValidarCabecera = "La Fecha Auditada no tiene un formato válido (DD/MM/AAAA)."
         Exit Function
     End If
     
-    If CDate(fechaAuditadaStr) > Date Then
+    If CDate(fechaAudParsed) > Date Then
         ValidarCabecera = "La Fecha Auditada no puede ser posterior a hoy."
         Exit Function
     End If
@@ -303,6 +310,91 @@ ErrorHandler:
 End Function
 
 '' ======================================================================
+' Función: ParseFechaDMY
+' Propósito: Convierte una cadena de fecha en formato dd/mm/yyyy o dd-mm-yyyy
+'            a un valor Date de forma INDEPENDIENTE de la configuración regional.
+'            Resuelve el bug de CDate() que interpreta erróneamente las fechas
+'            cuando el sistema usa separador decimal "." (formato mm/dd/yyyy).
+' Parámetros:
+'   fechaStr: Cadena con fecha en formato dd/mm/yyyy o dd-mm-yyyy
+' Retorna: Variant con el Date si es válido, o Empty si no se pudo parsear.
+' Fecha: 22/06/2026 — Fix de locale-dependence en CDate/IsDate
+' ======================================================================
+Public Function ParseFechaDMY(ByVal fechaStr As String) As Variant
+    On Error GoTo ErrorHandler
+    
+    ParseFechaDMY = Empty
+    
+    ' Limpiar espacios
+    fechaStr = Trim(fechaStr)
+    If fechaStr = "" Then Exit Function
+    
+    ' Normalizar separadores: aceptar "/" o "-"
+    Dim sep As String
+    If InStr(fechaStr, "/") > 0 Then
+        sep = "/"
+    ElseIf InStr(fechaStr, "-") > 0 Then
+        sep = "-"
+    Else
+        Exit Function  ' Sin separador reconocido
+    End If
+    
+    Dim partes() As String
+    partes = Split(fechaStr, sep)
+    
+    ' Debe tener exactamente 3 partes: día, mes, año
+    If UBound(partes) <> 2 Then Exit Function
+    
+    Dim d As Long, m As Long, a As Long
+    
+    ' Convertir a números (independiente de locale)
+    On Error Resume Next
+    d = CLng(Trim(partes(0)))
+    m = CLng(Trim(partes(1)))
+    a = CLng(Trim(partes(2)))
+    On Error GoTo ErrorHandler
+    
+    ' Si hubo error de conversión, salir
+    If d = 0 Or m = 0 Or a = 0 Then Exit Function
+    
+    ' Validar rangos
+    If d < 1 Or d > 31 Then Exit Function
+    If m < 1 Or m > 12 Then Exit Function
+    If a < 1900 Or a > 2100 Then Exit Function
+    
+    ' Validar días según el mes (incluyendo años bisiestos)
+    Dim diasPorMes As Variant
+    diasPorMes = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    
+    ' Ajustar febrero para años bisiestos
+    If m = 2 Then
+        If (a Mod 4 = 0 And a Mod 100 <> 0) Or (a Mod 400 = 0) Then
+            If d > 29 Then Exit Function
+        Else
+            If d > 28 Then Exit Function
+        End If
+    Else
+        If d > diasPorMes(m - 1) Then Exit Function
+    End If
+    
+    ' Construir fecha con DateSerial (SIEMPRE interpreta año, mes, día en ese orden)
+    Dim fechaResult As Date
+    fechaResult = DateSerial(a, m, d)
+    
+    ' Verificación adicional: DateSerial ajusta fechas inválidas (ej: 31/Feb → 3/Mar)
+    ' Si el mes resultante no coincide, la fecha era inválida
+    If Month(fechaResult) <> m Or Day(fechaResult) <> d Or Year(fechaResult) <> a Then
+        Exit Function
+    End If
+    
+    ParseFechaDMY = fechaResult
+    Exit Function
+    
+ErrorHandler:
+    ParseFechaDMY = Empty
+End Function
+
+'' ======================================================================
 ' Función: CorregirYValidarFecha
 ' Propósito: Intenta convertir entrada de fecha a formato dd-mm-yyyy.
 '            Acepta múltiples formatos: dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd, etc.
@@ -312,6 +404,7 @@ End Function
 '   "valido": True/False
 '   "valor": Fecha en formato dd-mm-yyyy (si válido) o vacío (si inválido)
 '   "mensaje": Mensaje para el usuario
+' ACTUALIZADO: 22/06/2026 — Usa ParseFechaDMY (independiente de locale) en vez de CDate
 ' ======================================================================
 Public Function CorregirYValidarFecha(ByVal fechaStr As String) As Object
     On Error GoTo ErrorHandler
@@ -332,21 +425,18 @@ Public Function CorregirYValidarFecha(ByVal fechaStr As String) As Object
         Exit Function
     End If
     
-    ' Intentar interpretar como fecha
-    Dim fechaDate As Date
-    Dim esValida As Boolean
-    esValida = False
+    ' Intentar interpretar como fecha usando parseo independiente de locale
+    Dim fechaParsed As Variant
+    fechaParsed = ParseFechaDMY(fechaStr)
     
-    On Error Resume Next
-    fechaDate = CDate(fechaStr)
-    If Err.Number = 0 Then esValida = True
-    On Error GoTo ErrorHandler
-    
-    If Not esValida Then
+    If IsEmpty(fechaParsed) Then
         resultado("mensaje") = "Fecha no válida. Use formato dd-mm-yyyy o dd/mm/yyyy."
         Set CorregirYValidarFecha = resultado
         Exit Function
     End If
+    
+    Dim fechaDate As Date
+    fechaDate = fechaParsed  ' ParseFechaDMY ya devuelve Date (no usar CDate que depende del locale)
     
     ' Verificar que no sea futura
     If fechaDate > Date Then
@@ -361,7 +451,7 @@ Public Function CorregirYValidarFecha(ByVal fechaStr As String) As Object
     
     ' Comparar con original
     Dim esCambio As Boolean
-    esCambio = (Format(fechaDate, "dd-mm-yyyy") <> fechaStr)
+    esCambio = (fechaCorregida <> fechaStr)
     
     resultado("valido") = True
     resultado("valor") = fechaCorregida
@@ -394,6 +484,7 @@ End Function
 '   "mensaje": Mensaje para el usuario
 ' FASE 7 - 23/04/2026
 ' ACTUALIZADO: 24/04/2026 - Validación de fecha futura obligatoria
+' ACTUALIZADO: 22/06/2026 — Usa ParseFechaDMY (independiente de locale) en vez de CDate
 ' ======================================================================
 Public Function CorregirYValidarFechaVencimiento(ByVal fechaStr As String) As Object
     On Error GoTo ErrorHandler
@@ -414,21 +505,18 @@ Public Function CorregirYValidarFechaVencimiento(ByVal fechaStr As String) As Ob
         Exit Function
     End If
     
-    ' Intentar interpretar como fecha
-    Dim fechaDate As Date
-    Dim esValida As Boolean
-    esValida = False
+    ' Intentar interpretar como fecha usando parseo independiente de locale
+    Dim fechaParsed As Variant
+    fechaParsed = ParseFechaDMY(fechaStr)
     
-    On Error Resume Next
-    fechaDate = CDate(fechaStr)
-    If Err.Number = 0 Then esValida = True
-    On Error GoTo ErrorHandler
-    
-    If Not esValida Then
+    If IsEmpty(fechaParsed) Then
         resultado("mensaje") = "Fecha no válida. Use formato dd-mm-yyyy o dd/mm/yyyy."
         Set CorregirYValidarFechaVencimiento = resultado
         Exit Function
     End If
+    
+    Dim fechaDate As Date
+    fechaDate = fechaParsed  ' ParseFechaDMY ya devuelve Date (no usar CDate que depende del locale)
     
     ' VALIDACIÓN CRÍTICA: La fecha de vencimiento DEBE ser mayor a la fecha actual
     ' Si está vencida, el personal NO puede realizar la inspección
@@ -635,11 +723,13 @@ Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
     End If
     
     ' --- Validar y corregir FECHA ---
+    ' ACTUALIZADO 23/06/2026: NO escribir de vuelta al textbox (.Value)
+    ' porque MSForms reinterpreta la fecha con el locale del sistema, corrompiendo el valor.
+    ' El texto original del usuario se preserva y ParseFechaDMY lo convierte correctamente.
     Dim resutlFecha As Object
-    Set resutlFecha = CorregirYValidarFecha(Trim(frm.txtFecha.Value))
+    Set resutlFecha = CorregirYValidarFecha(Trim(frm.txtFecha.Text))
     
     If resutlFecha("valido") Then
-        frm.txtFecha.Value = resutlFecha("valor")
         If resutlFecha("mensaje") <> "" Then
             correcciones.Add resutlFecha("mensaje")
         End If
@@ -649,10 +739,9 @@ Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
     
     ' --- Validar y corregir FECHA AUDITADA ---
     Dim resultFechaAuditada As Object
-    Set resultFechaAuditada = CorregirYValidarFecha(Trim(frm.txtFechaAuditada.Value))
+    Set resultFechaAuditada = CorregirYValidarFecha(Trim(frm.txtFechaAuditada.Text))
     
     If resultFechaAuditada("valido") Then
-        frm.txtFechaAuditada.Value = resultFechaAuditada("valor")
         If resultFechaAuditada("mensaje") <> "" Then
             correcciones.Add resultFechaAuditada("mensaje")
         End If
@@ -711,15 +800,19 @@ Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
             errores.Add "Debe seleccionar la Calificación de Vestuario (Si/No)."
         End If
         
-        ' --- Fecha Vencimiento Vestuario (opcional, pero si existe debe ser válida) ---
+        ' --- Fecha Vencimiento Vestuario (OBLIGATORIO) ---
+        ' ACTUALIZADO 23/06/2026: Usar .Text para evitar conversión Date→String con locale
         Dim fechaVencVestuario As String
-        fechaVencVestuario = Trim(frm.txtFechaVencVestuario.Value)
-        If fechaVencVestuario <> "" Then
+        fechaVencVestuario = Trim(frm.txtFechaVencVestuario.Text)
+        If fechaVencVestuario = "" Then
+            errores.Add "Debe ingresar la Fecha de Vencimiento de Vestuario."
+        Else
             Dim resultFechaVencVestuario As Object
             Set resultFechaVencVestuario = CorregirYValidarFechaVencimiento(fechaVencVestuario)
             
             If resultFechaVencVestuario("valido") Then
-                frm.txtFechaVencVestuario.Value = resultFechaVencVestuario("valor")
+                ' ACTUALIZADO 23/06/2026: NO escribir de vuelta al textbox
+                ' (evita corrupción por reinterpretación MSForms con locale)
                 If resultFechaVencVestuario("mensaje") <> "" Then
                     correcciones.Add resultFechaVencVestuario("mensaje")
                 End If
@@ -734,15 +827,19 @@ Public Function ValidarCabeceraConAutoCorrecion(ByRef frm As Object) As Object
                 errores.Add "Debe seleccionar la Calificación de Operador (Si/No)."
             End If
             
-            ' --- Fecha Vencimiento Operador (opcional, pero si existe debe ser válida) ---
+            ' --- Fecha Vencimiento Operador (OBLIGATORIO) ---
+            ' ACTUALIZADO 23/06/2026: Usar .Text para evitar conversión Date→String con locale
             Dim fechaVencOperador As String
-            fechaVencOperador = Trim(frm.txtFechaVencOperador.Value)
-            If fechaVencOperador <> "" Then
+            fechaVencOperador = Trim(frm.txtFechaVencOperador.Text)
+            If fechaVencOperador = "" Then
+                errores.Add "Debe ingresar la Fecha de Vencimiento de Operador."
+            Else
                 Dim resultFechaVencOperador As Object
                 Set resultFechaVencOperador = CorregirYValidarFechaVencimiento(fechaVencOperador)
                 
                 If resultFechaVencOperador("valido") Then
-                    frm.txtFechaVencOperador.Value = resultFechaVencOperador("valor")
+                    ' ACTUALIZADO 23/06/2026: NO escribir de vuelta al textbox
+                    ' (evita corrupción por reinterpretación MSForms con locale)
                     If resultFechaVencOperador("mensaje") <> "" Then
                         correcciones.Add resultFechaVencOperador("mensaje")
                     End If
